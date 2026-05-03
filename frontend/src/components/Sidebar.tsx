@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, FileText, ShoppingCart, Package,
-  FolderOpen, Users, Receipt, Mail, Bot, LogOut
+  FolderOpen, Users, Receipt, Mail, Bot, LogOut, Truck
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
@@ -13,7 +13,8 @@ const navItems = [
   { label: 'Доставки',   href: '/purchases', icon: ShoppingCart },
   { label: 'Склад',      href: '/inventory', icon: Package },
   { label: 'Проекти',    href: '/projects',  icon: FolderOpen },
-  { label: 'Клиенти',    href: '/clients',   icon: Users },
+  { label: 'Клиенти',    href: '/clients',    icon: Users },
+  { label: 'Доставчици', href: '/suppliers',  icon: Truck },
   { label: 'Разходи',    href: '/expenses',  icon: Receipt },
   { label: 'Документи',  href: '/documents', icon: Mail },
   { label: 'AI Асистент',href: '/ai',        icon: Bot },

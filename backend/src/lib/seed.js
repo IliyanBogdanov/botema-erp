@@ -88,7 +88,7 @@ async function main() {
   ];
 
   const clients = await Promise.all(clientData.map(c =>
-    prisma.client.upsert({ where: { id: c.id }, update: {}, create: c as any })
+    prisma.client.upsert({ where: { id: c.id }, update: {}, create: c })
   ));
   console.log(`✓ ${clients.length} clients created`);
 
@@ -111,7 +111,7 @@ async function main() {
   ];
 
   const projects = await Promise.all(projectData.map(p =>
-    prisma.project.upsert({ where: { code: p.code }, update: {}, create: p as any })
+    prisma.project.upsert({ where: { code: p.code }, update: {}, create: p })
   ));
   console.log(`✓ ${projects.length} projects created`);
 
@@ -180,7 +180,7 @@ async function main() {
           projectId: inv.projectId || null,
           type: 'INVOICE',
           status: 'PAID',
-          brand: (inv.brand || 'STUDIO_BOTEMA') as any,
+          brand: (inv.brand || 'STUDIO_BOTEMA'),
           currency: inv.currency || 'BGN',
           amountNet: inv.amount,
           vatAmount: Math.round((inv.total - inv.amount) * 100) / 100,
@@ -190,7 +190,7 @@ async function main() {
         }
       });
       created++;
-    } catch (e: any) {
+    } catch (e) {
       console.warn(`Skipping invoice ${inv.number}: ${e.message}`);
     }
   }

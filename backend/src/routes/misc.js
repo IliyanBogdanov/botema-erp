@@ -33,6 +33,11 @@ suppliersRouter.post('/', auth, async (req, res) => {
   res.status(201).json(supplier);
 });
 
+suppliersRouter.patch('/:id', auth, async (req, res) => {
+  const supplier = await prisma.supplier.update({ where: { id: req.params.id }, data: req.body });
+  res.json(supplier);
+});
+
 // ─── Documents ────────────────────────────────────────────────────────────────
 const documentsRouter = express.Router();
 
