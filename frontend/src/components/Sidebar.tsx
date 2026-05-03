@@ -39,9 +39,16 @@ export function Sidebar() {
   return (
     <aside className="w-56 flex-shrink-0 bg-[#111113] border-r border-[#27272a] flex flex-col h-full">
       {/* Logo */}
-      <div className="px-4 py-5 border-b border-[#27272a]">
-        <div className="text-sm font-bold text-white">Studio Botema</div>
-        <div className="text-[10px] text-[#52525b] font-semibold uppercase tracking-widest mt-0.5">ERP System</div>
+      <div className="px-4 py-5 border-b border-[#27272a] flex items-center gap-2.5">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+          <rect x="1" y="1" width="30" height="30" rx="7" stroke="#e4e4e7" strokeWidth="1.5" opacity="0.9"/>
+          <path d="M10 9h8a4 4 0 0 1 0 8h-8V9z M10 15h9a4 4 0 0 1 0 8h-9v-8z"
+            stroke="#e4e4e7" strokeWidth="1.5" fill="none" strokeLinejoin="round"/>
+        </svg>
+        <div>
+          <div className="text-sm font-bold text-white leading-tight">Studio Botema</div>
+          <div className="text-[9px] text-[#52525b] font-semibold uppercase tracking-widest">ERP System</div>
+        </div>
       </div>
 
       {/* Nav */}

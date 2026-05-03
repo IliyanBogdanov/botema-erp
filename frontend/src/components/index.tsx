@@ -1,11 +1,18 @@
 'use client';
 import { statusConfig, fmt, fmtDate } from '@/lib/api';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { useState } from 'react';
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 const colorMap: Record<string, string> = {
   green: '#30d158', red: '#ff453a', blue: '#0a84ff', orange: '#ff9f0a', purple: '#bf5af2'
 };
+
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
+}
 
 export function KPICard({ label, value, sub, color, icon }: {
   label: string; value: string | number; sub?: string; color?: string; icon?: React.ReactNode;
@@ -13,12 +20,26 @@ export function KPICard({ label, value, sub, color, icon }: {
   const c = colorMap[color || 'blue'];
   return (
     <div className="card p-5">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#71717a]">{label}</span>
-        <span style={{ color: c }} className="opacity-70">{icon}</span>
+      <div className="flex items-start justify-between mb-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a] leading-tight">{label}</span>
+        <div
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            background: `rgba(${hexToRgb(c)}, 0.15)`,
+            color: c,
+          }}
+          className="flex items-center justify-center flex-shrink-0 ml-2"
+        >
+          <span style={{ fontSize: 12 }}>{icon}</span>
+        </div>
       </div>
-      <div className="text-2xl font-extrabold tracking-tight" style={{ color: c }}>{value}</div>
-      {sub && <div className="text-xs text-[#52525b] mt-1">{sub}</div>}
+      <div
+        className="font-bold tracking-tight text-white"
+        style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}
+      >
+        {value}
+      </div>
+      {sub && <div className="text-[11px] text-[#52525b] mt-1">{sub}</div>}
     </div>
   );
 }
@@ -38,9 +59,9 @@ export function StatusBadge({ status }: { status: string }) {
 const MONTHS = ['Яну','Фев','Мар','Апр','Май','Юни','Юли','Авг','Сеп','Окт','Ное','Дек'];
 
 export function RevenueChart({ data }: { data: any[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   const monthly = Array.from({ length: 12 }, (_, i) => ({
-    month: MONTHS[i],
-    SB: 0, LV: 0
+    month: MONTHS[i], SB: 0, LV: 0,
   }));
   data.forEach(d => {
     const idx = parseInt(d.month) - 1;
@@ -48,20 +69,64 @@ export function RevenueChart({ data }: { data: any[] }) {
       monthly[idx][d.brand === 'LUMINAVERA' ? 'LV' : 'SB'] = Number(d.revenue);
     }
   });
+  const maxVal = Math.max(...monthly.map(d => d.SB + d.LV), 1);
+  const BAR_H = 155;
+
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={monthly} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-        <XAxis dataKey="month" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-        <YAxis hide />
-        <Tooltip
-          contentStyle={{ background: '#1d1d1f', border: '1px solid #27272a', borderRadius: 8, fontSize: 12 }}
-          labelStyle={{ color: '#e4e4e7' }}
-          formatter={(v: number) => [fmt(v, 'BGN'), '']}
-        />
-        <Bar dataKey="SB" fill="#0a84ff" radius={[3,3,0,0]} name="Studio Botema" />
-        <Bar dataKey="LV" fill="#30d158" radius={[3,3,0,0]} name="Luminavera" />
-      </BarChart>
-    </ResponsiveContainer>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: BAR_H + 24, position: 'relative' }}>
+      {monthly.map((d, i) => {
+        const total = d.SB + d.LV;
+        const totalH = (total / maxVal) * BAR_H;
+        const sbH = total > 0 ? (d.SB / total) * totalH : 0;
+        const lvH = totalH - sbH;
+        const isHov = hovered === i;
+        return (
+          <div
+            key={i}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, position: 'relative', cursor: 'default' }}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            {isHov && total > 0 && (
+              <div style={{
+                position: 'absolute', bottom: BAR_H + 4, left: '50%', transform: 'translateX(-50%)',
+                background: '#1d1d1f', border: '1px solid #27272a', borderRadius: 8,
+                padding: '5px 8px', whiteSpace: 'nowrap', fontSize: 11, color: '#e4e4e7',
+                zIndex: 10, pointerEvents: 'none',
+              }}>
+                <div style={{ fontWeight: 700, marginBottom: 2 }}>{MONTHS[i]}</div>
+                {d.SB > 0 && <div style={{ color: '#0a84ff' }}>SB {fmt(d.SB, 'BGN')}</div>}
+                {d.LV > 0 && <div style={{ color: '#30d158' }}>LV {fmt(d.LV, 'BGN')}</div>}
+              </div>
+            )}
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: BAR_H, gap: 2 }}>
+              {d.LV > 0 && (
+                <div style={{
+                  width: '100%', height: lvH,
+                  borderRadius: '4px 4px 0 0',
+                  background: '#30d158', opacity: isHov ? 1 : 0.8,
+                  transition: 'opacity 0.15s',
+                }} />
+              )}
+              {total > 0 ? (
+                <div style={{
+                  width: '100%', height: sbH > 0 ? sbH : totalH,
+                  borderRadius: d.LV > 0 ? 0 : '4px 4px 0 0',
+                  background: 'linear-gradient(to bottom, #0a84ff, rgba(10,132,255,0.5))',
+                  opacity: isHov ? 1 : 0.85,
+                  transition: 'opacity 0.15s',
+                }} />
+              ) : (
+                <div style={{ width: '100%', height: 2, background: '#27272a', borderRadius: 2 }} />
+              )}
+            </div>
+            <div style={{ fontSize: 9, color: isHov ? '#a1a1aa' : '#52525b', letterSpacing: '0.03em', transition: 'color 0.15s' }}>
+              {MONTHS[i]}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

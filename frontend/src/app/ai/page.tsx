@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
+import { Send, User } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -10,8 +10,71 @@ interface Message {
 
 const WELCOME: Message = {
   role: 'assistant',
-  content: 'Здравей! Аз съм AI асистентът на Studio Botema. Мога да те помогна с финансови справки, анализи и въпроси за бизнеса.',
+  content: 'Здравей! Аз съм AI асистентът на Studio Botema. Мога да те помогна с финансови справки, анализи на клиенти и проекти, и въпроси за бизнеса.',
 };
+
+function AIAvatar({ size = 32 }: { size?: number }) {
+  return (
+    <div
+      style={{
+        width: size, height: size, borderRadius: size * 0.34,
+        background: 'rgba(191,90,242,0.15)',
+        border: '1px solid rgba(191,90,242,0.3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+        fontSize: size * 0.5, color: '#bf5af2',
+      }}
+    >✦</div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex gap-3 justify-start">
+      <AIAvatar />
+      <div className="bg-[#1d1d1f] border border-[#27272a] rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5">
+        <span className="typing-dot" />
+        <span className="typing-dot" />
+        <span className="typing-dot" />
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ msg }: { msg: Message }) {
+  const parts = msg.content.split(/(```[\s\S]*?```)/g);
+  return (
+    <div className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      {msg.role === 'assistant' && <AIAvatar />}
+      <div className={`max-w-[75%] text-sm leading-relaxed ${
+        msg.role === 'user'
+          ? 'bg-[#0a84ff] text-white rounded-2xl rounded-br-md px-4 py-3'
+          : 'bg-[#1d1d1f] text-[#e4e4e7] border border-[#27272a] rounded-2xl rounded-bl-md'
+      }`}>
+        {msg.role === 'assistant' ? (
+          <div className="px-4 py-3 space-y-2">
+            {parts.map((part, i) =>
+              part.startsWith('```') ? (
+                <pre key={i} className="bg-[#09090b] border border-[#27272a] rounded-lg p-3 text-xs text-[#30d158] overflow-x-auto font-mono whitespace-pre-wrap">
+                  {part.replace(/^```\w*\n?/, '').replace(/```$/, '')}
+                </pre>
+              ) : (
+                <span key={i} className="whitespace-pre-wrap">{part}</span>
+              )
+            )}
+          </div>
+        ) : (
+          <span className="whitespace-pre-wrap">{msg.content}</span>
+        )}
+      </div>
+      {msg.role === 'user' && (
+        <div className="w-8 h-8 rounded-xl bg-[#27272a] flex items-center justify-center flex-shrink-0 mt-0.5">
+          <User size={15} className="text-[#a1a1aa]" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AIPage() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
@@ -29,7 +92,7 @@ export default function AIPage() {
     if (!text || loading) return;
 
     const userMsg: Message = { role: 'user', content: text };
-    const history = messages.slice(1); // skip welcome for history
+    const history = messages.slice(1);
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
@@ -39,17 +102,15 @@ export default function AIPage() {
         message: text,
         history: history.map(m => ({ role: m.role, content: m.content })),
       });
-      const assistantMsg: Message = {
+      setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.reply || data.message || data.content || 'Нямам отговор в момента.',
-      };
-      setMessages(prev => [...prev, assistantMsg]);
-    } catch (err: any) {
-      const errMsg: Message = {
+      }]);
+    } catch {
+      setMessages(prev => [...prev, {
         role: 'assistant',
         content: '⚠️ Грешка при свързване с AI. Моля, опитайте отново.',
-      };
-      setMessages(prev => [...prev, errMsg]);
+      }]);
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -57,7 +118,7 @@ export default function AIPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       send();
     }
@@ -67,66 +128,33 @@ export default function AIPage() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex-shrink-0 px-6 py-4 border-b border-[#27272a] flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-[rgba(10,132,255,0.15)] border border-[rgba(10,132,255,0.2)] flex items-center justify-center">
-          <Bot size={18} className="text-[#0a84ff]" />
-        </div>
+        <AIAvatar size={36} />
         <div>
-          <h1 className="text-base font-bold text-white">AI Асистент</h1>
-          <p className="text-xs text-[#52525b]">Studio Botema ERP · GPT-4</p>
+          <h1 className="text-base font-bold text-white">Botema AI</h1>
+          <p className="text-xs text-[#52525b]">Studio Botema ERP · Claude Sonnet</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse" />
+          <span className="text-xs text-[#52525b]">онлайн</span>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' && (
-              <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-[rgba(10,132,255,0.15)] border border-[rgba(10,132,255,0.2)] flex items-center justify-center mt-0.5">
-                <Bot size={15} className="text-[#0a84ff]" />
-              </div>
-            )}
-            <div
-              className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-[#0a84ff] text-white rounded-br-md'
-                  : 'bg-[#1d1d1f] text-[#e4e4e7] border border-[#27272a] rounded-bl-md'
-              }`}
-            >
-              {msg.content}
-            </div>
-            {msg.role === 'user' && (
-              <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-[#27272a] flex items-center justify-center mt-0.5">
-                <User size={15} className="text-[#a1a1aa]" />
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex gap-3 justify-start">
-            <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-[rgba(10,132,255,0.15)] border border-[rgba(10,132,255,0.2)] flex items-center justify-center">
-              <Bot size={15} className="text-[#0a84ff]" />
-            </div>
-            <div className="bg-[#1d1d1f] border border-[#27272a] rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-2">
-              <Loader2 size={14} className="text-[#0a84ff] animate-spin" />
-              <span className="text-sm text-[#71717a]">Мисля...</span>
-            </div>
-          </div>
-        )}
-
+        {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
+        {loading && <TypingIndicator />}
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
       <div className="flex-shrink-0 px-4 py-4 border-t border-[#27272a]">
-        <div className="flex gap-3 items-end bg-[#1d1d1f] border border-[#27272a] rounded-2xl px-4 py-3 focus-within:border-[#0a84ff] transition-colors">
+        <div className="flex gap-3 items-end bg-[#1d1d1f] border border-[#27272a] rounded-2xl px-4 py-3 focus-within:border-[rgba(191,90,242,0.5)] transition-colors">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Задай въпрос... (Enter за изпращане, Shift+Enter за нов ред)"
+            placeholder="Задай въпрос..."
             rows={1}
             className="flex-1 bg-transparent text-[#e4e4e7] text-sm outline-none resize-none placeholder:text-[#52525b] max-h-32"
             style={{ lineHeight: '1.5' }}
@@ -135,14 +163,16 @@ export default function AIPage() {
           <button
             onClick={send}
             disabled={!input.trim() || loading}
-            className="flex-shrink-0 w-8 h-8 rounded-xl bg-[#0a84ff] flex items-center justify-center
-              hover:bg-blue-500 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center
+              transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'rgba(191,90,242,0.2)', color: '#bf5af2' }}
+            title="⌘+↵"
           >
-            <Send size={14} className="text-white" />
+            <Send size={13} />
           </button>
         </div>
         <p className="text-center text-xs text-[#3f3f46] mt-2">
-          AI може да прави грешки. Проверявай важна финансова информация.
+          ⌘+↵ за изпращане · AI може да прави грешки
         </p>
       </div>
     </div>
