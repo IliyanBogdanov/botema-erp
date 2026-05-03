@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8"/>
+<title>Studio Botema · ERP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; }
+  deck-stage { width: 100vw; height: 100vh; }
+  @keyframes typing-pulse {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+  }
+</style>
+<script src="deck-stage.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<deck-stage width="1920" height="1080">
+  <section data-label="01 Cover"><div id="slide-1" style="width:100%;height:100%"></div></section>
+  <section data-label="02 Problem"><div id="slide-2" style="width:100%;height:100%"></div></section>
+  <section data-label="03 Solution"><div id="slide-3" style="width:100%;height:100%"></div></section>
+  <section data-label="04 Dashboard"><div id="slide-4" style="width:100%;height:100%"></div></section>
+  <section data-label="05 Modules"><div id="slide-5" style="width:100%;height:100%"></div></section>
+  <section data-label="06 AI Assistant"><div id="slide-6" style="width:100%;height:100%"></div></section>
+  <section data-label="07 Gmail Automation"><div id="slide-7" style="width:100%;height:100%"></div></section>
+  <section data-label="08 Impact"><div id="slide-8" style="width:100%;height:100%"></div></section>
+  <section data-label="09 Stack"><div id="slide-9" style="width:100%;height:100%"></div></section>
+  <section data-label="10 Before After"><div id="slide-10" style="width:100%;height:100%"></div></section>
+  <section data-label="11 Roadmap"><div id="slide-11" style="width:100%;height:100%"></div></section>
+  <section data-label="12 Closing"><div id="slide-12" style="width:100%;height:100%"></div></section>
+</deck-stage>
+
+<div id="tweaks-root"></div>
+
+<script>
+  // EDITMODE — accent color tweak
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "accent": "#ff9f0a",
+    "fontWeight": "Apple System"
+  }/*EDITMODE-END*/;
+  // apply CSS var early
+  document.documentElement.style.setProperty('--accent', TWEAKS.accent);
+</script>
+
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="mockups.jsx"></script>
+<script type="text/babel" src="slides.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+  // Mount each slide
+  window.SLIDES.forEach((Slide, i) => {
+    const el = document.getElementById(`slide-${i+1}`);
+    if (el) ReactDOM.createRoot(el).render(<Slide />);
+  });
+
+  // Tweaks panel
+  const ACCENT_PRESETS = [
+    { label: 'Apple Blue', value: '#0a84ff' },
+    { label: 'Botema Brass', value: '#c9a96b' },
+    { label: 'Forest', value: '#30d158' },
+    { label: 'Plum', value: '#bf5af2' },
+    { label: 'Ember', value: '#ff9f0a' },
+    { label: 'Crimson', value: '#ff453a' },
+  ];
+
+  function TweaksApp() {
+    const [tweaks, setTweak] = useTweaks(TWEAKS);
+    React.useEffect(() => {
+      document.documentElement.style.setProperty('--accent', tweaks.accent);
+    }, [tweaks.accent]);
+    return (
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Accent">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {ACCENT_PRESETS.map(p => (
+              <button
+                key={p.value}
+                onClick={() => setTweak('accent', p.value)}
+                style={{
+                  padding: '8px 6px',
+                  background: tweaks.accent === p.value ? '#27272a' : '#161618',
+                  border: `1px solid ${tweaks.accent === p.value ? p.value : '#27272a'}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                }}
+              >
+                <span style={{ width: 18, height: 18, borderRadius: 999, background: p.value }}/>
+                <span style={{ fontSize: 10, color: '#a1a1aa', fontWeight: 500 }}>{p.label}</span>
+              </button>
+            ))}
+          </div>
+          <TweakColor label="Custom" value={tweaks.accent} onChange={v => setTweak('accent', v)} />
+        </TweakSection>
+      </TweaksPanel>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('tweaks-root')).render(<TweaksApp />);
+</script>
+
+</body>
+</html>
