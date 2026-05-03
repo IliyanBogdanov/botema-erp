@@ -1,0 +1,58 @@
+name: Deploy Studio Botema ERP
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Test Backend ────────────────────────────────────────────────────────────
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm', cache-dependency-path: backend/package-lock.json }
+      - run: cd backend && npm ci
+      - run: cd backend && npx prisma generate
+      - run: echo "✓ Backend build OK"
+
+  # ─── Test Frontend ───────────────────────────────────────────────────────────
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
+
+  # ─── Deploy Backend to Railway ───────────────────────────────────────────────
+  deploy-backend:
+    needs: [test-backend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: railwayapp/railway-action@v1
+        with:
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          service: botema-erp-backend
+
+  # ─── Deploy Frontend to Vercel ───────────────────────────────────────────────
+  deploy-frontend:
+    needs: [test-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: frontend
+          vercel-args: '--prod'

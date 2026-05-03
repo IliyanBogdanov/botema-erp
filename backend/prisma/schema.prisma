@@ -1,0 +1,349 @@
+// Studio Botema ERP — Database Schema
+// PostgreSQL via Supabase
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(STAFF)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices  Invoice[]
+  documents Document[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  VIEWER
+}
+
+// ─── COMPANY ─────────────────────────────────────────────────────────────────
+
+model Company {
+  id        String @id @default(cuid())
+  name      String
+  eik       String @unique
+  vat       String
+  address   String
+  city      String
+  mol       String
+  bankIban  String
+  bankBic   String
+  bankName  String
+  email     String?
+  phone     String?
+  website   String?
+  brand     Brand  @default(STUDIO_BOTEMA)
+
+  @@map("companies")
+}
+
+enum Brand {
+  STUDIO_BOTEMA
+  LUMINAVERA
+}
+
+// ─── CLIENTS ─────────────────────────────────────────────────────────────────
+
+model Client {
+  id        String      @id @default(cuid())
+  name      String
+  eik       String?
+  vat       String?
+  city      String?
+  address   String?
+  mol       String?
+  email     String?
+  phone     String?
+  type      ClientType  @default(COMPANY)
+  brand     Brand       @default(STUDIO_BOTEMA)
+  since     Int?
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  invoices  Invoice[]
+  projects  Project[]
+
+  @@map("clients")
+}
+
+enum ClientType {
+  COMPANY
+  PERSON
+  ET
+}
+
+// ─── SUPPLIERS ───────────────────────────────────────────────────────────────
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  country   String?
+  currency  String   @default("EUR")
+  discount  String?
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  purchases Purchase[]
+  inventory InventoryItem[]
+
+  @@map("suppliers")
+}
+
+// ─── PROJECTS ────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  code        String        @unique  // e.g. "1717.183"
+  name        String
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id])
+  status      ProjectStatus @default(ACTIVE)
+  year        Int
+  notes       String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  invoices    Invoice[]
+  purchases   Purchase[]
+  inventory   InventoryItem[]
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+// ─── INVOICES (OUTGOING) ─────────────────────────────────────────────────────
+
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  date          DateTime
+  dueDate       DateTime?
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id])
+  projectId     String?
+  project       Project?      @relation(fields: [projectId], references: [id])
+  type          InvoiceType   @default(INVOICE)
+  status        PaymentStatus @default(PENDING)
+  brand         Brand         @default(STUDIO_BOTEMA)
+  currency      String        @default("BGN")
+  amountNet     Decimal       @db.Decimal(12, 2)
+  vatAmount     Decimal       @db.Decimal(12, 2)
+  amountTotal   Decimal       @db.Decimal(12, 2)
+  description   String?
+  notes         String?
+  driveFileId   String?       // Google Drive file ID
+  createdById   String?
+  createdBy     User?         @relation(fields: [createdById], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items         InvoiceItem[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  qty         Decimal  @db.Decimal(10, 3)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  vatPct      Decimal  @default(20) @db.Decimal(5, 2)
+  total       Decimal  @db.Decimal(12, 2)
+
+  @@map("invoice_items")
+}
+
+enum InvoiceType {
+  INVOICE
+  PROFORMA
+  CREDIT_NOTE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// ─── PURCHASES (INCOMING) ────────────────────────────────────────────────────
+
+model Purchase {
+  id          String        @id @default(cuid())
+  invoiceNo   String?
+  date        DateTime
+  supplierId  String
+  supplier    Supplier      @relation(fields: [supplierId], references: [id])
+  projectId   String?
+  project     Project?      @relation(fields: [projectId], references: [id])
+  currency    String        @default("EUR")
+  amount      Decimal       @db.Decimal(12, 2)
+  description String?
+  status      PaymentStatus @default(PAID)
+  driveFileId String?
+  year        Int
+  createdAt   DateTime      @default(now())
+
+  items       PurchaseItem[]
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id          String   @id @default(cuid())
+  purchaseId  String
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  code        String?
+  description String
+  qty         Decimal  @db.Decimal(10, 3)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+
+  @@map("purchase_items")
+}
+
+// ─── INVENTORY ───────────────────────────────────────────────────────────────
+
+model InventoryItem {
+  id          String          @id @default(cuid())
+  supplierId  String
+  supplier    Supplier        @relation(fields: [supplierId], references: [id])
+  projectId   String?
+  project     Project?        @relation(fields: [projectId], references: [id])
+  code        String
+  name        String
+  category    ItemCategory    @default(LIGHTING)
+  account     String?         // счетоводна сметка
+  qtyIn       Decimal         @default(0) @db.Decimal(10, 3)
+  qtyOut      Decimal         @default(0) @db.Decimal(10, 3)
+  location    String?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  movements   StockMovement[]
+
+  @@map("inventory_items")
+}
+
+model StockMovement {
+  id            String         @id @default(cuid())
+  itemId        String
+  item          InventoryItem  @relation(fields: [itemId], references: [id])
+  type          MovementType
+  qty           Decimal        @db.Decimal(10, 3)
+  date          DateTime
+  reference     String?
+  notes         String?
+  createdAt     DateTime       @default(now())
+
+  @@map("stock_movements")
+}
+
+enum MovementType {
+  IN       // доставка
+  OUT      // изписване
+  SAMPLE   // мостра
+  RETURN   // връщане
+  ADJUST   // корекция
+}
+
+enum ItemCategory {
+  LIGHTING    // осветителни тела
+  ELECTRICAL  // ел. материали
+  SAMPLE      // мостри
+  FURNITURE   // мебели
+  MIRROR      // огледала
+  OTHER
+}
+
+// ─── EXPENSES ────────────────────────────────────────────────────────────────
+
+model Expense {
+  id          String   @id @default(cuid())
+  date        DateTime
+  category    String
+  supplier    String
+  description String?
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("EUR")
+  year        Int
+  createdAt   DateTime @default(now())
+
+  @@map("expenses")
+}
+
+// ─── DOCUMENTS ───────────────────────────────────────────────────────────────
+
+model Document {
+  id            String       @id @default(cuid())
+  driveFileId   String       @unique
+  driveUrl      String
+  filename      String
+  type          DocType
+  status        DocStatus    @default(PENDING)
+  extractedData Json?        // AI extracted data
+  processedAt   DateTime?
+  createdById   String?
+  createdBy     User?        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime     @default(now())
+
+  @@map("documents")
+}
+
+enum DocType {
+  INVOICE_IN
+  INVOICE_OUT
+  PROFORMA
+  DELIVERY
+  OTHER
+}
+
+enum DocStatus {
+  PENDING    // чака обработка
+  PROCESSED  // обработен
+  LINKED     // свързан с фактура
+  REJECTED   // отхвърлен
+}
+
+// ─── GMAIL WATCH ─────────────────────────────────────────────────────────────
+
+model GmailWatch {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  historyId     String
+  expiration    DateTime
+  active        Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+
+  @@map("gmail_watches")
+}

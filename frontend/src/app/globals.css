@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #09090b;
+    --bg-card: #111113;
+    --bg-hover: #1d1d1f;
+    --border: #27272a;
+    --text: #e4e4e7;
+    --text-muted: #71717a;
+    --text-dim: #52525b;
+    --accent: #0a84ff;
+    --green: #30d158;
+    --red: #ff453a;
+    --orange: #ff9f0a;
+    --purple: #bf5af2;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg-card); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#111113] border border-[#27272a] rounded-2xl;
+  }
+
+  .btn-primary {
+    @apply bg-[#0a84ff] text-white font-semibold px-4 py-2 rounded-lg
+           hover:bg-blue-500 transition-colors text-sm;
+  }
+
+  .btn-secondary {
+    @apply bg-[#27272a] text-[#a1a1aa] font-medium px-4 py-2 rounded-lg
+           hover:bg-[#3f3f46] transition-colors text-sm;
+  }
+
+  .input {
+    @apply bg-[#1d1d1f] border border-[#27272a] rounded-lg px-3 py-2
+           text-[#e4e4e7] text-sm outline-none focus:border-[#0a84ff]
+           transition-colors placeholder:text-[#52525b] w-full;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .table-header {
+    @apply text-[10px] font-semibold uppercase tracking-widest text-[#71717a]
+           px-4 py-3 text-left border-b border-[#27272a] bg-[#1d1d1f];
+  }
+
+  .table-cell {
+    @apply px-4 py-3 border-b border-[#1a1a1c] text-sm;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
+           text-[#71717a] hover:text-white hover:bg-[#1d1d1f] transition-all cursor-pointer;
+  }
+
+  .nav-item.active {
+    @apply text-[#0a84ff] bg-[rgba(10,132,255,0.1)];
+  }
+}

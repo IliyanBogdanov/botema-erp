@@ -1,0 +1,1 @@
+export { PendingDocuments } from './index';
