@@ -9,7 +9,21 @@ const PORT = process.env.PORT || 3001;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowed = [
+      'http://localhost:3000',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean);
+    // Allow requests with no origin (mobile apps, curl) or matching origins
+    if (!origin || allowed.some(o => origin === o || origin.endsWith('.vercel.app'))) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: ${origin} not allowed`));
+    }
+  },
+  credentials: true,
+}));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
