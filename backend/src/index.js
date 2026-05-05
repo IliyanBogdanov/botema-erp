@@ -44,7 +44,11 @@ app.use('/api/dashboard',  require('./routes/dashboard'));
 app.use('/api/alerts',     require('./routes/alerts'));
 app.use('/api/vat',        require('./routes/vat'));
 app.use('/api/ai',         require('./routes/ai'));
-app.use('/api/gmail',      require('./routes/gmail'));
+app.use('/api/gmail',          require('./routes/gmail'));
+app.use('/api/counterparties', require('./routes/counterparties'));
+app.use('/api/biz-documents',  require('./routes/bizDocuments'));
+app.use('/api/payments',       require('./routes/payments'));
+app.use('/api/reconciliation', require('./routes/reconciliation'));
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
