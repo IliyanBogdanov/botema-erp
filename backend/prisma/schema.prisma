@@ -128,10 +128,15 @@ model Project {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  invoices  Invoice[]
-  purchases Purchase[]
-  inventory InventoryItem[]
-  alerts    Alert[]
+  invoices     Invoice[]
+  purchases    Purchase[]
+  inventory    InventoryItem[]
+  alerts       Alert[]
+  bizDocuments BizDocument[]
+  orders       Order[]
+  deliveries   Delivery[]
+  payments     Payment[]
+  missing      MissingDocument[]
 
   @@map("projects")
 }
@@ -422,4 +427,451 @@ model GmailWatch {
   updatedAt  DateTime @updatedAt
 
   @@map("gmail_watches")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NORMALIZED BUSINESS DATA LAYER
+// Таблици за нормализирания import от Drive/Gmail
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── COUNTERPARTIES ──────────────────────────────────────────────────────────
+// Обединена таблица: клиенти, доставчици, куриери, банки, счетоводство
+
+model Counterparty {
+  id          String          @id @default(cuid())
+  name        String
+  type        CounterpartyType
+  subtype     String?         // "COURIER", "BANK", "ACCOUNTING", "CUSTOMS" etc.
+  eik         String?
+  vat         String?
+  country     String          @default("BG")
+  currency    String          @default("BGN")
+  address     String?
+  city        String?
+  email       String?
+  phone       String?
+  notes       String?
+  companyId   String?         // Studio Botema or Luminavera
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  contacts            Contact[]
+  ordersAsClient      Order[]              @relation("OrderClient")
+  ordersAsSupplier    Order[]              @relation("OrderSupplier")
+  deliveries          Delivery[]
+  bizDocuments        BizDocument[]
+  payments            Payment[]
+  missingDocuments    MissingDocument[]
+
+  @@index([type])
+  @@index([name])
+  @@map("counterparties")
+}
+
+enum CounterpartyType {
+  CLIENT
+  SUPPLIER
+  COURIER
+  BANK
+  ACCOUNTING
+  OTHER
+}
+
+// ─── CONTACTS ────────────────────────────────────────────────────────────────
+
+model Contact {
+  id              String       @id @default(cuid())
+  counterpartyId  String
+  counterparty    Counterparty @relation(fields: [counterpartyId], references: [id])
+  name            String
+  email           String?
+  phone           String?
+  role            String?
+  notes           String?
+  createdAt       DateTime     @default(now())
+
+  @@map("contacts")
+}
+
+// ─── SOURCE FILES ─────────────────────────────────────────────────────────────
+// Оригинални Drive/Gmail файлове
+
+model SourceFile {
+  id          String     @id @default(cuid())
+  type        SourceType
+  driveFileId String?    @unique
+  driveUrl    String?
+  gmailMsgId  String?    @unique
+  gmailThread String?
+  filename    String
+  mimeType    String?
+  folder      String?    // Drive folder path
+  subject     String?    // Email subject
+  fromEmail   String?
+  receivedAt  DateTime?
+  processedAt DateTime?
+  notes       String?
+  createdAt   DateTime   @default(now())
+
+  bizDocuments BizDocument[]
+  emailThread  EmailThread?  @relation(fields: [gmailThread], references: [threadId])
+
+  @@map("source_files")
+}
+
+enum SourceType {
+  DRIVE
+  GMAIL
+  MANUAL
+}
+
+// ─── EMAIL THREADS ────────────────────────────────────────────────────────────
+
+model EmailThread {
+  id              String    @id @default(cuid())
+  threadId        String    @unique // Gmail thread ID
+  subject         String
+  fromEmail       String?
+  counterpartyId  String?
+  lastMessageAt   DateTime?
+  messageCount    Int       @default(1)
+  hasAttachments  Boolean   @default(false)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sourceFiles SourceFile[]
+
+  @@map("email_threads")
+}
+
+// ─── BIZ DOCUMENTS ────────────────────────────────────────────────────────────
+// Нормализирани бизнес документи (фактури, проформи, оферти, протоколи, ДН)
+
+model BizDocument {
+  id              String          @id @default(cuid())
+  companyId       String?         // Studio Botema / Luminavera
+  counterpartyId  String?
+  counterparty    Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  projectId       String?
+  project         Project?        @relation(fields: [projectId], references: [id])
+  sourceFileId    String?
+  sourceFile      SourceFile?     @relation(fields: [sourceFileId], references: [id])
+  docType         BizDocType
+  docNumber       String?
+  docDate         DateTime?
+  dueDate         DateTime?
+  currency        String          @default("BGN")
+  amountNet       Decimal?        @db.Decimal(14, 4)
+  vatAmount       Decimal?        @db.Decimal(14, 4)
+  amountTotal     Decimal?        @db.Decimal(14, 4)
+  vatType         VatType         @default(STANDARD_BG)
+  status          BizDocStatus    @default(NEW)
+  confidence      Decimal?        @db.Decimal(5, 2)
+  notes           String?
+  internalRef     String?         // наш вътрешен reference
+  externalRef     String?         // reference от контрагента
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lines               BizDocumentLine[]
+  reconciliationLinks ReconciliationLink[] @relation("SourceDoc")
+  linkedTo            ReconciliationLink[] @relation("TargetDoc")
+  missingDocuments    MissingDocument[]
+
+  @@index([docType, status])
+  @@index([counterpartyId])
+  @@index([docDate])
+  @@map("biz_documents")
+}
+
+model BizDocumentLine {
+  id          String      @id @default(cuid())
+  docId       String
+  doc         BizDocument @relation(fields: [docId], references: [id], onDelete: Cascade)
+  lineNo      Int?
+  code        String?
+  description String
+  qty         Decimal?    @db.Decimal(12, 4)
+  unit        String?
+  unitPrice   Decimal?    @db.Decimal(14, 4)
+  vatPct      Decimal?    @db.Decimal(5, 2)
+  total       Decimal?    @db.Decimal(14, 4)
+  notes       String?
+
+  @@map("biz_document_lines")
+}
+
+enum BizDocType {
+  INVOICE_OUT      // изходяща фактура
+  INVOICE_IN       // входяща фактура
+  PROFORMA_OUT
+  PROFORMA_IN
+  OFFER_OUT        // оферта към клиент
+  OFFER_IN         // оферта от доставчик
+  CREDIT_NOTE
+  DELIVERY_NOTE    // стокова разписка / ДН
+  CMR              // товарителница
+  PROTOCOL         // приемо-предавателен протокол
+  CUSTOMS          // митнически документ
+  BANK_STATEMENT
+  OTHER
+}
+
+enum BizDocStatus {
+  NEW
+  NEEDS_REVIEW
+  REVIEWED
+  IMPORTED         // вкаран в ERP
+  MATCHED          // свързан с плащане/доставка
+  ARCHIVED
+  REJECTED
+}
+
+enum VatType {
+  STANDARD_BG      // БГ ДДС 20%
+  EU_INTRA         // вътреобщностна доставка
+  REVERSE_CHARGE   // обратно начисляване
+  EXEMPT           // освободена
+  NON_VAT          // не е предмет на ДДС
+  IMPORT           // внос / митница
+}
+
+// ─── ORDERS ──────────────────────────────────────────────────────────────────
+
+model Order {
+  id              String        @id @default(cuid())
+  companyId       String?
+  clientId        String?
+  client          Counterparty? @relation("OrderClient", fields: [clientId], references: [id])
+  supplierId      String?
+  supplier        Counterparty? @relation("OrderSupplier", fields: [supplierId], references: [id])
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id])
+  orderType       OrderType
+  orderNo         String?
+  orderDate       DateTime?
+  currency        String        @default("EUR")
+  amountTotal     Decimal?      @db.Decimal(14, 4)
+  status          OrderStatus   @default(OPEN)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  lines      OrderLine[]
+  deliveries Delivery[]
+
+  @@index([orderType, status])
+  @@map("orders")
+}
+
+model OrderLine {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  lineNo      Int?
+  code        String?
+  description String
+  qty         Decimal @db.Decimal(12, 4)
+  unit        String?
+  unitPrice   Decimal @db.Decimal(14, 4)
+  currency    String  @default("EUR")
+  notes       String?
+
+  @@map("order_lines")
+}
+
+enum OrderType {
+  CLIENT_ORDER    // от клиент
+  SUPPLIER_ORDER  // към доставчик
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIAL
+  FULFILLED
+  CANCELLED
+}
+
+// ─── DELIVERIES ──────────────────────────────────────────────────────────────
+
+model Delivery {
+  id              String        @id @default(cuid())
+  orderId         String?
+  order           Order?        @relation(fields: [orderId], references: [id])
+  counterpartyId  String?
+  counterparty    Counterparty? @relation(fields: [counterpartyId], references: [id])
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id])
+  deliveryType    DeliveryType
+  deliveryNo      String?
+  deliveryDate    DateTime?
+  courier         String?
+  trackingNo      String?
+  status          DeliveryStatus @default(IN_TRANSIT)
+  hasInvoice      Boolean       @default(false)
+  invoiceValue    Decimal?      @db.Decimal(14, 4)
+  currency        String        @default("EUR")
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([deliveryType, status])
+  @@map("deliveries")
+}
+
+enum DeliveryType {
+  INBOUND   // входяща доставка
+  OUTBOUND  // изходяща доставка
+  RETURN    // връщане
+}
+
+enum DeliveryStatus {
+  IN_TRANSIT
+  DELIVERED
+  PARTIAL
+  RETURNED
+  CANCELLED
+}
+
+// ─── PAYMENTS ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id              String        @id @default(cuid())
+  companyId       String?
+  counterpartyId  String?
+  counterparty    Counterparty? @relation(fields: [counterpartyId], references: [id])
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id])
+  paymentType     PaymentType
+  paymentDate     DateTime
+  amount          Decimal       @db.Decimal(14, 4)
+  currency        String        @default("BGN")
+  reference       String?       // bank ref / COD ref
+  bankAccount     String?
+  status          PaymentMatchStatus @default(UNMATCHED)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  reconciliationLinks ReconciliationLink[]
+
+  @@index([paymentType, status])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+enum PaymentType {
+  BANK_TRANSFER
+  COD             // наложен платеж
+  CARD
+  CASH
+  OTHER
+}
+
+enum PaymentMatchStatus {
+  UNMATCHED
+  PARTIAL
+  MATCHED
+}
+
+// ─── RECONCILIATION LINKS ────────────────────────────────────────────────────
+// Логическите връзки между документи, плащания и доставки
+
+model ReconciliationLink {
+  id            String      @id @default(cuid())
+  sourceDocId   String?
+  sourceDoc     BizDocument? @relation("SourceDoc", fields: [sourceDocId], references: [id])
+  targetDocId   String?
+  targetDoc     BizDocument? @relation("TargetDoc", fields: [targetDocId], references: [id])
+  paymentId     String?
+  payment       Payment?    @relation(fields: [paymentId], references: [id])
+  linkType      LinkType
+  amountLinked  Decimal?    @db.Decimal(14, 4)
+  currency      String?
+  confidence    Decimal?    @db.Decimal(5, 2)
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  @@index([linkType])
+  @@map("reconciliation_links")
+}
+
+enum LinkType {
+  PAYMENT_TO_INVOICE
+  INVOICE_TO_DELIVERY
+  DELIVERY_TO_ORDER
+  ORDER_TO_PROJECT
+  DOCUMENT_TO_SOURCE
+  EMAIL_TO_DOCUMENT
+  PARTIAL_MATCH
+}
+
+// ─── MISSING DOCUMENTS ───────────────────────────────────────────────────────
+
+model MissingDocument {
+  id              String       @id @default(cuid())
+  counterpartyId  String?
+  counterparty    Counterparty? @relation(fields: [counterpartyId], references: [id])
+  projectId       String?
+  project         Project?     @relation(fields: [projectId], references: [id])
+  relatedDocId    String?
+  relatedDoc      BizDocument? @relation(fields: [relatedDocId], references: [id])
+  missingType     MissingType
+  description     String
+  expectedAmount  Decimal?     @db.Decimal(14, 4)
+  currency        String?
+  status          MissingStatus @default(OPEN)
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@map("missing_documents")
+}
+
+enum MissingType {
+  ADVANCE_INVOICE   // аванс фактура
+  FINAL_INVOICE     // финална фактура
+  DELIVERY_NOTE     // липсваща стокова разписка
+  PAYMENT_PROOF     // липсващо плащане
+  CUSTOMS_DOC       // митнически документ
+  OTHER
+}
+
+enum MissingStatus {
+  OPEN
+  FOUND
+  WRITTEN_OFF
+}
+
+// ─── COVERAGE ────────────────────────────────────────────────────────────────
+// Tracking на Drive/Gmail обхождане
+
+model Coverage {
+  id          String         @id @default(cuid())
+  source      CoverageSource
+  path        String         // Drive folder path или Gmail label/filter
+  year        Int
+  status      CoverageStatus @default(PENDING)
+  itemsFound  Int            @default(0)
+  itemsDone   Int            @default(0)
+  notes       String?
+  lastRunAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([source, path, year])
+  @@map("coverage")
+}
+
+enum CoverageSource {
+  DRIVE
+  GMAIL
+}
+
+enum CoverageStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  PARTIAL
 }
