@@ -49,6 +49,7 @@ app.use('/api/counterparties', require('./routes/counterparties'));
 app.use('/api/biz-documents',  require('./routes/bizDocuments'));
 app.use('/api/payments',       require('./routes/payments'));
 app.use('/api/reconciliation', require('./routes/reconciliation'));
+app.use('/api/backfill',       require('./routes/backfill'));
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

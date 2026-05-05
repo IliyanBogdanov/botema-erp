@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, FileText, ShoppingCart, Package,
-  FolderOpen, Users, Receipt, Mail, Bot, LogOut, Truck, AlertTriangle
+  FolderOpen, Users, Receipt, Mail, Bot, LogOut, Truck, AlertTriangle, Database
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
@@ -21,6 +21,7 @@ const navItems = [
   { label: 'Документи',  href: '/documents', icon: Mail },
   { label: 'Сигнали',    href: '/alerts',    icon: AlertTriangle },
   { label: 'AI Асистент',href: '/ai',        icon: Bot },
+  { label: 'Backfill',   href: '/backfill',  icon: Database },
 ];
 
 export function Sidebar() {
