@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
@@ -21,8 +22,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoices  Invoice[]
-  documents Document[]
+  invoices          Invoice[]
+  documents         Document[]
+  reviewedDocuments Document[] @relation("ReviewedDocuments")
+  alerts            Alert[]
 
   @@map("users")
 }
@@ -36,20 +39,20 @@ enum Role {
 // ─── COMPANY ─────────────────────────────────────────────────────────────────
 
 model Company {
-  id        String @id @default(cuid())
-  name      String
-  eik       String @unique
-  vat       String
-  address   String
-  city      String
-  mol       String
-  bankIban  String
-  bankBic   String
-  bankName  String
-  email     String?
-  phone     String?
-  website   String?
-  brand     Brand  @default(STUDIO_BOTEMA)
+  id       String  @id @default(cuid())
+  name     String
+  eik      String  @unique
+  vat      String
+  address  String
+  city     String
+  mol      String
+  bankIban String
+  bankBic  String
+  bankName String
+  email    String?
+  phone    String?
+  website  String?
+  brand    Brand   @default(STUDIO_BOTEMA)
 
   @@map("companies")
 }
@@ -62,7 +65,7 @@ enum Brand {
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
 
 model Client {
-  id        String      @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
   eik       String?
   vat       String?
@@ -71,15 +74,15 @@ model Client {
   mol       String?
   email     String?
   phone     String?
-  type      ClientType  @default(COMPANY)
-  brand     Brand       @default(STUDIO_BOTEMA)
+  type      ClientType @default(COMPANY)
+  brand     Brand      @default(STUDIO_BOTEMA)
   since     Int?
   notes     String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
-  invoices  Invoice[]
-  projects  Project[]
+  invoices Invoice[]
+  projects Project[]
 
   @@map("clients")
 }
@@ -112,22 +115,23 @@ model Supplier {
 // ─── PROJECTS ────────────────────────────────────────────────────────────────
 
 model Project {
-  id          String        @id @default(cuid())
-  code        String        @unique  // e.g. "1717.183"
-  name        String
-  clientId    String?
-  client      Client?       @relation(fields: [clientId], references: [id])
-  status      ProjectStatus @default(ACTIVE)
-  year        Int
-  notes       String?
-  startDate   DateTime?
-  endDate     DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id        String        @id @default(cuid())
+  code      String        @unique // e.g. "1717.183"
+  name      String
+  clientId  String?
+  client    Client?       @relation(fields: [clientId], references: [id])
+  status    ProjectStatus @default(ACTIVE)
+  year      Int
+  notes     String?
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
-  invoices    Invoice[]
-  purchases   Purchase[]
-  inventory   InventoryItem[]
+  invoices  Invoice[]
+  purchases Purchase[]
+  inventory InventoryItem[]
+  alerts    Alert[]
 
   @@map("projects")
 }
@@ -142,43 +146,44 @@ enum ProjectStatus {
 // ─── INVOICES (OUTGOING) ─────────────────────────────────────────────────────
 
 model Invoice {
-  id            String        @id @default(cuid())
-  number        String        @unique
-  date          DateTime
-  dueDate       DateTime?
-  clientId      String
-  client        Client        @relation(fields: [clientId], references: [id])
-  projectId     String?
-  project       Project?      @relation(fields: [projectId], references: [id])
-  type          InvoiceType   @default(INVOICE)
-  status        PaymentStatus @default(PENDING)
-  brand         Brand         @default(STUDIO_BOTEMA)
-  currency      String        @default("BGN")
-  amountNet     Decimal       @db.Decimal(12, 2)
-  vatAmount     Decimal       @db.Decimal(12, 2)
-  amountTotal   Decimal       @db.Decimal(12, 2)
-  description   String?
-  notes         String?
-  driveFileId   String?       // Google Drive file ID
-  createdById   String?
-  createdBy     User?         @relation(fields: [createdById], references: [id])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id          String        @id @default(cuid())
+  number      String        @unique
+  date        DateTime
+  dueDate     DateTime?
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id])
+  projectId   String?
+  project     Project?      @relation(fields: [projectId], references: [id])
+  type        InvoiceType   @default(INVOICE)
+  status      PaymentStatus @default(PENDING)
+  brand       Brand         @default(STUDIO_BOTEMA)
+  currency    String        @default("BGN")
+  amountNet   Decimal       @db.Decimal(12, 2)
+  vatAmount   Decimal       @db.Decimal(12, 2)
+  amountTotal Decimal       @db.Decimal(12, 2)
+  description String?
+  notes       String?
+  driveFileId String? // Google Drive file ID
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  items         InvoiceItem[]
+  items  InvoiceItem[]
+  alerts Alert[]
 
   @@map("invoices")
 }
 
 model InvoiceItem {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   invoiceId   String
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   description String
-  qty         Decimal  @db.Decimal(10, 3)
-  unitPrice   Decimal  @db.Decimal(12, 2)
-  vatPct      Decimal  @default(20) @db.Decimal(5, 2)
-  total       Decimal  @db.Decimal(12, 2)
+  qty         Decimal @db.Decimal(10, 3)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  vatPct      Decimal @default(20) @db.Decimal(5, 2)
+  total       Decimal @db.Decimal(12, 2)
 
   @@map("invoice_items")
 }
@@ -214,7 +219,8 @@ model Purchase {
   year        Int
   createdAt   DateTime      @default(now())
 
-  items       PurchaseItem[]
+  items  PurchaseItem[]
+  alerts Alert[]
 
   @@map("purchases")
 }
@@ -235,55 +241,55 @@ model PurchaseItem {
 // ─── INVENTORY ───────────────────────────────────────────────────────────────
 
 model InventoryItem {
-  id          String          @id @default(cuid())
-  supplierId  String
-  supplier    Supplier        @relation(fields: [supplierId], references: [id])
-  projectId   String?
-  project     Project?        @relation(fields: [projectId], references: [id])
-  code        String
-  name        String
-  category    ItemCategory    @default(LIGHTING)
-  account     String?         // счетоводна сметка
-  qtyIn       Decimal         @default(0) @db.Decimal(10, 3)
-  qtyOut      Decimal         @default(0) @db.Decimal(10, 3)
-  location    String?
-  notes       String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id         String       @id @default(cuid())
+  supplierId String
+  supplier   Supplier     @relation(fields: [supplierId], references: [id])
+  projectId  String?
+  project    Project?     @relation(fields: [projectId], references: [id])
+  code       String
+  name       String
+  category   ItemCategory @default(LIGHTING)
+  account    String? // счетоводна сметка
+  qtyIn      Decimal      @default(0) @db.Decimal(10, 3)
+  qtyOut     Decimal      @default(0) @db.Decimal(10, 3)
+  location   String?
+  notes      String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
-  movements   StockMovement[]
+  movements StockMovement[]
 
   @@map("inventory_items")
 }
 
 model StockMovement {
-  id            String         @id @default(cuid())
-  itemId        String
-  item          InventoryItem  @relation(fields: [itemId], references: [id])
-  type          MovementType
-  qty           Decimal        @db.Decimal(10, 3)
-  date          DateTime
-  reference     String?
-  notes         String?
-  createdAt     DateTime       @default(now())
+  id        String        @id @default(cuid())
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id])
+  type      MovementType
+  qty       Decimal       @db.Decimal(10, 3)
+  date      DateTime
+  reference String?
+  notes     String?
+  createdAt DateTime      @default(now())
 
   @@map("stock_movements")
 }
 
 enum MovementType {
-  IN       // доставка
-  OUT      // изписване
-  SAMPLE   // мостра
-  RETURN   // връщане
-  ADJUST   // корекция
+  IN // доставка
+  OUT // изписване
+  SAMPLE // мостра
+  RETURN // връщане
+  ADJUST // корекция
 }
 
 enum ItemCategory {
-  LIGHTING    // осветителни тела
-  ELECTRICAL  // ел. материали
-  SAMPLE      // мостри
-  FURNITURE   // мебели
-  MIRROR      // огледала
+  LIGHTING // осветителни тела
+  ELECTRICAL // ел. материали
+  SAMPLE // мостри
+  FURNITURE // мебели
+  MIRROR // огледала
   OTHER
 }
 
@@ -306,19 +312,36 @@ model Expense {
 // ─── DOCUMENTS ───────────────────────────────────────────────────────────────
 
 model Document {
-  id            String       @id @default(cuid())
-  driveFileId   String       @unique
-  driveUrl      String
-  filename      String
-  type          DocType
-  status        DocStatus    @default(PENDING)
-  extractedData Json?        // AI extracted data
-  processedAt   DateTime?
-  createdById   String?
-  createdBy     User?        @relation(fields: [createdById], references: [id])
-  createdAt     DateTime     @default(now())
+  id              String          @id @default(cuid())
+  driveFileId     String          @unique
+  driveUrl        String
+  filename        String
+  type            DocType
+  status          DocStatus       @default(PENDING)
+  extractedData   Json? // AI extracted data
+  confidence      Decimal?        @db.Decimal(5, 2)
+  suggestedAction DocumentAction?
+  duplicateOfId   String?
+  riskFlags       Json?
+  processedAt     DateTime?
+  createdById     String?
+  createdBy       User?           @relation(fields: [createdById], references: [id])
+  reviewedById    String?
+  reviewedBy      User?           @relation("ReviewedDocuments", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  createdAt       DateTime        @default(now())
+
+  alerts Alert[]
 
   @@map("documents")
+}
+
+enum DocumentAction {
+  CREATE_PURCHASE
+  CREATE_INVOICE
+  CREATE_EXPENSE
+  ARCHIVE_ONLY
+  REJECT
 }
 
 enum DocType {
@@ -330,21 +353,73 @@ enum DocType {
 }
 
 enum DocStatus {
-  PENDING    // чака обработка
-  PROCESSED  // обработен
-  LINKED     // свързан с фактура
-  REJECTED   // отхвърлен
+  PENDING // чака обработка
+  PROCESSED // обработен
+  LINKED // свързан с фактура
+  REJECTED // отхвърлен
+}
+
+// ─── ALERTS ──────────────────────────────────────────────────────────────────
+
+model Alert {
+  id           String        @id @default(cuid())
+  type         AlertType
+  severity     AlertSeverity @default(WARNING)
+  status       AlertStatus   @default(ACTIVE)
+  title        String
+  description  String
+  metadata     Json?
+  documentId   String?
+  document     Document?     @relation(fields: [documentId], references: [id])
+  invoiceId    String?
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  purchaseId   String?
+  purchase     Purchase?     @relation(fields: [purchaseId], references: [id])
+  projectId    String?
+  project      Project?      @relation(fields: [projectId], references: [id])
+  createdById  String?
+  createdBy    User?         @relation(fields: [createdById], references: [id])
+  detectedAt   DateTime      @default(now())
+  resolvedAt   DateTime?
+  snoozedUntil DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status, severity])
+  @@index([type, status])
+  @@map("alerts")
+}
+
+enum AlertType {
+  DOCUMENT
+  VAT
+  REVENUE
+  EXPENSE
+  PROJECT
+  DATA_QUALITY
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+  SNOOZED
 }
 
 // ─── GMAIL WATCH ─────────────────────────────────────────────────────────────
 
 model GmailWatch {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  historyId     String
-  expiration    DateTime
-  active        Boolean  @default(true)
-  updatedAt     DateTime @updatedAt
+  id         String   @id @default(cuid())
+  email      String   @unique
+  historyId  String
+  expiration DateTime
+  active     Boolean  @default(true)
+  updatedAt  DateTime @updatedAt
 
   @@map("gmail_watches")
 }

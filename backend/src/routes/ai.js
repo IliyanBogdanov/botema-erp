@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const Anthropic = require('@anthropic-ai/sdk');
 const { auth } = require('../middleware/auth');
+const prisma = require('../lib/prisma');
 
-const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // POST /api/ai/chat
@@ -85,7 +84,8 @@ router.post('/extract', auth, async (req, res) => {
             "amountTotal": 0.00,
             "currency": "EUR"|"BGN",
             "description": "...",
-            "items": [{"description":"...","qty":1,"unitPrice":0.00}]
+            "confidence": 0.00,
+            "items": [{"description":"...","qty":1,"unitPrice":0.00,"vatPct":20}]
           }
           Само JSON, без markdown.` }
         ]

@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const { auth } = require('../middleware/auth');
+const { analyzeDocument, reviewDocument } = require('../lib/documentReview');
+const { generateAlerts } = require('../lib/alertEngine');
+const prisma = require('../lib/prisma');
 
-const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const getGmailClient = () => {
@@ -69,37 +70,16 @@ router.get('/pending', auth, async (req, res) => {
 // POST /api/gmail/process/:docId — Confirm and save document
 router.post('/process/:docId', auth, async (req, res) => {
   try {
-    const { action, invoiceData } = req.body;
-    const doc = await prisma.document.findUnique({ where: { id: req.params.docId } });
-    if (!doc) return res.status(404).json({ error: 'Document not found' });
-
-    if (action === 'approve') {
-      // Create invoice or purchase from extracted data
-      const data = invoiceData || doc.extractedData;
-      if (data.type === 'INVOICE_IN') {
-        // Find or create supplier
-        let supplier = await prisma.supplier.findFirst({ where: { name: { contains: data.supplierName } } });
-        if (!supplier) {
-          supplier = await prisma.supplier.create({ data: { name: data.supplierName, currency: data.currency || 'EUR' } });
-        }
-        await prisma.purchase.create({
-          data: {
-            invoiceNo: data.invoiceNo,
-            date: new Date(data.date),
-            supplierId: supplier.id,
-            currency: data.currency || 'EUR',
-            amount: data.amount,
-            description: data.description,
-            driveFileId: doc.driveFileId,
-            year: new Date(data.date).getFullYear(),
-          }
-        });
-      }
-      await prisma.document.update({ where: { id: doc.id }, data: { status: 'LINKED', processedAt: new Date() } });
-    } else {
-      await prisma.document.update({ where: { id: doc.id }, data: { status: 'REJECTED' } });
-    }
-    res.json({ success: true });
+    const action = req.body.action === 'approve'
+      ? req.body.documentAction || 'CREATE_PURCHASE'
+      : 'REJECT';
+    const result = await reviewDocument(prisma, req.params.docId, {
+      ...req.body,
+      action,
+      invoiceData: req.body.invoiceData,
+    }, req.user.id);
+    await generateAlerts(prisma);
+    res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -183,7 +163,10 @@ async function processEmail(gmail, messageId) {
                 "amount": 0.00,
                 "currency": "EUR"|"BGN",
                 "description": "кратко описание",
-                "items": [{"description":"...", "qty":1, "unitPrice":0.00}]
+                "vatAmount": 0.00,
+                "amountTotal": 0.00,
+                "confidence": 0.00,
+                "items": [{"description":"...", "qty":1, "unitPrice":0.00, "vatPct":20}]
               }
               Върни САМО валиден JSON без markdown.`
             }
@@ -207,6 +190,8 @@ async function processEmail(gmail, messageId) {
         fields: 'id, webViewLink'
       });
 
+      const analysis = await analyzeDocument(prisma, extractedData);
+
       // Save document record
       await prisma.document.create({
         data: {
@@ -216,8 +201,13 @@ async function processEmail(gmail, messageId) {
           type: extractedData.type || 'INVOICE_IN',
           status: 'PENDING',
           extractedData,
+          confidence: analysis.confidence,
+          suggestedAction: analysis.suggestedAction,
+          duplicateOfId: analysis.duplicateOfId,
+          riskFlags: analysis.riskFlags,
         }
       });
+      await generateAlerts(prisma);
     }
   } catch (err) {
     console.error('processEmail error:', err);

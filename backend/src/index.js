@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const { startAlertJobs } = require('./lib/alertEngine');
+const prisma = require('./lib/prisma');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,6 +41,8 @@ app.use('/api/inventory',  require('./routes/inventory'));
 app.use('/api/expenses',   require('./routes/expenses'));
 app.use('/api/documents',  require('./routes/documents'));
 app.use('/api/dashboard',  require('./routes/dashboard'));
+app.use('/api/alerts',     require('./routes/alerts'));
+app.use('/api/vat',        require('./routes/vat'));
 app.use('/api/ai',         require('./routes/ai'));
 app.use('/api/gmail',      require('./routes/gmail'));
 
@@ -54,5 +58,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Studio Botema ERP API running on port ${PORT}`);
 });
+
+startAlertJobs(prisma);
 
 module.exports = app;

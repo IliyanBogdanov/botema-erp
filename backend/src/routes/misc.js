@@ -1,9 +1,8 @@
 const express = require('express');
+const prisma = require('../lib/prisma');
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 const expensesRouter = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 const { auth } = require('../middleware/auth');
 
 expensesRouter.get('/', auth, async (req, res) => {
