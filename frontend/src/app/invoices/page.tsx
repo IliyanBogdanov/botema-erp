@@ -21,7 +21,7 @@ interface Invoice {
   dueDate: string;
   status: string;
   amountNet: number;
-  amountVat: number;
+  vatAmount: number;
   amountTotal: number;
   currency: string;
   client?: { id: string; name: string };
@@ -361,7 +361,7 @@ export default function InvoicesPage() {
                   <td className="table-cell font-medium text-white">{inv.client?.name || '—'}</td>
                   <td className="table-cell text-[#a1a1aa] text-xs">{inv.project?.code || '—'}</td>
                   <td className="table-cell text-right font-semibold text-white">{fmt(inv.amountNet, inv.currency)}</td>
-                  <td className="table-cell text-right text-[#71717a]">{fmt(inv.amountVat, inv.currency)}</td>
+                  <td className="table-cell text-right text-[#71717a]">{fmt(inv.vatAmount, inv.currency)}</td>
                   <td className="table-cell text-right font-bold text-white">{fmt(inv.amountTotal, inv.currency)}</td>
                   <td className="table-cell"><StatusBadge status={inv.status} /></td>
                   <td className="table-cell"><StatusMenu invoice={inv} /></td>

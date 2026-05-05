@@ -7,7 +7,7 @@ import { TopClientsChart } from '@/components/TopClientsChart';
 import { RecentInvoices } from '@/components/RecentInvoices';
 import { PendingDocuments } from '@/components/PendingDocuments';
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Package, Clock, DollarSign, Percent } from 'lucide-react';
+import { TrendingUp, TrendingDown, Package, Percent, AlertTriangle } from 'lucide-react';
 
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear());
@@ -21,6 +21,17 @@ export default function DashboardPage() {
     queryKey: ['pending-docs'],
     queryFn: () => api.get('/gmail/pending').then(r => r.data),
     refetchInterval: 30000,
+  });
+
+  const { data: alerts = [] } = useQuery({
+    queryKey: ['dashboard-alerts'],
+    queryFn: () => api.get('/alerts?status=ACTIVE&limit=5').then(r => r.data),
+    refetchInterval: 60000,
+  });
+
+  const { data: vat } = useQuery({
+    queryKey: ['vat-overview', year],
+    queryFn: () => api.get(`/vat/overview?year=${year}`).then(r => r.data),
   });
 
   if (isLoading) return <LoadingSkeleton />;
@@ -49,6 +60,22 @@ export default function DashboardPage() {
       </div>
 
       {/* Pending documents alert */}
+      {alerts?.length > 0 && (
+        <div className="mb-6 card p-4 border-l-4 border-[#ff453a]">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <AlertTriangle size={18} className="text-[#ff453a] flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-white">{alerts.length} активни сигнала</div>
+                <div className="text-xs text-[#a1a1aa] truncate">{alerts[0]?.title}</div>
+              </div>
+            </div>
+            <a href="/alerts" className="text-xs text-[#0a84ff] font-semibold hover:underline flex-shrink-0">Отвори</a>
+          </div>
+        </div>
+      )}
+
+      {/* Pending documents alert */}
       {pendingDocs?.length > 0 && (
         <div className="mb-6 card p-4 border-l-4 border-[#ff9f0a] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -73,6 +100,26 @@ export default function DashboardPage() {
         <KPICard label="Склад" value={kpis.inventoryCount || 0}
           sub="артикула налични" color="orange" icon={<Package size={16} />} />
       </div>
+
+      {vat && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="card p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">Изходящ ДДС</div>
+            <div className="text-xl font-bold text-white mt-2">{vat.outputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">Входящ ДДС</div>
+            <div className="text-xl font-bold text-white mt-2">{vat.estimatedInputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">Нетно ДДС</div>
+            <div className={`text-xl font-bold mt-2 ${vat.netVat >= 0 ? 'text-[#ff9f0a]' : 'text-[#30d158]'}`}>
+              {vat.netVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+            </div>
+            {vat.pendingCredit > 0 && <div className="text-xs text-[#71717a] mt-1">Потенциален кредит: {vat.pendingCredit.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN</div>}
+          </div>
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">

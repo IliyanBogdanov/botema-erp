@@ -1,11 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, FileText, ShoppingCart, Package,
-  FolderOpen, Users, Receipt, Mail, Bot, LogOut, Truck
+  FolderOpen, Users, Receipt, Mail, Bot, LogOut, Truck, AlertTriangle
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
+import { api } from '@/lib/api';
 
 const navItems = [
   { label: 'Дашборд',    href: '/',          icon: LayoutDashboard, exact: true },
@@ -17,6 +19,7 @@ const navItems = [
   { label: 'Доставчици', href: '/suppliers',  icon: Truck },
   { label: 'Разходи',    href: '/expenses',  icon: Receipt },
   { label: 'Документи',  href: '/documents', icon: Mail },
+  { label: 'Сигнали',    href: '/alerts',    icon: AlertTriangle },
   { label: 'AI Асистент',href: '/ai',        icon: Bot },
 ];
 
@@ -24,6 +27,12 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clearUser } = useAuthStore();
+  const { data: alerts = [] } = useQuery({
+    queryKey: ['alerts-sidebar'],
+    queryFn: () => api.get('/alerts?status=ACTIVE&limit=20').then(r => r.data),
+    refetchInterval: 60000,
+  });
+  const alertCount = Array.isArray(alerts) ? alerts.length : 0;
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href;
@@ -61,6 +70,11 @@ export function Sidebar() {
           >
             <Icon size={16} className="flex-shrink-0" />
             <span>{label}</span>
+            {href === '/alerts' && alertCount > 0 && (
+              <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-[#ff453a] text-white text-[10px] font-bold flex items-center justify-center">
+                {alertCount > 9 ? '9+' : alertCount}
+              </span>
+            )}
           </Link>
         ))}
       </nav>
