@@ -22,19 +22,23 @@ export default function BackfillPage() {
 
   const { data: coverage } = useQuery({
     queryKey: ['coverage'],
-    queryFn: () => api('/backfill/coverage'),
+    queryFn: () => api.get('/backfill/coverage').then(r => r.data),
     refetchInterval: 5000,
   });
 
   const { data: sourceFiles } = useQuery({
     queryKey: ['source-files'],
-    queryFn: () => api('/backfill/source-files?type=GMAIL'),
+    queryFn: () => api.get('/backfill/source-files?type=GMAIL').then(r => r.data),
   });
 
   const gmailBackfill = useMutation({
-    mutationFn: (year: number) => api(`/backfill/gmail/${year}`, { method: 'POST' }),
-    onSuccess: (data) => {
-      addLog(`✅ Gmail ${data.year}: намерени ${data.totalFound}, записани ${data.totalDone}, пропуснати ${data.skipped}`);
+    mutationFn: (year: number) => api.post(`/backfill/gmail/${year}`).then(r => r.data),
+    onSuccess: (data: any) => {
+      if (data.jobId) {
+        addLog(`⏳ Gmail backfill started (job: ${data.jobId}). Ще се обнови автоматично.`);
+      } else {
+        addLog(`✅ Gmail ${data.year}: намерени ${data.totalFound}, записани ${data.totalDone}, пропуснати ${data.skipped}`);
+      }
       qc.invalidateQueries({ queryKey: ['coverage'] });
       qc.invalidateQueries({ queryKey: ['source-files'] });
     },
@@ -42,17 +46,17 @@ export default function BackfillPage() {
   });
 
   const driveBackfillMut = useMutation({
-    mutationFn: (data: typeof driveFolder) => api('/backfill/drive', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: (data) => {
-      addLog(`✅ Drive ${data.folderPath}: намерени ${data.totalFound}, записани ${data.totalDone}`);
+    mutationFn: (data: typeof driveFolder) => api.post('/backfill/drive', data).then(r => r.data),
+    onSuccess: (data: any) => {
+      addLog(`✅ Drive ${data.folderPath ?? ''}: намерени ${data.totalFound ?? '?'}, записани ${data.totalDone ?? '?'}`);
       qc.invalidateQueries({ queryKey: ['coverage'] });
     },
     onError: (e: any) => addLog(`❌ Drive грешка: ${e.message}`),
   });
 
   const inventoryImport = useMutation({
-    mutationFn: (rows: object[]) => api('/backfill/inventory', { method: 'POST', body: JSON.stringify({ rows }) }),
-    onSuccess: (data) => {
+    mutationFn: (rows: object[]) => api.post('/backfill/inventory', { rows }).then(r => r.data),
+    onSuccess: (data: any) => {
       addLog(`✅ Наличности: вкарани ${data.created}, грешки ${data.errors?.length ?? 0}`);
       if (data.errors?.length) data.errors.forEach((e: string) => addLog(`  ⚠ ${e}`));
     },
