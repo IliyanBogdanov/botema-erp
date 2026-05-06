@@ -50,6 +50,8 @@ app.use('/api/biz-documents',  require('./routes/bizDocuments'));
 app.use('/api/payments',       require('./routes/payments'));
 app.use('/api/reconciliation', require('./routes/reconciliation'));
 app.use('/api/backfill',       require('./routes/backfill'));
+app.use('/api/auth/google',    require('./routes/google'));  // callback at /api/auth/google/callback
+app.use('/api/google',         require('./routes/google'));  // auth-url + status
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
