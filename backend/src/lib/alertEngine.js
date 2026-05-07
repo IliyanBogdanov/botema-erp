@@ -38,20 +38,34 @@ async function generateAlerts(prisma) {
     orderBy: { createdAt: 'asc' },
   });
 
-  for (const doc of pendingDocs) {
-    const flags = Array.isArray(doc.riskFlags) ? doc.riskFlags : [];
-    const hasRawOnly = Boolean(doc.extractedData?.raw);
+  // One summary alert for pending documents (instead of per-document noise)
+  if (pendingDocs.length > 0) {
+    const critical = pendingDocs.filter(d => Array.isArray(d.riskFlags) && d.riskFlags.includes('DUPLICATE_INVOICE'));
+    const severity = critical.length > 0 ? 'CRITICAL' : 'WARNING';
+    const byType = pendingDocs.reduce((acc, d) => { acc[d.type] = (acc[d.type] || 0) + 1; return acc; }, {});
+    const typeStr = Object.entries(byType).map(([t, n]) => `${t}: ${n}`).join(', ');
     created.push(await ensureAlert(prisma, {
       type: 'DOCUMENT',
-      severity: flags.includes('DUPLICATE_INVOICE') || hasRawOnly ? 'CRITICAL' : 'WARNING',
-      title: `Документ чака решение: ${doc.filename}`,
-      description: flags.length
-        ? `Документът има рискове: ${flags.join(', ')}. Потвърди действие преди запис.`
-        : 'Документът е извлечен и чака да избереш как да бъде вкаран.',
-      documentId: doc.id,
-      metadata: { flags, suggestedAction: doc.suggestedAction },
+      severity,
+      title: `${pendingDocs.length} документа чакат решение`,
+      description: `Преглед и класификация необходими: ${typeStr}. Отвори "Документи" за детайли.`,
+      metadata: { count: pendingDocs.length, byType },
     }));
+  }
 
+  // Critical-only: duplicate invoice alerts per document
+  for (const doc of pendingDocs) {
+    const flags = Array.isArray(doc.riskFlags) ? doc.riskFlags : [];
+    if (flags.includes('DUPLICATE_INVOICE')) {
+      created.push(await ensureAlert(prisma, {
+        type: 'DOCUMENT',
+        severity: 'CRITICAL',
+        title: `Възможен дубликат: ${doc.filename}`,
+        description: 'Документът изглежда дублиран. Провери преди запис.',
+        documentId: doc.id,
+        metadata: { flags },
+      }));
+    }
     if (flags.includes('MISSING_VAT')) {
       created.push(await ensureAlert(prisma, {
         type: 'VAT',
@@ -85,8 +99,9 @@ async function generateAlerts(prisma) {
     }));
   }
 
+  const twoYearsAgo = new Date(`${currentYear - 2}-01-01T00:00:00.000Z`);
   const invoicesWithoutProject = await prisma.invoice.findMany({
-    where: { projectId: null, status: { not: 'CANCELLED' }, date: { gte: startOfYear } },
+    where: { projectId: null, status: { not: 'CANCELLED' }, date: { gte: twoYearsAgo } },
     take: 25,
     include: { client: { select: { name: true } } },
   });

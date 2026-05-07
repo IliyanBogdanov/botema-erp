@@ -58,6 +58,23 @@ router.post('/generate', auth, async (req, res) => {
   }
 });
 
+// POST /api/alerts/bulk-resolve — resolve many alerts at once by filter
+router.post('/bulk-resolve', auth, async (req, res) => {
+  try {
+    const { type, severity, status = 'ACTIVE' } = req.body;
+    const where = { status };
+    if (type) where.type = type;
+    if (severity) where.severity = severity;
+    const result = await prisma.alert.updateMany({
+      where,
+      data: { status: 'RESOLVED', resolvedAt: new Date() },
+    });
+    res.json({ resolved: result.count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/digest', auth, async (req, res) => {
   try {
     const result = await sendDailyDigest(prisma);
