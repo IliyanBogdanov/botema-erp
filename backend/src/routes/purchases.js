@@ -23,4 +23,22 @@ router.post('/', auth, async (req, res) => {
   res.status(201).json(purchase);
 });
 
+router.patch('/:id', auth, async (req, res) => {
+  try {
+    const { amount, currency, invoiceNo, description, status, projectId, date } = req.body;
+    const data = {};
+    if (amount !== undefined) data.amount = Number(amount);
+    if (currency) data.currency = currency;
+    if (invoiceNo !== undefined) data.invoiceNo = invoiceNo;
+    if (description !== undefined) data.description = description;
+    if (status) data.status = status;
+    if (projectId !== undefined) data.projectId = projectId || null;
+    if (date) { data.date = new Date(date); data.year = new Date(date).getFullYear(); }
+    const purchase = await prisma.purchase.update({ where: { id: req.params.id }, data });
+    res.json(purchase);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

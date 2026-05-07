@@ -95,9 +95,9 @@ router.get('/jobs', auth, adminOnly, (req, res) => {
 });
 
 // POST /api/backfill/parse-purchases  — AI-parse Drive source files → create Purchase records
-// Body: { limit?: number, dryRun?: boolean }
+// Body: { limit?: number, dryRun?: boolean, forceUpdate?: boolean }
 router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
-  const { limit = 30, dryRun = false } = req.body || {};
+  const { limit = 30, dryRun = false, forceUpdate = false } = req.body || {};
 
   const jobId = `parse-${Date.now()}`;
   jobs[jobId] = { jobId, type: 'parse-purchases', status: 'running', started: new Date(), log: [], result: null };
@@ -165,14 +165,17 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
 
       for (const file of files) {
         try {
-          // Skip if already has a purchase
+          // Skip if already has a purchase (unless forceUpdate to fix amount=0)
           const existing = await prisma.purchase.findFirst({
             where: { driveFileId: file.driveFileId },
           });
           if (existing) {
-            skipped++;
-            log(`SKIP (exists): ${file.filename}`);
-            continue;
+            if (!forceUpdate || (Number(existing.amount) !== 0)) {
+              skipped++;
+              log(`SKIP (exists): ${file.filename}`);
+              continue;
+            }
+            log(`RE-PARSE (amount=0): ${file.filename}`);
           }
 
           // Skip outgoing folders and delivery notes (only want invoices/purchases)
@@ -208,21 +211,37 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
 
           if (!dryRun && supplierId && parsed.docDate) {
             const year = new Date(parsed.docDate).getFullYear();
-            await prisma.purchase.create({
-              data: {
-                invoiceNo: parsed.invoiceNo || undefined,
-                date: new Date(parsed.docDate),
-                supplierId,
-                currency: parsed.currency || 'EUR',
-                amount: parsed.amountTotal || 0,
-                description: parsed.description || file.filename,
-                status: parsed.amountTotal ? 'PAID' : 'PENDING',
-                year: isNaN(year) ? new Date().getFullYear() : year,
-                driveFileId: file.driveFileId,
-              },
-            });
-            created++;
-            log(`  ✅ Purchase created (amount=${parsed.amountTotal || 'unknown'})`);
+            if (existing && forceUpdate) {
+              // Update existing purchase amount
+              await prisma.purchase.update({
+                where: { id: existing.id },
+                data: {
+                  amount: parsed.amountTotal || existing.amount,
+                  currency: parsed.currency || existing.currency,
+                  invoiceNo: parsed.invoiceNo || existing.invoiceNo,
+                  status: parsed.amountTotal ? 'PAID' : existing.status,
+                  description: parsed.description || existing.description,
+                },
+              });
+              created++;
+              log(`  ✅ Purchase updated (amount=${parsed.amountTotal || 'unknown'})`);
+            } else {
+              await prisma.purchase.create({
+                data: {
+                  invoiceNo: parsed.invoiceNo || undefined,
+                  date: new Date(parsed.docDate),
+                  supplierId,
+                  currency: parsed.currency || 'EUR',
+                  amount: parsed.amountTotal || 0,
+                  description: parsed.description || file.filename,
+                  status: parsed.amountTotal ? 'PAID' : 'PENDING',
+                  year: isNaN(year) ? new Date().getFullYear() : year,
+                  driveFileId: file.driveFileId,
+                },
+              });
+              created++;
+              log(`  ✅ Purchase created (amount=${parsed.amountTotal || 'unknown'})`);
+            }
           } else if (!dryRun) {
             skipped++;
             const reason = !supplierId ? 'no supplier' : 'no date';

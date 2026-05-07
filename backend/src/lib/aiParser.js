@@ -3,7 +3,7 @@
  * Handles Bulgarian folder names, extracts supplier/date/invoice from filename+folder
  */
 const { google } = require('googleapis');
-const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 
 const getAuth = () => {
   const oauth2 = new google.auth.OAuth2(
@@ -15,7 +15,7 @@ const getAuth = () => {
   return oauth2;
 };
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Bulgarian month names → month number
 const BG_MONTHS = {
@@ -170,14 +170,28 @@ async function downloadDriveFile(fileId) {
 }
 
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
-  const base64 = pdfBuffer.toString('base64');
   const folderType = guessFolderType(folder);
+
+  // Extract text from PDF
+  let pdfText = '';
+  try {
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(pdfBuffer);
+    pdfText = data.text.substring(0, 4000); // limit to 4000 chars
+  } catch (e) {
+    pdfText = `[PDF text extraction failed: ${e.message}]`;
+  }
 
   const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
 
 File: "${filename}"
 Folder: "${folder}"
 Document type hint: ${folderType}
+
+PDF text content:
+---
+${pdfText}
+---
 
 Extract the following data as JSON. If a field cannot be found, use null.
 Return ONLY valid JSON, no explanation.
@@ -197,22 +211,13 @@ Return ONLY valid JSON, no explanation.
   "confidence": number
 }`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
     max_tokens: 1024,
-    messages: [{
-      role: 'user',
-      content: [
-        {
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-        },
-        { type: 'text', text: prompt },
-      ],
-    }],
+    messages: [{ role: 'user', content: prompt }],
   });
 
-  const text = response.content[0].text.trim();
+  const text = response.choices[0].message.content.trim();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
   return JSON.parse(jsonMatch[0]);
