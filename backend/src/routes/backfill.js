@@ -3,6 +3,7 @@ const router = express.Router();
 const { auth, requireRole } = require('../middleware/auth');
 const adminOnly = requireRole('ADMIN');
 const { gmailBackfill, driveBackfill, importInventoryFromRows } = require('../lib/backfill');
+const { downloadDriveFile, parseDocumentWithAI, parseFromFilename, guessSupplierFromPath, guessFolderType, isOutgoingFolder } = require('../lib/aiParser');
 const prisma = require('../lib/prisma');
 
 // In-memory job status store
@@ -93,6 +94,156 @@ router.get('/jobs', auth, adminOnly, (req, res) => {
   res.json(Object.values(jobs).sort((a, b) => new Date(b.started) - new Date(a.started)));
 });
 
+// POST /api/backfill/parse-purchases  — AI-parse Drive source files → create Purchase records
+// Body: { limit?: number, dryRun?: boolean }
+router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
+  const { limit = 30, dryRun = false } = req.body || {};
+
+  const jobId = `parse-${Date.now()}`;
+  jobs[jobId] = { jobId, type: 'parse-purchases', status: 'running', started: new Date(), log: [], result: null };
+  res.json({ accepted: true, jobId, message: `Parsing purchases (limit ${limit}, dryRun ${dryRun}). Poll GET /api/backfill/job/${jobId}` });
+
+  // Run async
+  (async () => {
+    const log = msg => {
+      console.log('[parse-purchases]', msg);
+      jobs[jobId].log.push(msg);
+      if (jobs[jobId].log.length > 500) jobs[jobId].log.shift();
+    };
+
+    try {
+      // Target: incoming invoice/purchase folders (Bulgarian + English)
+      const allFiles = await prisma.sourceFile.findMany({
+        where: {
+          type: 'DRIVE',
+          driveFileId: { not: null },
+          AND: [
+            {
+              OR: [
+                { mimeType: { contains: 'pdf', mode: 'insensitive' } },
+                { filename: { endsWith: '.pdf', mode: 'insensitive' } },
+              ],
+            },
+            {
+              OR: [
+                { folder: { contains: 'Purchases', mode: 'insensitive' } },
+                { folder: { contains: 'Imports', mode: 'insensitive' } },
+                { folder: { contains: 'Входящи', mode: 'insensitive' } },
+                { folder: { contains: 'Лодес', mode: 'insensitive' } },
+                { folder: { contains: 'Алфалуче', mode: 'insensitive' } },
+                { folder: { contains: 'Поларис', mode: 'insensitive' } },
+                { folder: { contains: 'Брага', mode: 'insensitive' } },
+                { folder: { contains: 'Зиета', mode: 'insensitive' } },
+                { folder: { contains: 'Каримоку', mode: 'insensitive' } },
+                { folder: { contains: 'Омега Лайт', mode: 'insensitive' } },
+                { folder: { contains: 'Ателие Седап', mode: 'insensitive' } },
+                { folder: { contains: 'АКА', mode: 'insensitive' } },
+                { folder: { contains: 'Поръчка', mode: 'insensitive' } },
+                { folder: { contains: 'Фактура ', mode: 'insensitive' } },
+                { folder: { contains: 'Фактури ', mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
+        orderBy: { receivedAt: 'desc' },
+        take: parseInt(limit) * 3, // fetch more, filter in JS
+      });
+
+      // Exclude outgoing folders in JS (Prisma doesn't support NOT+contains+mode)
+      const EXCLUDE = ['изходящи', 'outgoing', 'оферти', 'оферта'];
+      const files = allFiles
+        .filter(f => {
+          const fl = f.folder.toLowerCase();
+          return !EXCLUDE.some(kw => fl.includes(kw));
+        })
+        .slice(0, parseInt(limit));
+
+      log(`Found ${files.length} purchase-related Drive files`);
+
+      let created = 0, skipped = 0, failed = 0;
+      const results = [];
+
+      for (const file of files) {
+        try {
+          // Skip if already has a purchase
+          const existing = await prisma.purchase.findFirst({
+            where: { driveFileId: file.driveFileId },
+          });
+          if (existing) {
+            skipped++;
+            log(`SKIP (exists): ${file.filename}`);
+            continue;
+          }
+
+          // Skip outgoing folders and delivery notes (only want invoices/purchases)
+          if (isOutgoingFolder(file.folder)) {
+            skipped++;
+            log(`SKIP (outgoing folder): ${file.filename}`);
+            continue;
+          }
+          const folderLower = file.folder.toLowerCase();
+          if (folderLower.includes('delivery') || folderLower.includes('deliveries') ||
+              folderLower.includes('доставк')) {
+            skipped++;
+            log(`SKIP (delivery folder): ${file.filename}`);
+            continue;
+          }
+
+          const supplierId = guessSupplierFromPath(file.folder, file.filename);
+          log(`Parsing ${file.filename} (supplier: ${supplierId || 'unknown'}, folder: ${file.folder})...`);
+
+          // Try AI parsing first, fall back to heuristic
+          let parsed;
+          try {
+            const pdfBuffer = await downloadDriveFile(file.driveFileId);
+            parsed = await parseDocumentWithAI(file.filename, file.folder, pdfBuffer);
+          } catch (dlErr) {
+            log(`  AI failed: ${dlErr.message.substring(0, 100)} — using heuristic fallback`);
+            parsed = parseFromFilename(file.filename, file.folder);
+          }
+
+          log(`  → invoiceNo=${parsed.invoiceNo} date=${parsed.docDate} total=${parsed.amountTotal} ${parsed.currency} conf=${parsed.confidence}`);
+
+          results.push({ file: file.filename, parsed, supplierId });
+
+          if (!dryRun && supplierId && parsed.docDate) {
+            const year = new Date(parsed.docDate).getFullYear();
+            await prisma.purchase.create({
+              data: {
+                invoiceNo: parsed.invoiceNo || undefined,
+                date: new Date(parsed.docDate),
+                supplierId,
+                currency: parsed.currency || 'EUR',
+                amount: parsed.amountTotal || 0,
+                description: parsed.description || file.filename,
+                status: parsed.amountTotal ? 'PAID' : 'PENDING',
+                year: isNaN(year) ? new Date().getFullYear() : year,
+                driveFileId: file.driveFileId,
+              },
+            });
+            created++;
+            log(`  ✅ Purchase created (amount=${parsed.amountTotal || 'unknown'})`);
+          } else if (!dryRun) {
+            skipped++;
+            const reason = !supplierId ? 'no supplier' : 'no date';
+            log(`  ⚠️ Skipped (${reason})`);
+          }
+        } catch (fileErr) {
+          failed++;
+          log(`  ❌ Error: ${fileErr.message}`);
+        }
+      }
+
+      jobs[jobId].status = 'done';
+      jobs[jobId].result = { total: files.length, created, skipped, failed, results };
+      log(`Done: created=${created} skipped=${skipped} failed=${failed}`);
+    } catch (err) {
+      jobs[jobId].status = 'error';
+      jobs[jobId].error = err.message;
+    }
+  })();
+});
+
 // GET /api/backfill/coverage  — current backfill status
 router.get('/coverage', auth, async (req, res) => {
   try {
@@ -133,6 +284,140 @@ router.get('/source-files', auth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// POST /api/backfill/parse-documents  — create Document records from ALL Drive/Gmail PDF source files
+// Body: { limit?: number, dryRun?: boolean }
+router.post('/parse-documents', auth, adminOnly, async (req, res) => {
+  const { limit = 100, dryRun = false } = req.body || {};
+
+  const jobId = `parse-docs-${Date.now()}`;
+  jobs[jobId] = { jobId, type: 'parse-documents', status: 'running', started: new Date(), log: [], result: null };
+  res.json({ accepted: true, jobId, message: `Parsing documents (limit ${limit}, dryRun ${dryRun}). Poll GET /api/backfill/job/${jobId}` });
+
+  (async () => {
+    const log = msg => {
+      console.log('[parse-documents]', msg);
+      jobs[jobId].log.push(msg);
+      if (jobs[jobId].log.length > 500) jobs[jobId].log.shift();
+    };
+
+    try {
+      // Fetch all PDF source files (Drive + Gmail attachments)
+      const allFiles = await prisma.sourceFile.findMany({
+        where: {
+          driveFileId: { not: null },
+          OR: [
+            { mimeType: { contains: 'pdf', mode: 'insensitive' } },
+            { filename: { endsWith: '.pdf', mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { receivedAt: 'desc' },
+        take: parseInt(limit) * 2,
+      });
+
+      // Filter out promotional/irrelevant files
+      const SKIP_KEYWORDS = ['pricelist', 'price list', 'ценова листа', 'catalogue', 'каталог', 'newsletter'];
+      const files = allFiles
+        .filter(f => {
+          const fl = (f.folder + ' ' + f.filename).toLowerCase();
+          return !SKIP_KEYWORDS.some(kw => fl.includes(kw));
+        })
+        .slice(0, parseInt(limit));
+
+      log(`Found ${files.length} PDF source files to process`);
+
+      let created = 0, skipped = 0, failed = 0;
+
+      // Detect document type from folder/filename
+      const detectDocType = (folder, filename) => {
+        const fl = (folder + ' ' + filename).toLowerCase();
+        if (fl.includes('изходящи') || fl.includes('outgoing') || fl.includes('микро') || fl.includes('micro.bg')) return 'INVOICE_OUT';
+        if (fl.includes('оферт') || fl.includes('offer') || fl.includes('проформ') || fl.includes('proform')) return 'PROFORMA';
+        if (fl.includes('доставк') || fl.includes('delivery') || fl.includes('товарителница') || fl.includes('dn') || fl.includes('cmr')) return 'DELIVERY';
+        if (fl.includes('фактура') || fl.includes('invoice') || fl.includes('входящи') || fl.includes('purchases')) return 'INVOICE_IN';
+        return 'OTHER';
+      };
+
+      // Suggest action based on doc type
+      const suggestAction = (docType, isOutgoing) => {
+        if (isOutgoing || docType === 'INVOICE_OUT') return 'CREATE_INVOICE';
+        if (docType === 'INVOICE_IN') return 'CREATE_PURCHASE';
+        if (docType === 'DELIVERY') return 'ARCHIVE_ONLY';
+        if (docType === 'PROFORMA') return 'ARCHIVE_ONLY';
+        return 'ARCHIVE_ONLY';
+      };
+
+      for (const file of files) {
+        try {
+          // Skip if document already exists for this driveFileId
+          const existing = await prisma.document.findFirst({
+            where: { driveFileId: file.driveFileId },
+          });
+          if (existing) {
+            skipped++;
+            log(`SKIP (exists): ${file.filename}`);
+            continue;
+          }
+
+          const outgoing = isOutgoingFolder(file.folder);
+          const docType = detectDocType(file.folder, file.filename);
+          const supplierId = !outgoing ? guessSupplierFromPath(file.folder, file.filename) : null;
+          const parsed = parseFromFilename(file.filename, file.folder);
+
+          log(`${file.filename} → type=${docType} supplier=${supplierId || '-'} outgoing=${outgoing}`);
+
+          const extractedData = {
+            invoiceNo: parsed.invoiceNo || null,
+            date: parsed.docDate || null,
+            supplierName: supplierId || null,
+            description: parsed.description || file.filename,
+            amount: parsed.amountTotal || null,
+            currency: parsed.currency || 'BGN',
+            folder: file.folder,
+            source: file.type,
+          };
+
+          const riskFlags = [];
+          if (!parsed.invoiceNo) riskFlags.push('MISSING_INVOICE_NO');
+          if (!parsed.docDate) riskFlags.push('MISSING_DATE');
+          if (!parsed.amountTotal) riskFlags.push('MISSING_AMOUNT');
+          if (!supplierId && !outgoing) riskFlags.push('UNKNOWN_COUNTERPARTY');
+
+          if (!dryRun) {
+            await prisma.document.create({
+              data: {
+                driveFileId: file.driveFileId,
+                driveUrl: file.driveUrl || `https://drive.google.com/file/d/${file.driveFileId}/view`,
+                filename: file.filename,
+                type: docType,
+                status: 'PENDING',
+                extractedData,
+                confidence: parsed.confidence ? parseFloat(parsed.confidence) : (riskFlags.length === 0 ? 0.8 : 0.4),
+                suggestedAction: suggestAction(docType, outgoing),
+                riskFlags: riskFlags.length > 0 ? riskFlags : null,
+              },
+            });
+            created++;
+            log(`  ✅ Document created (type=${docType})`);
+          } else {
+            log(`  DRY-RUN: would create ${docType} doc`);
+            created++;
+          }
+        } catch (fileErr) {
+          failed++;
+          log(`  ❌ ${file.filename}: ${fileErr.message}`);
+        }
+      }
+
+      jobs[jobId].status = 'done';
+      jobs[jobId].result = { total: files.length, created, skipped, failed };
+      log(`Done: created=${created} skipped=${skipped} failed=${failed}`);
+    } catch (err) {
+      jobs[jobId].status = 'error';
+      jobs[jobId].error = err.message;
+    }
+  })();
 });
 
 module.exports = router;
