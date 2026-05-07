@@ -60,6 +60,16 @@ async function main() {
     prisma.supplier.upsert({ where: { id: 'sup-rrom' }, update: {}, create: { id: 'sup-rrom', name: 'ЕТ Румен Романов', country: 'България', currency: 'BGN' } }),
     prisma.supplier.upsert({ where: { id: 'sup-rent' }, update: {}, create: { id: 'sup-rent', name: 'Наем шоурум', country: 'България', currency: 'BGN' } }),
     prisma.supplier.upsert({ where: { id: 'sup-acct' }, update: {}, create: { id: 'sup-acct', name: 'Счетоводни услуги', country: 'България', currency: 'BGN' } }),
+    // 2024/2025 suppliers
+    prisma.supplier.upsert({ where: { id: 'sup-bonaldo' }, update: {}, create: { id: 'sup-bonaldo', name: 'Bonaldo S.p.A.', country: 'Италия', currency: 'EUR' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-topdig' }, update: {}, create: { id: 'sup-topdig', name: 'Топ Диджитал', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-fb' }, update: {}, create: { id: 'sup-fb', name: 'Meta / Facebook Ads', country: 'США', currency: 'EUR' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-google' }, update: {}, create: { id: 'sup-google', name: 'Google Ads', country: 'США', currency: 'EUR' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-sh' }, update: {}, create: { id: 'sup-sh', name: 'Superhosting', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-nest' }, update: {}, create: { id: 'sup-nest', name: 'Nest Studio', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-rashev' }, update: {}, create: { id: 'sup-rashev', name: 'Рашев и КО', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-ultra' }, update: {}, create: { id: 'sup-ultra', name: 'Ultralight', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-econt' }, update: {}, create: { id: 'sup-econt', name: 'Еконт Експрес', country: 'България', currency: 'BGN' } }),
   ]);
   console.log(`✓ ${suppliers.length} suppliers created`);
 

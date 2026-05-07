@@ -1,7 +1,7 @@
 /**
  * Document parser — AI-powered with smart heuristic fallback
  * Handles Bulgarian folder names, extracts supplier/date/invoice from filename+folder
- * AI chain: Gemini 2.5 Flash → Groq llama-3.3-70b (fallback) → heuristic
+ * AI chain: Gemini 2.5 Flash → Groq llama-3.3-70b → OpenRouter (free) → heuristic
  */
 const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -23,6 +23,11 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const groq = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1',
   apiKey: process.env.GROQ_API_KEY,
+});
+
+const openrouter = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY,
 });
 
 // Bulgarian month names → month number
@@ -64,6 +69,15 @@ const SUPPLIER_KEYWORDS = [
   { keys: ['румен романов', 'rumen romanov'],               id: 'sup-rrom'  },
   { keys: ['наем', 'rent', 'шоурум', 'showroom'],          id: 'sup-rent'  },
   { keys: ['счетоводн', 'accounting', 'accountancy'],      id: 'sup-acct'  },
+  // 2024/2025 suppliers
+  { keys: ['bonaldo', 'боналдо'],                          id: 'sup-bonaldo' },
+  { keys: ['топ диджитал', 'top digital', 'топдиджитал'],  id: 'sup-topdig'  },
+  { keys: ['facebook', 'фейсбук', 'meta ads', 'meta/fac'], id: 'sup-fb'      },
+  { keys: ['google ads', 'гугъл', 'google платеж'],        id: 'sup-google'  },
+  { keys: ['superhosting', 'супърхостинг'],                id: 'sup-sh'      },
+  { keys: ['nest studio', 'нест студио', 'nest '],         id: 'sup-nest'    },
+  { keys: ['rashev', 'рашев', 'ultralight'],               id: 'sup-rashev'  },
+  { keys: ['econt', 'еконт'],                              id: 'sup-econt'   },
 ];
 
 // Folders that indicate OUTGOING documents — skip these
@@ -231,7 +245,51 @@ Return ONLY valid JSON, no explanation.
   return JSON.parse(jsonMatch[0]);
 }
 
-async function parseDocumentWithAI(filename, folder, pdfBuffer) {
+async function parseDocumentWithOpenRouter(filename, folder, pdfBuffer) {
+  const folderType = guessFolderType(folder);
+  const pdfData = await pdfParse(pdfBuffer);
+  const text = pdfData.text.substring(0, 6000);
+
+  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+
+File: "${filename}"
+Folder: "${folder}"
+Document type hint: ${folderType}
+
+Document text:
+${text}
+
+Extract the following data as JSON. If a field cannot be found, use null.
+Return ONLY valid JSON, no explanation.
+
+{
+  "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
+  "invoiceNo": string | null,
+  "docDate": "YYYY-MM-DD" | null,
+  "dueDate": "YYYY-MM-DD" | null,
+  "currency": "EUR" | "BGN" | "USD" | null,
+  "amountNet": number | null,
+  "vatAmount": number | null,
+  "amountTotal": number | null,
+  "description": string | null,
+  "supplierName": string | null,
+  "supplierVat": string | null,
+  "confidence": number
+}`;
+
+  const chat = await openrouter.chat.completions.create({
+    model: 'deepseek/deepseek-chat-v3-0324:free',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.1,
+  });
+
+  const content = chat.choices[0].message.content.trim();
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in OpenRouter response: ' + content.substring(0, 200));
+  return JSON.parse(jsonMatch[0]);
+}
+
+
   const folderType = guessFolderType(folder);
 
   const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
@@ -277,7 +335,15 @@ Return ONLY valid JSON, no explanation.
   } catch (err) {
     // If Gemini is rate-limited or quota exhausted, fall back to Groq
     if (err.message && (err.message.includes('429') || err.message.includes('quota') || err.message.includes('Too Many'))) {
-      return parseDocumentWithGroq(filename, folder, pdfBuffer);
+      try {
+        return await parseDocumentWithGroq(filename, folder, pdfBuffer);
+      } catch (groqErr) {
+        // If Groq is also rate-limited, fall back to OpenRouter
+        if (groqErr.message && (groqErr.message.includes('429') || groqErr.message.includes('quota') || groqErr.message.includes('Too Many'))) {
+          return parseDocumentWithOpenRouter(filename, folder, pdfBuffer);
+        }
+        throw groqErr;
+      }
     }
     throw err;
   }
@@ -287,6 +353,7 @@ module.exports = {
   downloadDriveFile,
   parseDocumentWithAI,
   parseDocumentWithGroq,
+  parseDocumentWithOpenRouter,
   parseFromFilename,
   guessSupplierFromPath,
   guessFolderType,
