@@ -45,6 +45,21 @@ async function main() {
     prisma.supplier.upsert({ where: { id: 'sup-kra' }, update: {}, create: { id: 'sup-kra', name: 'KRAAB SYSTEMS', country: 'Белгия', currency: 'EUR' } }),
     prisma.supplier.upsert({ where: { id: 'sup-nov' }, update: {}, create: { id: 'sup-nov', name: 'NOVALUCE', country: '', currency: 'EUR' } }),
     prisma.supplier.upsert({ where: { id: 'sup-sov' }, update: {}, create: { id: 'sup-sov', name: 'Sovet Italia', country: 'Италия', currency: 'EUR' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-dhl' }, update: {}, create: { id: 'sup-dhl', name: 'DHL Express', country: 'Германия', currency: 'EUR' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-omega' }, update: {}, create: { id: 'sup-omega', name: 'Omega Light', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-speedy' }, update: {}, create: { id: 'sup-speedy', name: 'Speedy', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-zieta' }, update: {}, create: { id: 'sup-zieta', name: 'Zieta', country: 'Полша', currency: 'EUR' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-macro' }, update: {}, create: { id: 'sup-macro', name: 'Macro.bg', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-openai' }, update: {}, create: { id: 'sup-openai', name: 'OpenAI / ChatGPT', country: 'США', currency: 'USD' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-micro' }, update: {}, create: { id: 'sup-micro', name: 'Microinvest', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-zira' }, update: {}, create: { id: 'sup-zira', name: 'Зира Дизайн Хаус ООД', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-sunf' }, update: {}, create: { id: 'sup-sunf', name: 'Сънфуудс България ЕООД', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-ambic' }, update: {}, create: { id: 'sup-ambic', name: 'Амбицио', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-alfal' }, update: {}, create: { id: 'sup-alfal', name: 'Алфа Лайт ЕООД', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-watt' }, update: {}, create: { id: 'sup-watt', name: 'ВАТТ 2025', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-rrom' }, update: {}, create: { id: 'sup-rrom', name: 'ЕТ Румен Романов', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-rent' }, update: {}, create: { id: 'sup-rent', name: 'Наем шоурум', country: 'България', currency: 'BGN' } }),
+    prisma.supplier.upsert({ where: { id: 'sup-acct' }, update: {}, create: { id: 'sup-acct', name: 'Счетоводни услуги', country: 'България', currency: 'BGN' } }),
   ]);
   console.log(`✓ ${suppliers.length} suppliers created`);
 

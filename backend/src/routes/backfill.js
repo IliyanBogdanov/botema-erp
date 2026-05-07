@@ -112,69 +112,94 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
     };
 
     try {
-      // Target: incoming invoice/purchase folders (Bulgarian + English)
-      const allFiles = await prisma.sourceFile.findMany({
-        where: {
-          type: 'DRIVE',
-          driveFileId: { not: null },
-          AND: [
-            {
-              OR: [
-                { mimeType: { contains: 'pdf', mode: 'insensitive' } },
-                { filename: { endsWith: '.pdf', mode: 'insensitive' } },
-              ],
-            },
-            {
-              OR: [
-                { folder: { contains: 'Purchases', mode: 'insensitive' } },
-                { folder: { contains: 'Imports', mode: 'insensitive' } },
-                { folder: { contains: 'Входящи', mode: 'insensitive' } },
-                { folder: { contains: 'Лодес', mode: 'insensitive' } },
-                { folder: { contains: 'Алфалуче', mode: 'insensitive' } },
-                { folder: { contains: 'Поларис', mode: 'insensitive' } },
-                { folder: { contains: 'Брага', mode: 'insensitive' } },
-                { folder: { contains: 'Зиета', mode: 'insensitive' } },
-                { folder: { contains: 'Каримоку', mode: 'insensitive' } },
-                { folder: { contains: 'Омега Лайт', mode: 'insensitive' } },
-                { folder: { contains: 'Ателие Седап', mode: 'insensitive' } },
-                { folder: { contains: 'АКА', mode: 'insensitive' } },
-                { folder: { contains: 'Поръчка', mode: 'insensitive' } },
-                { folder: { contains: 'Фактура ', mode: 'insensitive' } },
-                { folder: { contains: 'Фактури ', mode: 'insensitive' } },
-              ],
-            },
-          ],
-        },
-        orderBy: { receivedAt: 'desc' },
-        take: parseInt(limit) * 3, // fetch more, filter in JS
-      });
+      let files;
 
-      // Exclude outgoing folders in JS (Prisma doesn't support NOT+contains+mode)
-      const EXCLUDE = ['изходящи', 'outgoing', 'оферти', 'оферта'];
-      const files = allFiles
-        .filter(f => {
-          const fl = f.folder.toLowerCase();
-          return !EXCLUDE.some(kw => fl.includes(kw));
-        })
-        .slice(0, parseInt(limit));
-
-      log(`Found ${files.length} purchase-related Drive files`);
+      if (forceUpdate) {
+        // For forceUpdate: find all purchases with amount=0 that have a driveFileId, and fetch their source files
+        const zeroPurchases = await prisma.purchase.findMany({
+          where: { amount: 0, driveFileId: { not: null } },
+          take: parseInt(limit),
+        });
+        const driveIds = zeroPurchases.map(p => p.driveFileId).filter(Boolean);
+        const sourceFiles = await prisma.sourceFile.findMany({
+          where: { driveFileId: { in: driveIds } },
+        });
+        // Map driveFileId → sourceFile
+        const sfMap = Object.fromEntries(sourceFiles.map(sf => [sf.driveFileId, sf]));
+        // Build file-like objects from purchases (fallback if no sourceFile record)
+        files = zeroPurchases.map(p => {
+          const sf = sfMap[p.driveFileId];
+          return sf || {
+            driveFileId: p.driveFileId,
+            filename: p.description || p.driveFileId,
+            folder: '',
+            mimeType: 'application/pdf',
+          };
+        });
+        log(`Found ${files.length} zero-amount purchases to re-parse`);
+      } else {
+        // Normal mode: scan Drive source files in purchase folders
+        const allFiles = await prisma.sourceFile.findMany({
+          where: {
+            type: 'DRIVE',
+            driveFileId: { not: null },
+            AND: [
+              {
+                OR: [
+                  { mimeType: { contains: 'pdf', mode: 'insensitive' } },
+                  { filename: { endsWith: '.pdf', mode: 'insensitive' } },
+                ],
+              },
+              {
+                OR: [
+                  { folder: { contains: 'Purchases', mode: 'insensitive' } },
+                  { folder: { contains: 'Imports', mode: 'insensitive' } },
+                  { folder: { contains: 'Входящи', mode: 'insensitive' } },
+                  { folder: { contains: 'Лодес', mode: 'insensitive' } },
+                  { folder: { contains: 'Алфалуче', mode: 'insensitive' } },
+                  { folder: { contains: 'Поларис', mode: 'insensitive' } },
+                  { folder: { contains: 'Брага', mode: 'insensitive' } },
+                  { folder: { contains: 'Зиета', mode: 'insensitive' } },
+                  { folder: { contains: 'Каримоку', mode: 'insensitive' } },
+                  { folder: { contains: 'Омега Лайт', mode: 'insensitive' } },
+                  { folder: { contains: 'Ателие Седап', mode: 'insensitive' } },
+                  { folder: { contains: 'АКА', mode: 'insensitive' } },
+                  { folder: { contains: 'Поръчка', mode: 'insensitive' } },
+                  { folder: { contains: 'Фактура ', mode: 'insensitive' } },
+                  { folder: { contains: 'Фактури ', mode: 'insensitive' } },
+                ],
+              },
+            ],
+          },
+          orderBy: { receivedAt: 'desc' },
+          take: parseInt(limit) * 3,
+        });
+        const EXCLUDE = ['изходящи', 'outgoing', 'оферти', 'оферта'];
+        files = allFiles
+          .filter(f => {
+            const fl = f.folder.toLowerCase();
+            return !EXCLUDE.some(kw => fl.includes(kw));
+          })
+          .slice(0, parseInt(limit));
+        log(`Found ${files.length} purchase-related Drive files`);
+      }
 
       let created = 0, skipped = 0, failed = 0;
       const results = [];
 
       for (const file of files) {
         try {
-          // Skip if already has a purchase (unless forceUpdate to fix amount=0)
-          const existing = await prisma.purchase.findFirst({
-            where: { driveFileId: file.driveFileId },
-          });
-          if (existing) {
-            if (!forceUpdate || (Number(existing.amount) !== 0)) {
+          // In forceUpdate mode, files ARE the zero-amount purchases — always re-parse
+          let existing = null;
+          if (!forceUpdate) {
+            existing = await prisma.purchase.findFirst({ where: { driveFileId: file.driveFileId } });
+            if (existing) {
               skipped++;
               log(`SKIP (exists): ${file.filename}`);
               continue;
             }
+          } else {
+            existing = await prisma.purchase.findFirst({ where: { driveFileId: file.driveFileId } });
             log(`RE-PARSE (amount=0): ${file.filename}`);
           }
 
@@ -200,8 +225,10 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
           try {
             const pdfBuffer = await downloadDriveFile(file.driveFileId);
             parsed = await parseDocumentWithAI(file.filename, file.folder, pdfBuffer);
+            // Small delay to respect Gemini rate limits (15 RPM free tier)
+            await new Promise(r => setTimeout(r, 4500));
           } catch (dlErr) {
-            log(`  AI failed: ${dlErr.message.substring(0, 100)} — using heuristic fallback`);
+            log(`  AI failed [${dlErr.status || dlErr.statusCode || 'ERR'}]: ${dlErr.message.substring(0, 150)} — using heuristic fallback`);
             parsed = parseFromFilename(file.filename, file.folder);
           }
 

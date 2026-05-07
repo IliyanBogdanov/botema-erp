@@ -1,9 +1,12 @@
 /**
  * Document parser — AI-powered with smart heuristic fallback
  * Handles Bulgarian folder names, extracts supplier/date/invoice from filename+folder
+ * AI chain: Gemini 2.5 Flash → Groq llama-3.3-70b (fallback) → heuristic
  */
 const { google } = require('googleapis');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const OpenAI = require('openai');
+const pdfParse = require('pdf-parse');
 
 const getAuth = () => {
   const oauth2 = new google.auth.OAuth2(
@@ -15,7 +18,12 @@ const getAuth = () => {
   return oauth2;
 };
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const groq = new OpenAI({
+  baseURL: 'https://api.groq.com/openai/v1',
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 // Bulgarian month names → month number
 const BG_MONTHS = {
@@ -46,6 +54,16 @@ const SUPPLIER_KEYWORDS = [
   { keys: ['speedy', 'спиди'],                             id: 'sup-speedy'},
   { keys: ['zieta', 'зиета'],                              id: 'sup-zieta' },
   { keys: ['macro', 'макро'],                              id: 'sup-macro' },
+  { keys: ['chatgpt', 'чатгпт', 'чат гпт', 'openai'],     id: 'sup-openai'},
+  { keys: ['microinvest', 'микроинвест'],                  id: 'sup-micro' },
+  { keys: ['зира дизайн', 'zira design'],                  id: 'sup-zira'  },
+  { keys: ['sunfoods', 'сънфуудс', 'сън фудс'],            id: 'sup-sunf'  },
+  { keys: ['ambicio', 'амбицио'],                          id: 'sup-ambic' },
+  { keys: ['alfa light', 'алфа лайт'],                     id: 'sup-alfal' },
+  { keys: ['ват ', 'watt ', 'ватт'],                       id: 'sup-watt'  },
+  { keys: ['румен романов', 'rumen romanov'],               id: 'sup-rrom'  },
+  { keys: ['наем', 'rent', 'шоурум', 'showroom'],          id: 'sup-rent'  },
+  { keys: ['счетоводн', 'accounting', 'accountancy'],      id: 'sup-acct'  },
 ];
 
 // Folders that indicate OUTGOING documents — skip these
@@ -169,18 +187,10 @@ async function downloadDriveFile(fileId) {
   });
 }
 
-async function parseDocumentWithAI(filename, folder, pdfBuffer) {
+async function parseDocumentWithGroq(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
-
-  // Extract text from PDF
-  let pdfText = '';
-  try {
-    const pdfParse = require('pdf-parse');
-    const data = await pdfParse(pdfBuffer);
-    pdfText = data.text.substring(0, 4000); // limit to 4000 chars
-  } catch (e) {
-    pdfText = `[PDF text extraction failed: ${e.message}]`;
-  }
+  const pdfData = await pdfParse(pdfBuffer);
+  const text = pdfData.text.substring(0, 6000); // keep within token limit
 
   const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
 
@@ -188,10 +198,8 @@ File: "${filename}"
 Folder: "${folder}"
 Document type hint: ${folderType}
 
-PDF text content:
----
-${pdfText}
----
+Document text:
+${text}
 
 Extract the following data as JSON. If a field cannot be found, use null.
 Return ONLY valid JSON, no explanation.
@@ -211,21 +219,74 @@ Return ONLY valid JSON, no explanation.
   "confidence": number
 }`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    max_tokens: 1024,
+  const chat = await groq.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
     messages: [{ role: 'user', content: prompt }],
+    temperature: 0.1,
   });
 
-  const text = response.choices[0].message.content.trim();
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
+  const content = chat.choices[0].message.content.trim();
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in Groq response: ' + content.substring(0, 200));
   return JSON.parse(jsonMatch[0]);
+}
+
+async function parseDocumentWithAI(filename, folder, pdfBuffer) {
+  const folderType = guessFolderType(folder);
+
+  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+
+File: "${filename}"
+Folder: "${folder}"
+Document type hint: ${folderType}
+
+Extract the following data as JSON. If a field cannot be found, use null.
+Return ONLY valid JSON, no explanation.
+
+{
+  "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
+  "invoiceNo": string | null,
+  "docDate": "YYYY-MM-DD" | null,
+  "dueDate": "YYYY-MM-DD" | null,
+  "currency": "EUR" | "BGN" | "USD" | null,
+  "amountNet": number | null,
+  "vatAmount": number | null,
+  "amountTotal": number | null,
+  "description": string | null,
+  "supplierName": string | null,
+  "supplierVat": string | null,
+  "confidence": number
+}`;
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  try {
+    const result = await model.generateContent([
+      { text: prompt },
+      {
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: pdfBuffer.toString('base64'),
+        },
+      },
+    ]);
+
+    const text = result.response.text().trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
+    return JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    // If Gemini is rate-limited or quota exhausted, fall back to Groq
+    if (err.message && (err.message.includes('429') || err.message.includes('quota') || err.message.includes('Too Many'))) {
+      return parseDocumentWithGroq(filename, folder, pdfBuffer);
+    }
+    throw err;
+  }
 }
 
 module.exports = {
   downloadDriveFile,
   parseDocumentWithAI,
+  parseDocumentWithGroq,
   parseFromFilename,
   guessSupplierFromPath,
   guessFolderType,
