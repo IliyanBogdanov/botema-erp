@@ -278,7 +278,7 @@ Return ONLY valid JSON, no explanation.
 }`;
 
   const chat = await openrouter.chat.completions.create({
-    model: 'deepseek/deepseek-chat-v3-0324:free',
+    model: 'meta-llama/llama-3.3-70b-instruct:free',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.1,
   });
