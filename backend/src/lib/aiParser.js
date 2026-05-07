@@ -338,11 +338,8 @@ Return ONLY valid JSON, no explanation.
       try {
         return await parseDocumentWithGroq(filename, folder, pdfBuffer);
       } catch (groqErr) {
-        // If Groq is also rate-limited, fall back to OpenRouter
-        if (groqErr.message && (groqErr.message.includes('429') || groqErr.message.includes('quota') || groqErr.message.includes('Too Many'))) {
-          return parseDocumentWithOpenRouter(filename, folder, pdfBuffer);
-        }
-        throw groqErr;
+        // If Groq fails for any reason, fall back to OpenRouter
+        return parseDocumentWithOpenRouter(filename, folder, pdfBuffer);
       }
     }
     throw err;
