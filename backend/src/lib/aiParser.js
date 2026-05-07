@@ -278,7 +278,7 @@ Return ONLY valid JSON, no explanation.
 }`;
 
   const chat = await openrouter.chat.completions.create({
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
+    model: 'openai/gpt-oss-20b:free',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.1,
   });
