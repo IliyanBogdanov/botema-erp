@@ -289,7 +289,7 @@ Return ONLY valid JSON, no explanation.
   return JSON.parse(jsonMatch[0]);
 }
 
-
+async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
 
   const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
