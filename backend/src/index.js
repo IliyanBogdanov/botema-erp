@@ -64,6 +64,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Studio Botema ERP API running on port ${PORT}`);
+  console.log(`🤖 AI chain: Gemini → Groq → OpenRouter (openai/gpt-oss-20b:free) [v2e21dda]`);
 });
 
 startAlertJobs(prisma);
