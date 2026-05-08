@@ -23,7 +23,7 @@ function tokenize(value) {
   return normalizeText(value)
     .split(' ')
     .map(token => token.trim())
-    .filter(token => token && token.length > 1 && !STOP_WORDS.has(token));
+    .filter(token => token && token.length > 1 && !STOP_WORDS.has(token) && !/^\d+$/.test(token));
 }
 
 function unique(values) {

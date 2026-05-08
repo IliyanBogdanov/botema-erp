@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
+const { auth } = require('../middleware/auth');
 
 // GET /api/reconciliation — всички links
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const { linkType } = req.query;
     const links = await prisma.reconciliationLink.findMany({
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/reconciliation/missing — липсващи документи
-router.get('/missing', async (req, res) => {
+router.get('/missing', auth, async (req, res) => {
   try {
     const missing = await prisma.missingDocument.findMany({
       where: { status: 'OPEN' },
@@ -40,7 +41,7 @@ router.get('/missing', async (req, res) => {
 });
 
 // GET /api/reconciliation/coverage
-router.get('/coverage', async (req, res) => {
+router.get('/coverage', auth, async (req, res) => {
   try {
     const coverage = await prisma.coverage.findMany({ orderBy: [{ source: 'asc' }, { year: 'desc' }] });
     res.json(coverage);

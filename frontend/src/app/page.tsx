@@ -318,7 +318,7 @@ export default function DashboardPage() {
               </p>
               {vat.pendingCredit > 0 && (
                 <p className="font-label-caps text-[10px] text-on-surface-variant/60 mt-2">
-                  POTENTIAL CREDIT: {vat.pendingCredit.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+                  {t('dash.potentialCredit')}: {vat.pendingCredit.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
                 </p>
               )}
             </div>
@@ -363,7 +363,7 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-3 gap-gutter">
             {(projList.length > 0 ? projList : [{code:'—', name:'Sofia Penthouse'},{code:'—', name:'Luminavera Showroom'},{code:'—', name:'Coastal Villa'}]).map((proj: any, i: number) => (
-              <a key={proj.id || i} href="/projects" className="group relative overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors cursor-pointer block">
+              <a key={proj.id || i} href={proj.id ? `/projects/${proj.id}` : '/projects'} className="group relative overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors cursor-pointer block">
                 <img
                   src={PROJ_IMG_POOL[i % PROJ_IMG_POOL.length]}
                   alt={proj.name}
