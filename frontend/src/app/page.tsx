@@ -6,13 +6,17 @@ import { useState } from 'react';
 import { useT } from '@/lib/i18n';
 
 // Premium Unsplash interiors — stable CDN URLs
-const HERO_IMG     = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&auto=format&q=80';
-const PROJ_IMGS    = [
+const HERO_IMG = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&auto=format&q=80';
+
+// Rotating interior images pool for project gallery
+const PROJ_IMG_POOL = [
   'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=600&auto=format&q=75',
   'https://images.unsplash.com/photo-1600210492493-0946911123ea?w=600&auto=format&q=75',
   'https://images.unsplash.com/photo-1631679706909-1844bbd07221?w=600&auto=format&q=75',
+  'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&auto=format&q=75',
+  'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&auto=format&q=75',
+  'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&auto=format&q=75',
 ];
-const PROJ_LABELS  = ['1717.001 — Sofia Penthouse', '1717.002 — Luminavera Showroom', '1717.003 — Coastal Villa'];
 
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear());
@@ -21,11 +25,23 @@ export default function DashboardPage() {
     queryKey: ['dashboard', year],
     queryFn: () => api.get(`/dashboard?year=${year}`).then(r => r.data),
   });
-  const { data: pendingDocs = [] } = useQuery({
+  const { data: pendingDocsRaw } = useQuery({
     queryKey: ['pending-docs'],
-    queryFn: () => api.get('/gmail/pending').then(r => r.data),
+    queryFn: () => api.get('/documents?status=PENDING&limit=5').then(r => r.data),
     refetchInterval: 30000,
   });
+  // Support both array and {data:[]} response shapes
+  const pendingDocs: any[] = Array.isArray(pendingDocsRaw)
+    ? pendingDocsRaw
+    : (pendingDocsRaw as any)?.data || [];
+
+  const { data: activeProjects = [] } = useQuery({
+    queryKey: ['active-projects'],
+    queryFn: () => api.get('/projects?status=ACTIVE&limit=3').then(r => r.data),
+  });
+  const projList: any[] = Array.isArray(activeProjects)
+    ? activeProjects.slice(0, 3)
+    : (activeProjects as any)?.data?.slice(0, 3) || [];
   const { data: alertsList = [] } = useQuery({
     queryKey: ['dashboard-alerts'],
     queryFn: () => api.get('/alerts?status=ACTIVE&limit=5').then(r => r.data),
@@ -101,16 +117,18 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-error">warning</span>
               <div>
-                <div className="font-label-caps text-label-caps text-on-surface">{alertsList.length} ACTIVE ALERTS</div>
+                <div className="font-label-caps text-label-caps text-on-surface">
+                  {alertsList.length} {t('alerts.active').toUpperCase()}
+                </div>
                 <div className="text-body-sm text-on-surface-variant mt-0.5 truncate max-w-xl">
                   {(alertsList as any[])[0]?.title}
                 </div>
               </div>
             </div>
-            <a href="/alerts" className="font-label-caps text-label-caps text-primary hover:opacity-80">VIEW ALL →</a>
+            <a href="/alerts" className="font-label-caps text-label-caps text-primary hover:opacity-80">{t('dash.viewAll')} →</a>
           </div>
         )}
-        {(Array.isArray(pendingDocs) ? pendingDocs : []).length > 0 && (
+        {pendingDocs.length > 0 && (
           <div className="bg-surface-container-low border border-outline-variant/10 border-l-4 border-l-primary-container p-4 flex items-center justify-between -mt-8">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
@@ -118,7 +136,7 @@ export default function DashboardPage() {
                 {pendingDocs.length} {t('dash.pendingReview')}
               </span>
             </div>
-            <a href="/documents" className="font-label-caps text-label-caps text-primary hover:opacity-80">REVIEW →</a>
+            <a href="/documents" className="font-label-caps text-label-caps text-primary hover:opacity-80">{t('doc.reviewed').toUpperCase()} →</a>
           </div>
         )}
 
@@ -238,22 +256,33 @@ export default function DashboardPage() {
               <h3 className="font-label-caps text-label-caps text-on-surface">{t('dash.aiCenter')}</h3>
             </div>
             <div className="space-y-5 relative">
-              {(Array.isArray(pendingDocs) ? pendingDocs : []).slice(0, 4).map((doc: any) => (
-                <div key={doc.id} className="flex items-start gap-4 pb-5 border-b border-outline-variant/5 last:border-0 last:pb-0">
-                  <div className="w-10 h-10 bg-primary-container/10 border border-primary-container/20 flex items-center justify-center flex-shrink-0">
-                    <span className="material-symbols-outlined text-primary text-[18px]">description</span>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <p className="font-body-sm text-on-surface truncate text-[13px]">{doc.subject || doc.fileName || 'Document'}</p>
-                    <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{doc.senderEmail || ''}</p>
-                    <div className="mt-2">
-                      <span className="px-2 py-0.5 bg-primary-container/15 text-primary font-label-caps text-[8px] border border-primary-container/20">
-                        {t('dash.pendingReview')}
-                      </span>
+              {pendingDocs.slice(0, 4).map((doc: any) => {
+                const data = doc.extractedData || {};
+                const name = data.supplierName || data.clientName || doc.filename?.replace(/\.[^.]+$/, '').slice(0, 30) || 'Document';
+                const amount = data.amountTotal || data.amount;
+                return (
+                  <div key={doc.id} className="flex items-start gap-4 pb-5 border-b border-outline-variant/5 last:border-0 last:pb-0">
+                    <div className="w-10 h-10 bg-primary-container/10 border border-primary-container/20 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-primary text-[18px]">description</span>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="font-body-sm text-on-surface truncate text-[13px]">{name}</p>
+                      {amount ? (
+                        <p className="font-data-mono text-[10px] text-primary mt-0.5">
+                          {Number(amount).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {data.currency || 'BGN'}
+                        </p>
+                      ) : (
+                        <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{doc.filename?.slice(0, 28)}</p>
+                      )}
+                      <div className="mt-2">
+                        <span className="px-2 py-0.5 bg-primary-container/15 text-primary font-label-caps text-[8px] border border-primary-container/20">
+                          {t('dash.pendingReview')}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {(Array.isArray(pendingDocs) ? pendingDocs : []).length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center opacity-50">
                   <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">check_circle</span>
@@ -333,25 +362,27 @@ export default function DashboardPage() {
             </a>
           </div>
           <div className="grid grid-cols-3 gap-gutter">
-            {PROJ_IMGS.map((img, i) => (
-              <div key={i} className="group relative overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors cursor-pointer">
+            {(projList.length > 0 ? projList : [{code:'—', name:'Sofia Penthouse'},{code:'—', name:'Luminavera Showroom'},{code:'—', name:'Coastal Villa'}]).map((proj: any, i: number) => (
+              <a key={proj.id || i} href="/projects" className="group relative overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors cursor-pointer block">
                 <img
-                  src={img}
-                  alt={PROJ_LABELS[i]}
+                  src={PROJ_IMG_POOL[i % PROJ_IMG_POOL.length]}
+                  alt={proj.name}
                   className="w-full h-48 object-cover transition-transform duration-700 group-hover:scale-105"
                   style={{ filter: 'brightness(0.7) saturate(0.9)' }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-surface/90 via-surface/20 to-transparent" />
-                {/* hover glow */}
                 <div className="absolute inset-0 border border-primary-container/0 group-hover:border-primary-container/40 transition-colors" />
                 <div className="absolute bottom-0 left-0 right-0 p-5">
                   <p className="font-label-caps text-[9px] text-primary mb-1 tracking-widest">{t('dash.activeProject')}</p>
-                  <p className="font-label-caps text-label-caps text-on-surface">{PROJ_LABELS[i]}</p>
+                  <p className="font-label-caps text-label-caps text-on-surface">{proj.code !== '—' ? `${proj.code} — ` : ''}{proj.name}</p>
+                  {proj.client?.name && (
+                    <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{proj.client.name}</p>
+                  )}
                 </div>
                 <div className="absolute top-3 right-3">
                   <div className="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.8)] animate-pulse" />
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </section>
