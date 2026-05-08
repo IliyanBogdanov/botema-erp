@@ -1,29 +1,30 @@
 'use client';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle, Clock, FileText, RefreshCw } from 'lucide-react';
 import { api, fmtDate } from '@/lib/api';
 
-const severityConfig: Record<string, { label: string; color: string }> = {
-  CRITICAL: { label: 'Критичен', color: '#ff453a' },
-  WARNING: { label: 'Внимание', color: '#ff9f0a' },
-  INFO: { label: 'Инфо', color: '#0a84ff' },
+const severityConfig: Record<string, { label: string; icon: string; cls: string }> = {
+  CRITICAL: { label: 'КРИТИЧЕН', icon: 'error',   cls: 'text-error bg-error/10 border-error/30' },
+  WARNING:  { label: 'ВНИМАНИЕ', icon: 'warning', cls: 'text-[#ff9f0a] bg-[#ff9f0a]/10 border-[#ff9f0a]/30' },
+  INFO:     { label: 'ИНФО',     icon: 'info',    cls: 'text-primary bg-primary/10 border-primary/30' },
 };
 
 const typeLabels: Record<string, string> = {
-  DOCUMENT: 'Документ',
-  VAT: 'ДДС',
-  REVENUE: 'Приходи',
-  EXPENSE: 'Разходи',
-  PROJECT: 'Проект',
-  DATA_QUALITY: 'Данни',
+  DOCUMENT: 'Документ', VAT: 'ДДС', REVENUE: 'Приходи',
+  EXPENSE: 'Разходи', PROJECT: 'Проект', DATA_QUALITY: 'Данни',
 };
+
+const STATUS_TABS = [
+  { key: 'ACTIVE',   label: 'Активни' },
+  { key: 'SNOOZED',  label: 'Отложени' },
+  { key: 'RESOLVED', label: 'Решени' },
+];
 
 export default function AlertsPage() {
   const [status, setStatus] = useState('ACTIVE');
   const qc = useQueryClient();
 
-  const { data: alerts = [], isLoading, refetch } = useQuery({
+  const { data: alerts = [], isLoading } = useQuery({
     queryKey: ['alerts', status],
     queryFn: () => api.get(`/alerts?status=${status}`).then(r => r.data),
     refetchInterval: status === 'ACTIVE' ? 60000 : undefined,
@@ -46,82 +47,136 @@ export default function AlertsPage() {
   });
 
   const snoozeTomorrow = (id: string) => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
+    const d = new Date(); d.setDate(d.getDate() + 1);
     updateAlert.mutate({ id, payload: { snoozedUntil: d.toISOString() } });
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Сигнали</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">Проблеми, ДДС рискове и пропуснати документи</p>
-        </div>
-        <button onClick={() => generate.mutate()} disabled={generate.isPending} className="btn-secondary flex items-center gap-2">
-          <RefreshCw size={15} className={generate.isPending ? 'animate-spin' : ''} /> Обнови анализа
-        </button>
-      </div>
+  const activeCount  = (alerts as any[]).filter((a: any) => a.severity === 'CRITICAL').length;
 
-      <div className="flex gap-1 bg-[#1d1d1f] p-1 rounded-xl mb-6 w-fit">
-        {['ACTIVE', 'SNOOZED', 'RESOLVED'].map(s => (
-          <button key={s} onClick={() => setStatus(s)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-              status === s ? 'bg-[#0a84ff] text-white' : 'text-[#71717a] hover:text-white'
-            }`}>
-            {s === 'ACTIVE' ? 'Активни' : s === 'SNOOZED' ? 'Отложени' : 'Решени'}
+  return (
+    <div className="p-container-padding space-y-8">
+
+      {/* Header */}
+      <section className="flex justify-between items-end">
+        <div>
+          <p className="font-label-caps text-label-caps text-primary mb-2">СИСТЕМА ЗА МОНИТОРИНГ</p>
+          <h2 className="font-headline text-headline-lg text-on-surface">Сигнали</h2>
+          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Проблеми, ДДС рискове и пропуснати документи
+          </p>
+        </div>
+        <button
+          onClick={() => generate.mutate()}
+          disabled={generate.isPending}
+          className="btn-secondary flex items-center gap-2"
+        >
+          <span className={`material-symbols-outlined text-[18px] ${generate.isPending ? 'animate-spin' : ''}`}>
+            refresh
+          </span>
+          Обнови анализа
+        </button>
+      </section>
+
+      {/* Critical count banner */}
+      {status === 'ACTIVE' && activeCount > 0 && (
+        <div className="bg-error/5 border border-error/20 border-l-4 border-l-error p-4 flex items-center gap-3">
+          <span className="material-symbols-outlined text-error text-[20px]">error</span>
+          <span className="font-label-caps text-label-caps text-on-surface">
+            {activeCount} КРИТИЧН{activeCount === 1 ? 'И' : 'И'} СИГНАЛА ИЗИСКВАТ НЕЗАБАВНА РЕАКЦИЯ
+          </span>
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
+        {STATUS_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setStatus(key)}
+            className={`px-5 py-1.5 font-label-caps text-label-caps transition-colors ${
+              status === key
+                ? 'bg-primary-container text-on-primary-container'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            {label}
           </button>
         ))}
       </div>
 
+      {/* Alert list */}
       {isLoading ? (
-        <div className="grid gap-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="card p-5 h-24 animate-pulse" />)}
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 bg-surface-container-low border border-outline-variant/10 animate-pulse" />
+          ))}
         </div>
-      ) : !alerts.length ? (
-        <div className="card p-12 text-center">
-          <CheckCircle size={40} className="mx-auto text-[#30d158] mb-3" />
-          <p className="text-[#a1a1aa] font-medium">Няма сигнали в тази категория</p>
+      ) : !(alerts as any[]).length ? (
+        <div className="bg-surface-container-low border border-outline-variant/10 p-16 flex flex-col items-center text-center">
+          <span className="material-symbols-outlined text-primary text-5xl mb-4">check_circle</span>
+          <p className="font-label-caps text-label-caps text-on-surface mb-1">ВСИЧКО Е НАРЕД</p>
+          <p className="font-body-sm text-body-sm text-on-surface-variant">Няма сигнали в тази категория</p>
         </div>
       ) : (
-        <div className="grid gap-3">
-          {alerts.map((alert: any) => {
+        <div className="space-y-3">
+          {(alerts as any[]).map((alert: any) => {
             const sev = severityConfig[alert.severity] || severityConfig.INFO;
             return (
-              <div key={alert.id} className="card p-5">
+              <div
+                key={alert.id}
+                className="bg-surface-container-low border border-outline-variant/10 p-5 hover:border-outline-variant/20 transition-colors group"
+              >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ color: sev.color, background: `${sev.color}22`, border: `1px solid ${sev.color}33` }}>
-                      <AlertTriangle size={18} />
+                  <div className="flex gap-4 min-w-0">
+
+                    {/* Severity icon */}
+                    <div className={`w-10 h-10 flex items-center justify-center flex-shrink-0 border ${sev.cls}`}>
+                      <span className="material-symbols-outlined text-[20px]">{sev.icon}</span>
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md"
-                          style={{ color: sev.color, background: `${sev.color}18` }}>
+
+                    <div className="min-w-0 flex-1">
+                      {/* Meta row */}
+                      <div className="flex items-center gap-3 flex-wrap mb-2">
+                        <span className={`px-2 py-0.5 font-label-caps text-[9px] border ${sev.cls}`}>
                           {sev.label}
                         </span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">
+                        <span className="font-label-caps text-[9px] text-on-surface-variant">
                           {typeLabels[alert.type] || alert.type}
                         </span>
-                        <span className="text-xs text-[#52525b] flex items-center gap-1">
-                          <Clock size={11} /> {fmtDate(alert.detectedAt)}
+                        <span className="font-label-caps text-[9px] text-on-surface-variant/50 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">schedule</span>
+                          {fmtDate(alert.detectedAt)}
                         </span>
                       </div>
-                      <h2 className="text-base font-semibold text-white mt-2">{alert.title}</h2>
-                      <p className="text-sm text-[#a1a1aa] mt-1">{alert.description}</p>
+
+                      <h3 className="font-body-sm text-on-surface text-[14px] font-medium">{alert.title}</h3>
+                      <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">{alert.description}</p>
+
                       {alert.document && (
-                        <a href={alert.document.driveUrl || '/documents'} target="_blank" className="inline-flex items-center gap-1 text-xs text-[#0a84ff] mt-3 hover:underline">
-                          <FileText size={12} /> {alert.document.filename}
+                        <a
+                          href={alert.document.driveUrl || '/documents'}
+                          target="_blank"
+                          className="inline-flex items-center gap-1.5 mt-3 font-label-caps text-[9px] text-primary hover:text-primary/80 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">description</span>
+                          {alert.document.filename}
                         </a>
                       )}
                     </div>
                   </div>
+
                   {status !== 'RESOLVED' && (
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button onClick={() => snoozeTomorrow(alert.id)} className="btn-secondary text-xs py-1.5 px-3">Отложи</button>
-                      <button onClick={() => updateAlert.mutate({ id: alert.id, payload: { status: 'RESOLVED' } })}
-                        className="btn-primary text-xs py-1.5 px-3">
+                    <div className="flex gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => snoozeTomorrow(alert.id)}
+                        className="btn-secondary text-xs py-1.5 px-3"
+                      >
+                        Отложи
+                      </button>
+                      <button
+                        onClick={() => updateAlert.mutate({ id: alert.id, payload: { status: 'RESOLVED' } })}
+                        className="btn-primary text-xs py-1.5 px-3"
+                      >
                         Решено
                       </button>
                     </div>
