@@ -2,32 +2,29 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import {
-  LayoutDashboard, FileText, ShoppingCart, Package,
-  FolderOpen, Users, Receipt, Mail, Bot, LogOut, Truck, AlertTriangle, Database
-} from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
 const navItems = [
-  { label: 'Дашборд',    href: '/',          icon: LayoutDashboard, exact: true },
-  { label: 'Фактури',    href: '/invoices',  icon: FileText },
-  { label: 'Доставки',   href: '/purchases', icon: ShoppingCart },
-  { label: 'Склад',      href: '/inventory', icon: Package },
-  { label: 'Проекти',    href: '/projects',  icon: FolderOpen },
-  { label: 'Клиенти',    href: '/clients',    icon: Users },
-  { label: 'Доставчици', href: '/suppliers',  icon: Truck },
-  { label: 'Разходи',    href: '/expenses',  icon: Receipt },
-  { label: 'Документи',  href: '/documents', icon: Mail },
-  { label: 'Сигнали',    href: '/alerts',    icon: AlertTriangle },
-  { label: 'AI Асистент',href: '/ai',        icon: Bot },
-  { label: 'Backfill',   href: '/backfill',  icon: Database },
+  { label: 'Dashboard',      href: '/',          icon: 'dashboard',         exact: true },
+  { label: 'Purchases',      href: '/purchases', icon: 'shopping_cart' },
+  { label: 'AI Doc Center',  href: '/documents', icon: 'auto_awesome' },
+  { label: 'Invoices',       href: '/invoices',  icon: 'receipt_long' },
+  { label: 'Projects',       href: '/projects',  icon: 'folder_open' },
+  { label: 'Counterparties', href: '/clients',   icon: 'groups' },
+  { label: 'Suppliers',      href: '/suppliers', icon: 'local_shipping' },
+  { label: 'Inventory',      href: '/inventory', icon: 'inventory_2' },
+  { label: 'Expenses',       href: '/expenses',  icon: 'receipt' },
+  { label: 'Alerts',         href: '/alerts',    icon: 'notifications_active' },
+  { label: 'AI Assistant',   href: '/ai',        icon: 'smart_toy' },
+  { label: 'Backfill',       href: '/backfill',  icon: 'cloud_sync' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
   const { user, clearUser } = useAuthStore();
+
   const { data: alerts = [] } = useQuery({
     queryKey: ['alerts-sidebar'],
     queryFn: () => api.get('/alerts?status=ACTIVE&limit=20').then(r => r.data),
@@ -35,10 +32,8 @@ export function Sidebar() {
   });
   const alertCount = Array.isArray(alerts) ? alerts.length : 0;
 
-  const isActive = (href: string, exact?: boolean) => {
-    if (exact) return pathname === href;
-    return pathname?.startsWith(href);
-  };
+  const isActive = (href: string, exact?: boolean) =>
+    exact ? pathname === href : pathname?.startsWith(href);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -47,54 +42,65 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-56 flex-shrink-0 bg-[#111113] border-r border-[#27272a] flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-4 py-5 border-b border-[#27272a] flex items-center gap-2.5">
-        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
-          <rect x="1" y="1" width="30" height="30" rx="7" stroke="#e4e4e7" strokeWidth="1.5" opacity="0.9"/>
-          <path d="M10 9h8a4 4 0 0 1 0 8h-8V9z M10 15h9a4 4 0 0 1 0 8h-9v-8z"
-            stroke="#e4e4e7" strokeWidth="1.5" fill="none" strokeLinejoin="round"/>
-        </svg>
-        <div>
-          <div className="text-sm font-bold text-white leading-tight">Studio Botema</div>
-          <div className="text-[9px] text-[#52525b] font-semibold uppercase tracking-widest">ERP System</div>
-        </div>
+    <aside className="h-screen w-64 flex-shrink-0 bg-surface-container-lowest flex flex-col py-gutter px-4 z-50">
+      {/* Brand */}
+      <div className="mb-10 px-2">
+        <h1 className="font-headline text-headline-md font-bold text-primary tracking-tight">
+          Studio Botema
+        </h1>
+        <p className="font-label-caps text-label-caps text-on-surface-variant/60 mt-1">
+          Interior Design ERP
+        </p>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ label, href, icon: Icon, exact }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`nav-item ${isActive(href, exact) ? 'active' : ''}`}
-          >
-            <Icon size={16} className="flex-shrink-0" />
-            <span>{label}</span>
-            {href === '/alerts' && alertCount > 0 && (
-              <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-[#ff453a] text-white text-[10px] font-bold flex items-center justify-center">
-                {alertCount > 9 ? '9+' : alertCount}
-              </span>
-            )}
-          </Link>
-        ))}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto">
+        {navItems.map(({ label, href, icon, exact }) => {
+          const active = isActive(href, exact);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex items-center gap-3 px-4 py-3 font-label-caps text-label-caps transition-colors ${
+                active
+                  ? 'text-primary border-r-2 border-primary'
+                  : 'text-on-surface-variant hover:bg-surface-container-high'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">{icon}</span>
+              <span>{label}</span>
+              {href === '/alerts' && alertCount > 0 && (
+                <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
+                  {alertCount > 9 ? '9+' : alertCount}
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </nav>
 
-      {/* User */}
-      <div className="p-3 border-t border-[#27272a]">
+      {/* New Project CTA + Logout */}
+      <div className="mt-auto space-y-2 px-0">
+        <Link
+          href="/projects"
+          className="block w-full bg-primary-container text-on-primary-container py-3 font-label-caps text-label-caps text-center hover:opacity-90 transition-opacity"
+        >
+          New Project
+        </Link>
+
         {user && (
-          <div className="mb-2 px-2">
-            <div className="text-xs font-semibold text-[#e4e4e7] truncate">{user.name}</div>
-            <div className="text-[10px] text-[#52525b] truncate">{user.email}</div>
+          <div className="px-2 pt-3 border-t border-outline-variant/10">
+            <div className="text-on-surface font-body-sm text-body-sm truncate">{user.name}</div>
+            <div className="text-on-surface-variant/60 font-label-caps text-[10px] truncate">{user.email}</div>
+            <button
+              onClick={handleLogout}
+              className="mt-2 flex items-center gap-2 px-0 py-2 font-label-caps text-label-caps text-error hover:text-error/80 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+              <span>Sign out</span>
+            </button>
           </div>
         )}
-        <button
-          onClick={handleLogout}
-          className="nav-item w-full text-[#ff453a] hover:text-[#ff453a] hover:bg-[rgba(255,69,58,0.1)]"
-        >
-          <LogOut size={15} />
-          <span>Изход</span>
-        </button>
       </div>
     </aside>
   );

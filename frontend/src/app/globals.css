@@ -2,91 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --bg: #09090b;
-    --bg-card: #111113;
-    --bg-hover: #1d1d1f;
-    --border: #27272a;
-    --text: #e4e4e7;
-    --text-muted: #71717a;
-    --text-dim: #52525b;
-    --accent: #0a84ff;
-    --green: #30d158;
-    --red: #ff453a;
-    --orange: #ff9f0a;
-    --purple: #bf5af2;
-  }
+/* Material Symbols Outlined */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+/* Playfair Display */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&display=swap');
 
+@layer base {
   * { box-sizing: border-box; }
 
+  html { color-scheme: dark; }
+
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    background-color: #131315;
+    color: #e5e1e4;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: var(--bg-card); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #0e0e10; }
+  ::-webkit-scrollbar-thumb { background: #353437; border-radius: 2px; }
 }
 
 @layer components {
-  .card {
-    @apply bg-[#111113] border border-[#27272a] rounded-2xl;
+  /* Material Symbols */
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+    vertical-align: middle;
+    line-height: 1;
   }
 
+  /* Legacy card utility — kept for backward compat */
+  .card {
+    @apply bg-surface-container-low border border-outline-variant/10;
+  }
+
+  /* Buttons */
   .btn-primary {
-    @apply bg-[#0a84ff] text-white font-semibold px-4 py-2 rounded-lg
-           hover:bg-blue-500 transition-colors text-sm;
+    @apply bg-primary-container text-on-primary-container font-label-caps text-label-caps
+           px-6 py-2.5 hover:opacity-90 transition-opacity;
   }
 
   .btn-secondary {
-    @apply bg-[#27272a] text-[#a1a1aa] font-medium px-4 py-2 rounded-lg
-           hover:bg-[#3f3f46] transition-colors text-sm;
-  }
-
-  .input {
-    @apply bg-[#1d1d1f] border border-[#27272a] rounded-lg px-3 py-2
-           text-[#e4e4e7] text-sm outline-none focus:border-[#0a84ff]
-           transition-colors placeholder:text-[#52525b] w-full;
-  }
-
-  .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
-  }
-
-  .table-header {
-    @apply text-[10px] font-semibold uppercase tracking-widest text-[#71717a]
-           px-4 py-3 text-left border-b border-[#27272a] bg-[#1d1d1f];
-  }
-
-  .table-cell {
-    @apply px-4 py-3 border-b border-[#1a1a1c] text-sm;
-  }
-
-  .nav-item {
-    @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
-           text-[#71717a] hover:text-white hover:bg-[#1d1d1f] transition-all cursor-pointer;
-  }
-
-  .nav-item.active {
-    @apply text-[#0a84ff] bg-[rgba(10,132,255,0.1)];
+    @apply border border-outline-variant text-on-surface font-label-caps text-label-caps
+           px-6 py-2.5 hover:bg-surface-container-high transition-colors;
   }
 
   .btn-ghost {
-    @apply text-[#a1a1aa] font-medium px-4 py-2 rounded-lg
-           hover:bg-[#27272a] hover:text-white transition-colors text-sm;
+    @apply text-on-surface-variant font-label-caps text-label-caps
+           px-4 py-2 hover:bg-surface-container-high transition-colors;
   }
 
+  /* Input */
+  .input {
+    @apply bg-surface-container border-none w-full px-3 py-2 text-body-sm
+           text-on-surface placeholder:text-on-surface-variant/50 outline-none
+           focus:ring-1 focus:ring-primary-container transition-all;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 font-label-caps text-label-caps;
+  }
+
+  /* Table */
+  .table-header {
+    @apply font-label-caps text-label-caps text-on-surface-variant
+           px-4 py-3 text-left border-b border-outline-variant/10 bg-surface-container;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 border-b border-outline-variant/5 font-body-sm text-body-sm text-on-surface;
+  }
+
+  /* Nav item — Stitch style */
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3
+           font-label-caps text-label-caps text-on-surface-variant
+           hover:bg-surface-container-high transition-colors cursor-pointer;
+  }
+
+  .nav-item.active {
+    @apply text-primary border-r-2 border-primary;
+  }
+
+  /* Animations */
   @keyframes typing-dot {
     0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
-    30% { opacity: 1; transform: translateY(-3px); }
+    30%           { opacity: 1;   transform: translateY(-3px); }
   }
   .typing-dot {
     width: 5px; height: 5px; border-radius: 50%;
-    background: #71717a; display: inline-block;
+    background: #8b91a0; display: inline-block;
     animation: typing-dot 1.2s ease-in-out infinite;
   }
   .typing-dot:nth-child(2) { animation-delay: 0.2s; }
