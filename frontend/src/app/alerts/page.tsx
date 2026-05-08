@@ -51,6 +51,10 @@ export default function AlertsPage() {
     },
   });
 
+  const sendDigest = useMutation({
+    mutationFn: () => api.post('/alerts/digest'),
+  });
+
   const snoozeTomorrow = (id: string) => {
     const d = new Date(); d.setDate(d.getDate() + 1);
     updateAlert.mutate({ id, payload: { snoozedUntil: d.toISOString() } });
@@ -70,16 +74,29 @@ export default function AlertsPage() {
             {t('alerts.subtitle')}
           </p>
         </div>
-        <button
-          onClick={() => generate.mutate()}
-          disabled={generate.isPending}
-          className="btn-secondary flex items-center gap-2"
-        >
-          <span className={`material-symbols-outlined text-[18px] ${generate.isPending ? 'animate-spin' : ''}`}>
-            refresh
-          </span>
-          {t('alerts.refresh')}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => sendDigest.mutate()}
+            disabled={sendDigest.isPending}
+            className="btn-secondary flex items-center gap-2"
+            title="Изпрати дневен дайджест по имейл"
+          >
+            <span className={`material-symbols-outlined text-[18px] ${sendDigest.isPending ? 'animate-pulse' : ''}`}>
+              {sendDigest.isSuccess ? 'mark_email_read' : 'forward_to_inbox'}
+            </span>
+            {sendDigest.isSuccess ? t('alerts.digestSent') : t('alerts.sendDigest')}
+          </button>
+          <button
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <span className={`material-symbols-outlined text-[18px] ${generate.isPending ? 'animate-spin' : ''}`}>
+              refresh
+            </span>
+            {t('alerts.refresh')}
+          </button>
+        </div>
       </section>
 
       {/* Critical count banner */}

@@ -273,11 +273,12 @@ export default function DocumentsPage() {
             <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">{t('doc.label')}</p>
             <h2 className="font-headline text-headline-lg text-on-background">{t('doc.title')}</h2>
             <p className="text-on-surface-variant font-body-md mt-2">
-              Validate scanned procurement invoices using proprietary neural extraction.
+              {t('doc.subtitle')}
             </p>
           </div>
-          <button className="px-6 py-3 border border-outline-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-colors">
-            Upload Batch
+          <button className="px-6 py-3 border border-outline-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-colors flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">upload_file</span>
+            {t('doc.uploadBatch')}
           </button>
         </div>
 
@@ -304,9 +305,9 @@ export default function DocumentsPage() {
           {/* Left: Document List */}
           <div className="col-span-4 flex flex-col bg-surface-container-low border border-outline-variant overflow-hidden">
             <div className="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container flex-shrink-0">
-              <span className="font-label-caps text-label-caps">Recent Uploads</span>
+              <span className="font-label-caps text-label-caps">{t('doc.recentUploads')}</span>
               <span className="font-data-mono text-data-mono text-primary">
-                {isLoading ? '...' : `${docs.length} ${activeStatus === 'PENDING' ? 'Pending' : 'Records'}`}
+                {isLoading ? '...' : `${docs.length} ${activeStatus === 'PENDING' ? t('doc.pending') : t('doc.records')}`}
               </span>
             </div>
             <div className="flex-1 overflow-y-auto">

@@ -297,11 +297,11 @@ function StatusMenu({ invoice }: { invoice: Invoice }) {
 const yearTabs = [2024, 2025, 2026];
 function getStatusTabs(t: ReturnType<typeof useT>) {
   return [
-    { label: t('inv.all'), value: '' },
-    { label: 'DRAFT', value: 'PENDING' },
-    { label: 'SENT', value: 'OVERDUE' },
-    { label: 'PAID', value: 'PAID' },
-    { label: 'CANCELLED', value: 'CANCELLED' },
+    { label: t('inv.all'),       value: '' },
+    { label: t('inv.pending'),   value: 'PENDING' },
+    { label: t('inv.overdue'),   value: 'OVERDUE' },
+    { label: t('inv.paid'),      value: 'PAID' },
+    { label: t('inv.cancelled'), value: 'CANCELLED' },
   ];
 }
 
