@@ -35,26 +35,17 @@ export default function DashboardPage() {
     queryKey: ['vat-overview', year],
     queryFn: () => api.get(`/vat/overview?year=${year}`).then(r => r.data),
   });
-  const { data: purchases = [] } = useQuery({
-    queryKey: ['top-suppliers-dash'],
-    queryFn: () => api.get('/purchases?limit=100').then(r => r.data),
-  });
   const t = useT();
 
   if (isLoading) return <LoadingSkeleton />;
 
-  const kpis   = data?.kpis || {};
+  const kpis = data?.kpis || {};
   const margin = parseFloat(kpis.grossMargin || 0);
-
-  const supplierMap: Record<string, number> = {};
-  (Array.isArray(purchases) ? purchases : purchases.data || []).forEach((p: any) => {
-    const name   = p.supplier?.name || p.supplierName || 'Unknown';
-    const amount = parseFloat(p.amount || 0);
-    if (amount > 0) supplierMap[name] = (supplierMap[name] || 0) + amount;
-  });
-  const topSuppliers = Object.entries(supplierMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxSupplier  = topSuppliers[0]?.[1] || 1;
-  const barOpacity   = [1, 0.8, 0.6, 0.4, 0.25];
+  const totalPurchasesEur = Number(kpis.totalPurchasesEur || 0);
+  const totalPurchasesCount = Number(kpis.totalPurchasesCount || 0);
+  const topSuppliers: [string, number][] = (data?.topSuppliers || []).map((supplier: any) => [supplier.name, Number(supplier.amount || 0)]);
+  const maxSupplier = topSuppliers[0]?.[1] || 1;
+  const barOpacity = [1, 0.8, 0.6, 0.4, 0.25];
 
   return (
     <div className="min-h-screen">
@@ -139,7 +130,9 @@ export default function DashboardPage() {
             <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.5)]" />
             <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.totalEur')}</p>
             <div className="flex items-baseline gap-2">
-              <span className="font-headline text-headline-xl text-on-surface">304,501</span>
+              <span className="font-headline text-headline-xl text-on-surface">
+                {totalPurchasesEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+              </span>
               <span className="font-data-mono text-data-mono text-primary">EUR</span>
             </div>
             <div className="mt-4 flex items-center gap-2 text-primary">
@@ -216,7 +209,7 @@ export default function DashboardPage() {
               <div className="text-center">
                 <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{t('dash.totalPurchases')}</p>
                 <p className="font-data-mono text-on-surface text-lg">
-                  {Array.isArray(purchases) ? purchases.length : (purchases.data?.length ?? 0)}
+                  {totalPurchasesCount}
                 </p>
               </div>
               <div className="text-center">
@@ -226,7 +219,7 @@ export default function DashboardPage() {
               <div className="text-center">
                 <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{t('dash.totalCost')}</p>
                 <p className="font-data-mono text-primary text-lg">
-                  {topSuppliers.reduce((s, [, v]) => s + v, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} EUR
+                  {totalPurchasesEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} EUR
                 </p>
               </div>
               <div className="text-center">

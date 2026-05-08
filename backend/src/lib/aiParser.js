@@ -20,15 +20,19 @@ const getAuth = () => {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const groq = new OpenAI({
+const groq = process.env.GROQ_API_KEY ? new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1',
   apiKey: process.env.GROQ_API_KEY,
-});
+}) : null;
 
-const openrouter = new OpenAI({
+const openrouter = process.env.OPENROUTER_API_KEY ? new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   apiKey: process.env.OPENROUTER_API_KEY,
-});
+}) : null;
+
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+}) : null;
 
 // Bulgarian month names → month number
 const BG_MONTHS = {
@@ -202,6 +206,8 @@ async function downloadDriveFile(fileId) {
 }
 
 async function parseDocumentWithGroq(filename, folder, pdfBuffer) {
+  if (!groq) throw new Error('GROQ_API_KEY is not configured');
+
   const folderType = guessFolderType(folder);
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000); // keep within token limit
@@ -246,6 +252,7 @@ Return ONLY valid JSON, no explanation.
 }
 
 async function parseDocumentWithOpenRouter(filename, folder, pdfBuffer) {
+  if (!openrouter) throw new Error('OPENROUTER_API_KEY is not configured');
   const folderType = guessFolderType(folder);
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000);
@@ -286,6 +293,52 @@ Return ONLY valid JSON, no explanation.
   const content = chat.choices[0].message.content.trim();
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON in OpenRouter response: ' + content.substring(0, 200));
+  return JSON.parse(jsonMatch[0]);
+}
+
+async function parseDocumentWithOpenAI(filename, folder, pdfBuffer) {
+  if (!openai) throw new Error('OPENAI_API_KEY is not configured');
+
+  const folderType = guessFolderType(folder);
+  const pdfData = await pdfParse(pdfBuffer);
+  const text = pdfData.text.substring(0, 12000);
+
+  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+
+File: "${filename}"
+Folder: "${folder}"
+Document type hint: ${folderType}
+
+Document text:
+${text}
+
+Extract the following data as JSON. If a field cannot be found, use null.
+Return ONLY valid JSON, no explanation.
+
+{
+  "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
+  "invoiceNo": string | null,
+  "docDate": "YYYY-MM-DD" | null,
+  "dueDate": "YYYY-MM-DD" | null,
+  "currency": "EUR" | "BGN" | "USD" | null,
+  "amountNet": number | null,
+  "vatAmount": number | null,
+  "amountTotal": number | null,
+  "description": string | null,
+  "supplierName": string | null,
+  "supplierVat": string | null,
+  "confidence": number
+}`;
+
+  const chat = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.1,
+  });
+
+  const content = chat.choices[0].message.content.trim();
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in OpenAI response: ' + content.substring(0, 200));
   return JSON.parse(jsonMatch[0]);
 }
 
@@ -333,15 +386,21 @@ Return ONLY valid JSON, no explanation.
     if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
     return JSON.parse(jsonMatch[0]);
   } catch (err) {
-    // If Gemini is rate-limited or quota exhausted, fall back to Groq
-    if (err.message && (err.message.includes('429') || err.message.includes('quota') || err.message.includes('Too Many'))) {
+    const fallbackParsers = [
+      parseDocumentWithGroq,
+      parseDocumentWithOpenRouter,
+      parseDocumentWithOpenAI,
+    ];
+
+    for (const parser of fallbackParsers) {
       try {
-        return await parseDocumentWithGroq(filename, folder, pdfBuffer);
-      } catch (groqErr) {
-        // If Groq fails for any reason, fall back to OpenRouter
-        return parseDocumentWithOpenRouter(filename, folder, pdfBuffer);
+        return await parser(filename, folder, pdfBuffer);
+      } catch (fallbackErr) {
+        if (fallbackErr.message?.includes('not configured')) continue;
+        err = fallbackErr;
       }
     }
+
     throw err;
   }
 }
@@ -351,6 +410,7 @@ module.exports = {
   parseDocumentWithAI,
   parseDocumentWithGroq,
   parseDocumentWithOpenRouter,
+  parseDocumentWithOpenAI,
   parseFromFilename,
   guessSupplierFromPath,
   guessFolderType,
