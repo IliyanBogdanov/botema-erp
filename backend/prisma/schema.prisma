@@ -429,6 +429,38 @@ model GmailWatch {
   @@map("gmail_watches")
 }
 
+// ─── GMAIL INBOX MESSAGES ─────────────────────────────────────────────────────
+
+model GmailMessage {
+  id              String             @id @default(cuid())
+  messageId       String             @unique
+  threadId        String?
+  subject         String
+  from            String?
+  snippet         String?
+  date            DateTime?
+  hasAttachments  Boolean            @default(false)
+  attachmentNames String[]
+  bodyText        String?
+  status          GmailMessageStatus @default(PENDING)
+  classification  String?
+  classifiedType  String?            // INVOICE_IN, INVOICE_OUT, DELIVERY, PAYMENT, INQUIRY, OTHER
+  notes           String?
+  reviewedAt      DateTime?
+  reviewedById    String?
+  documentId      String?            // linked document after processing
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("gmail_messages")
+}
+
+enum GmailMessageStatus {
+  PENDING
+  CLASSIFIED
+  IGNORED
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // NORMALIZED BUSINESS DATA LAYER
 // Таблици за нормализирания import от Drive/Gmail

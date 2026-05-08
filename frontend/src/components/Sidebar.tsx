@@ -18,7 +18,8 @@ const navItems = [
   { key: 'nav.expenses',   href: '/expenses',  icon: 'receipt' },
   { key: 'nav.vat',        href: '/vat',            icon: 'account_balance' },
   { key: 'nav.reconciliation', href: '/reconciliation', icon: 'account_tree' },
-  { key: 'nav.alerts',     href: '/alerts',    icon: 'notifications_active' },
+  { key: 'nav.inbox',          href: '/inbox',           icon: 'inbox' },
+  { key: 'nav.alerts',         href: '/alerts',    icon: 'notifications_active' },
   { key: 'nav.ai',         href: '/ai',        icon: 'smart_toy' },
   { key: 'nav.backfill',   href: '/backfill',  icon: 'cloud_sync' },
 ];
