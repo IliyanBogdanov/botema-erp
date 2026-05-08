@@ -1,11 +1,10 @@
+/* Google Fonts — must be first, before @tailwind */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Material Symbols Outlined */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
-/* Playfair Display */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&display=swap');
 
 @layer base {
   * { box-sizing: border-box; }
