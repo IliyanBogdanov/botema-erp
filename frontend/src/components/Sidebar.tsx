@@ -16,6 +16,7 @@ const navItems = [
   { key: 'nav.suppliers',  href: '/suppliers', icon: 'local_shipping' },
   { key: 'nav.inventory',  href: '/inventory', icon: 'inventory_2' },
   { key: 'nav.expenses',   href: '/expenses',  icon: 'receipt' },
+  { key: 'nav.vat',        href: '/vat',       icon: 'account_balance' },
   { key: 'nav.alerts',     href: '/alerts',    icon: 'notifications_active' },
   { key: 'nav.ai',         href: '/ai',        icon: 'smart_toy' },
   { key: 'nav.backfill',   href: '/backfill',  icon: 'cloud_sync' },

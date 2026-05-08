@@ -38,6 +38,8 @@ module.exports = {
         'error-container':            '#93000a',
         'on-error':                   '#690005',
         'on-error-container':         '#ffdad6',
+        'warning':                    '#ffb800',
+        'warning-container':          '#7a5500',
         'surface':                    '#131315',
         'surface-dim':                '#131315',
         'surface-bright':             '#39393b',
