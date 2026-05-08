@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fmtDate } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import { Modal } from '@/components/Modal';
 import { ExternalLink, AlertTriangle } from 'lucide-react';
 
@@ -19,12 +20,13 @@ interface Document {
   extractedData?: Record<string, any>;
 }
 
-const STATUS_TABS = [
-  { value: 'PENDING', label: 'Чакащи', color: '#ff9f0a' },
-  { value: 'PROCESSED', label: 'Архивирани', color: '#30d158' },
-  { value: 'LINKED', label: 'Вкарани', color: '#0a84ff' },
-  { value: 'REJECTED', label: 'Отхвърлени', color: '#ff453a' },
-];
+function getStatusTabs(t: ReturnType<typeof useT>) {
+  return [
+    { value: '', label: t('doc.allStatuses'), color: '#0a84ff' },
+    { value: 'PENDING', label: t('doc.pending'), color: '#ff9f0a' },
+    { value: 'PROCESSED', label: t('doc.reviewed'), color: '#30d158' },
+  ];
+}
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE_PURCHASE: 'Входяща фактура / доставка',
@@ -249,6 +251,8 @@ export default function DocumentsPage() {
   const [activeStatus, setActiveStatus] = useState('PENDING');
   const [selected, setSelected] = useState<Document | null>(null);
   const [reviewDoc, setReviewDoc] = useState<Document | null>(null);
+  const t = useT();
+  const statusTabs = getStatusTabs(t);
 
   const { data = {}, isLoading } = useQuery({
     queryKey: ['documents', activeStatus],
@@ -266,8 +270,8 @@ export default function DocumentsPage() {
         {/* Page Title */}
         <div className="flex justify-between items-end mb-8">
           <div>
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">AI PROCESSING</p>
-            <h2 className="font-headline text-headline-lg text-on-background">AI Document Center</h2>
+            <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">{t('doc.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-background">{t('doc.title')}</h2>
             <p className="text-on-surface-variant font-body-md mt-2">
               Validate scanned procurement invoices using proprietary neural extraction.
             </p>
@@ -279,7 +283,7 @@ export default function DocumentsPage() {
 
         {/* Status Tabs */}
         <div className="flex gap-2 mb-8">
-          {STATUS_TABS.map(tab => (
+          {statusTabs.map(tab => (
             <button
               key={tab.value}
               onClick={() => { setActiveStatus(tab.value); setSelected(null); }}
@@ -317,7 +321,7 @@ export default function DocumentsPage() {
               ) : docs.length === 0 ? (
                 <div className="p-10 text-center text-on-surface-variant">
                   <span className="material-symbols-outlined text-[48px] block mb-3 text-outline">description</span>
-                  <p className="font-body-sm">Няма документи</p>
+                  <p className="font-body-sm">{t('doc.noDocuments')}</p>
                 </div>
               ) : (
                 docs.map(doc => {
@@ -373,7 +377,7 @@ export default function DocumentsPage() {
               <div className="flex-1 bg-surface-container-lowest border border-outline-variant flex items-center justify-center">
                 <div className="text-center text-on-surface-variant">
                   <span className="material-symbols-outlined text-[64px] block mb-4 text-outline">article</span>
-                  <p className="font-label-caps text-label-caps">Select a document to review</p>
+                  <p className="font-label-caps text-label-caps">{t('doc.noSelected')}</p>
                 </div>
               </div>
             ) : (
@@ -384,7 +388,7 @@ export default function DocumentsPage() {
                     <div className="min-w-0">
                       <div className="font-body-md font-semibold text-on-surface truncate">{selected.filename}</div>
                       <div className="font-data-mono text-xs text-on-surface-variant mt-0.5">
-                        {fmtDate(selected.createdAt)} · {Math.round(Number(selected.confidence || 0) * 100)}% confidence
+                        {fmtDate(selected.createdAt)} · {Math.round(Number(selected.confidence || 0) * 100)}% {t('doc.confidence').toLowerCase()}
                       </div>
                     </div>
                     {selected.driveUrl && (
@@ -404,7 +408,7 @@ export default function DocumentsPage() {
                   <div className="p-gutter">
                     <div className="flex justify-between items-start mb-6">
                       <div>
-                        <h3 className="font-headline text-headline-md mb-1 text-on-surface">Extracted Data Points</h3>
+                        <h3 className="font-headline text-headline-md mb-1 text-on-surface">{t('doc.extractedData')}</h3>
                         <p className="font-body-sm text-on-surface-variant">Verify AI-suggested fields before confirming to ERP.</p>
                       </div>
                     </div>
@@ -414,7 +418,7 @@ export default function DocumentsPage() {
                       <div className="mb-6 border border-error/20 bg-error/5 p-4">
                         <div className="font-label-caps text-label-caps text-error mb-2 flex items-center gap-2">
                           <span className="material-symbols-outlined text-[16px]">warning</span>
-                          Risk Flags
+                          {t('doc.riskFlags')}
                         </div>
                         <div className="flex gap-2 flex-wrap">
                           {(selected.riskFlags as string[]).map(r => (
@@ -446,7 +450,7 @@ export default function DocumentsPage() {
 
                     {/* Suggested action */}
                     <div className="p-4 bg-primary/5 border border-primary/20 mb-6">
-                      <div className="font-label-caps text-label-caps text-primary mb-1">Suggested Action</div>
+                      <div className="font-label-caps text-label-caps text-primary mb-1">{t('doc.suggestedAction')}</div>
                       <div className="font-body-md text-on-surface">
                         {ACTION_LABELS[selected.suggestedAction || 'ARCHIVE_ONLY']}
                       </div>
@@ -460,7 +464,7 @@ export default function DocumentsPage() {
                           className="bg-primary-container text-on-primary-container px-gutter py-3 font-label-caps text-label-caps font-bold hover:opacity-90 flex items-center gap-2 transition-opacity"
                         >
                           <span className="material-symbols-outlined text-lg">check_circle</span>
-                          Confirm Data
+                          {t('doc.confirmData')}
                         </button>
                         <button
                           onClick={() => setSelected(null)}

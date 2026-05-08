@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate, statusConfig } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
 
@@ -294,13 +295,15 @@ function StatusMenu({ invoice }: { invoice: Invoice }) {
 }
 
 const yearTabs = [2024, 2025, 2026];
-const statusTabs = [
-  { label: 'Всички', value: '' },
-  { label: 'DRAFT', value: 'PENDING' },
-  { label: 'SENT', value: 'OVERDUE' },
-  { label: 'PAID', value: 'PAID' },
-  { label: 'CANCELLED', value: 'CANCELLED' },
-];
+function getStatusTabs(t: ReturnType<typeof useT>) {
+  return [
+    { label: t('inv.all'), value: '' },
+    { label: 'DRAFT', value: 'PENDING' },
+    { label: 'SENT', value: 'OVERDUE' },
+    { label: 'PAID', value: 'PAID' },
+    { label: 'CANCELLED', value: 'CANCELLED' },
+  ];
+}
 
 export default function InvoicesPage() {
   const [year, setYear] = useState(new Date().getFullYear());
@@ -318,6 +321,8 @@ export default function InvoicesPage() {
     queryFn: () => api.get(`/invoices?${params}`).then(r => r.data),
     staleTime: 30000,
   });
+  const t = useT();
+  const statusTabs = getStatusTabs(t);
 
   const invoices: Invoice[] = Array.isArray(data) ? data : (data as any).data || [];
   const totalAmount = invoices.reduce((sum, invoice) => sum + invoice.amountTotal, 0);
@@ -329,20 +334,20 @@ export default function InvoicesPage() {
       <div className="mx-auto max-w-7xl space-y-section-gap">
         <section className="flex justify-between items-end mb-section-gap">
           <div>
-            <p className="font-label-caps text-label-caps text-primary mb-2">ФИНАНСИ</p>
-            <h2 className="font-headline text-headline-lg text-on-surface">Фактури</h2>
+            <p className="font-label-caps text-label-caps text-primary mb-2">{t('inv.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">{t('inv.title')}</h2>
           </div>
           <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px]">add</span>
-            Нова фактура
+            {t('inv.new')}
           </button>
         </section>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Всички фактури" value={String(invoices.length)} sub={`${year} година`} />
-          <MetricCard label="Общо BGN" value={fmt(totalAmount, 'BGN')} sub="фактурирана стойност" />
-          <MetricCard label="За събиране" value={fmt(outstanding, 'BGN')} sub="неприключени фактури" />
-          <MetricCard label="Платени" value={String(paidCount)} sub="приключени плащания" />
+          <MetricCard label={t('inv.totalInvoices')} value={String(invoices.length)} sub={`${year} година`} />
+          <MetricCard label={t('inv.totalBgn')} value={fmt(totalAmount, 'BGN')} sub="фактурирана стойност" />
+          <MetricCard label={t('inv.outstanding')} value={fmt(outstanding, 'BGN')} sub="неприключени фактури" />
+          <MetricCard label={t('inv.paid')} value={String(paidCount)} sub="приключени плащания" />
         </div>
 
         <div className="space-y-6">
@@ -394,13 +399,13 @@ export default function InvoicesPage() {
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="table-header">#Фактура</th>
-                  <th className="table-header">Клиент</th>
-                  <th className="table-header">Проект</th>
-                  <th className="table-header">Дата</th>
-                  <th className="table-header">Падеж</th>
-                  <th className="table-header text-right">Сума</th>
-                  <th className="table-header">Статус</th>
+                  <th className="table-header">{t('inv.colNumber')}</th>
+                  <th className="table-header">{t('inv.colClient')}</th>
+                  <th className="table-header">{t('inv.colProject')}</th>
+                  <th className="table-header">{t('inv.colDate')}</th>
+                  <th className="table-header">{t('inv.colDue')}</th>
+                  <th className="table-header text-right">{t('inv.colAmount')}</th>
+                  <th className="table-header">{t('inv.colStatus')}</th>
                   <th className="table-header w-[140px]"></th>
                 </tr>
               </thead>
@@ -415,7 +420,7 @@ export default function InvoicesPage() {
                   ))
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="table-cell py-12 text-center text-on-surface-variant">Няма фактури</td>
+                    <td colSpan={8} className="table-cell py-12 text-center text-on-surface-variant">{t('inv.none')}</td>
                   </tr>
                 ) : (
                   invoices.map(inv => (

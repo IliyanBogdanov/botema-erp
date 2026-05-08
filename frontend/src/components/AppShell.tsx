@@ -3,28 +3,16 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { useAuthStore } from '@/lib/store';
-
-const pageTitles: Record<string, string> = {
-  '/':           'Executive Dashboard',
-  '/purchases':  'Purchases Ledger',
-  '/documents':  'AI Document Center',
-  '/invoices':   'Invoices',
-  '/projects':   'Projects',
-  '/clients':    'Counterparties',
-  '/suppliers':  'Suppliers',
-  '/inventory':  'Inventory',
-  '/expenses':   'Expenses',
-  '/alerts':     'Alerts',
-  '/ai':         'AI Assistant',
-  '/backfill':   'Drive Backfill',
-};
+import { useLangStore, useT } from '@/lib/i18n';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router   = useRouter();
   const { user } = useAuthStore();
+  const { lang, setLang } = useLangStore();
   const isAuthPage = pathname?.startsWith('/login');
   const [search, setSearch] = useState('');
+  const t = useT();
 
   useEffect(() => {
     if (!isAuthPage) {
@@ -34,10 +22,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   if (isAuthPage) return <>{children}</>;
-
-  const pageTitle = Object.entries(pageTitles).find(([k]) =>
-    k === '/' ? pathname === '/' : pathname?.startsWith(k)
-  )?.[1] ?? 'Studio Botema ERP';
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -56,14 +40,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className="w-full bg-surface-container border-none py-2 pl-10 pr-4 text-body-sm font-body-sm
                            text-on-surface placeholder:text-on-surface-variant/40 outline-none
                            focus:ring-1 focus:ring-primary-container transition-all"
-                placeholder="Search invoices, projects, suppliers…"
+                placeholder={t('header.search')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
           </div>
 
-          {/* Actions + User */}
+          {/* Actions + Lang + User */}
           <div className="flex items-center gap-6 ml-gutter">
             <div className="flex gap-4">
               <button className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">
@@ -76,6 +60,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 help_outline
               </button>
             </div>
+
+            {/* Language toggle */}
+            <div className="flex gap-0.5 border border-outline-variant/30 p-0.5">
+              <button
+                onClick={() => setLang('bg')}
+                className={`px-2.5 py-1 font-label-caps text-[10px] transition-colors ${
+                  lang === 'bg'
+                    ? 'bg-primary-container text-on-primary-container'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                БГ
+              </button>
+              <button
+                onClick={() => setLang('en')}
+                className={`px-2.5 py-1 font-label-caps text-[10px] transition-colors ${
+                  lang === 'en'
+                    ? 'bg-primary-container text-on-primary-container'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                EN
+              </button>
+            </div>
+
             {/* Avatar */}
             <div className="w-8 h-8 rounded-full bg-primary-container text-on-primary-container text-[12px] font-bold flex items-center justify-center border border-outline-variant flex-shrink-0">
               {user?.name?.charAt(0).toUpperCase() ?? 'S'}
@@ -91,3 +100,4 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+

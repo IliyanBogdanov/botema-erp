@@ -3,27 +3,29 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/store';
+import { useT } from '@/lib/i18n';
 import { api } from '@/lib/api';
 
 const navItems = [
-  { label: 'Dashboard',      href: '/',          icon: 'dashboard',         exact: true },
-  { label: 'Purchases',      href: '/purchases', icon: 'shopping_cart' },
-  { label: 'AI Doc Center',  href: '/documents', icon: 'auto_awesome' },
-  { label: 'Invoices',       href: '/invoices',  icon: 'receipt_long' },
-  { label: 'Projects',       href: '/projects',  icon: 'folder_open' },
-  { label: 'Counterparties', href: '/clients',   icon: 'groups' },
-  { label: 'Suppliers',      href: '/suppliers', icon: 'local_shipping' },
-  { label: 'Inventory',      href: '/inventory', icon: 'inventory_2' },
-  { label: 'Expenses',       href: '/expenses',  icon: 'receipt' },
-  { label: 'Alerts',         href: '/alerts',    icon: 'notifications_active' },
-  { label: 'AI Assistant',   href: '/ai',        icon: 'smart_toy' },
-  { label: 'Backfill',       href: '/backfill',  icon: 'cloud_sync' },
+  { key: 'nav.dashboard',  href: '/',          icon: 'dashboard',           exact: true },
+  { key: 'nav.purchases',  href: '/purchases', icon: 'shopping_cart' },
+  { key: 'nav.documents',  href: '/documents', icon: 'auto_awesome' },
+  { key: 'nav.invoices',   href: '/invoices',  icon: 'receipt_long' },
+  { key: 'nav.projects',   href: '/projects',  icon: 'folder_open' },
+  { key: 'nav.clients',    href: '/clients',   icon: 'groups' },
+  { key: 'nav.suppliers',  href: '/suppliers', icon: 'local_shipping' },
+  { key: 'nav.inventory',  href: '/inventory', icon: 'inventory_2' },
+  { key: 'nav.expenses',   href: '/expenses',  icon: 'receipt' },
+  { key: 'nav.alerts',     href: '/alerts',    icon: 'notifications_active' },
+  { key: 'nav.ai',         href: '/ai',        icon: 'smart_toy' },
+  { key: 'nav.backfill',   href: '/backfill',  icon: 'cloud_sync' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
   const { user, clearUser } = useAuthStore();
+  const t = useT();
 
   const { data: alerts = [] } = useQuery({
     queryKey: ['alerts-sidebar'],
@@ -55,7 +57,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ label, href, icon, exact }) => {
+        {navItems.map(({ key, href, icon, exact }) => {
           const active = isActive(href, exact);
           return (
             <Link
@@ -68,7 +70,7 @@ export function Sidebar() {
               }`}
             >
               <span className="material-symbols-outlined text-[20px] flex-shrink-0">{icon}</span>
-              <span className="min-w-0 flex-1 truncate">{label}</span>
+              <span className="min-w-0 flex-1 truncate">{t(key)}</span>
               {href === '/alerts' && alertCount > 0 && (
                 <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
                   {alertCount > 9 ? '9+' : alertCount}
@@ -85,7 +87,7 @@ export function Sidebar() {
           href="/projects"
           className="block w-full bg-primary-container text-on-primary-container py-3 font-label-caps text-label-caps text-center hover:opacity-90 transition-opacity"
         >
-          New Project
+          {t('nav.newProject')}
         </Link>
 
         {user && (
@@ -97,7 +99,7 @@ export function Sidebar() {
               className="mt-2 flex items-center gap-2 px-0 py-2 font-label-caps text-label-caps text-error hover:text-error/80 transition-colors"
             >
               <span className="material-symbols-outlined text-[18px]">logout</span>
-              <span>Sign out</span>
+              <span>{t('nav.signOut')}</span>
             </button>
           </div>
         )}
@@ -105,3 +107,4 @@ export function Sidebar() {
     </aside>
   );
 }
+

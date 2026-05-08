@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import { Modal } from '@/components/Modal';
 
 interface Supplier {
@@ -116,6 +117,7 @@ export default function SuppliersPage() {
     queryFn: () => api.get('/suppliers').then(r => r.data),
     staleTime: 30000,
   });
+  const t = useT();
 
   const suppliers: Supplier[] = Array.isArray(data) ? data : [];
 
@@ -144,18 +146,18 @@ export default function SuppliersPage() {
       <div className="mx-auto max-w-7xl space-y-section-gap">
         <section className="flex justify-between items-end mb-section-gap">
           <div>
-            <p className="font-label-caps text-label-caps text-primary mb-2">ДОСТАВЧИЦИ</p>
-            <h2 className="font-headline text-headline-lg text-on-surface">Доставчици</h2>
+            <p className="font-label-caps text-label-caps text-primary mb-2">{t('sup.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">{t('sup.title')}</h2>
           </div>
           <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px]">add</span>
-            Нов доставчик
+            {t('sup.new')}
           </button>
         </section>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Общо доставчици" value={String(suppliers.length)} sub={`${filtered.length} видими`} />
-          <MetricCard label="Всички поръчки" value={String(totalPurchases)} sub="свързани покупки" />
+          <MetricCard label={t('sup.totalSuppliers')} value={String(suppliers.length)} sub={`${filtered.length} видими`} />
+          <MetricCard label={t('sup.totalOrders')} value={String(totalPurchases)} sub="свързани покупки" />
           <MetricCard label="Валути" value={String(currencies)} sub="активни валути" />
           <MetricCard label="Водеща държава" value={topCountry} sub="по брой доставчици" />
         </div>
@@ -165,7 +167,7 @@ export default function SuppliersPage() {
             <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">search</span>
             <input
               className="input w-full py-3 pl-12"
-              placeholder="Търси фирма, държава, имейл..."
+              placeholder={t('sup.search')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -175,12 +177,12 @@ export default function SuppliersPage() {
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="table-header">Доставчик</th>
-                  <th className="table-header">Държава</th>
-                  <th className="table-header">Валута</th>
-                  <th className="table-header">Отстъпка</th>
-                  <th className="table-header">Имейл</th>
-                  <th className="table-header text-right">Поръчки</th>
+                  <th className="table-header">{t('sup.colSupplier')}</th>
+                  <th className="table-header">{t('sup.colCountry')}</th>
+                  <th className="table-header">{t('sup.colCurrency')}</th>
+                  <th className="table-header">{t('sup.colDiscount')}</th>
+                  <th className="table-header">{t('sup.colEmail')}</th>
+                  <th className="table-header text-right">{t('sup.colOrders')}</th>
                   <th className="table-header w-16"></th>
                 </tr>
               </thead>
@@ -195,7 +197,7 @@ export default function SuppliersPage() {
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">Няма доставчици</td>
+                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">{t('sup.none')}</td>
                   </tr>
                 ) : (
                   filtered.map(s => (

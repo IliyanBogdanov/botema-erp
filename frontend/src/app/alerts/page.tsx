@@ -2,12 +2,15 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fmtDate } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 
-const severityConfig: Record<string, { label: string; icon: string; cls: string }> = {
-  CRITICAL: { label: 'КРИТИЧЕН', icon: 'error',   cls: 'text-error bg-error/10 border-error/30' },
-  WARNING:  { label: 'ВНИМАНИЕ', icon: 'warning', cls: 'text-[#ff9f0a] bg-[#ff9f0a]/10 border-[#ff9f0a]/30' },
-  INFO:     { label: 'ИНФО',     icon: 'info',    cls: 'text-primary bg-primary/10 border-primary/30' },
-};
+function getSeverityConfig(t: ReturnType<typeof useT>): Record<string, { label: string; icon: string; cls: string }> {
+  return {
+    CRITICAL: { label: t('alerts.critical'), icon: 'error', cls: 'text-error bg-error/10 border-error/30' },
+    WARNING: { label: t('alerts.warning'), icon: 'warning', cls: 'text-[#ff9f0a] bg-[#ff9f0a]/10 border-[#ff9f0a]/30' },
+    INFO: { label: t('alerts.info'), icon: 'info', cls: 'text-primary bg-primary/10 border-primary/30' },
+  };
+}
 
 const typeLabels: Record<string, string> = {
   DOCUMENT: 'Документ', VAT: 'ДДС', REVENUE: 'Приходи',
@@ -15,14 +18,16 @@ const typeLabels: Record<string, string> = {
 };
 
 const STATUS_TABS = [
-  { key: 'ACTIVE',   label: 'Активни' },
-  { key: 'SNOOZED',  label: 'Отложени' },
-  { key: 'RESOLVED', label: 'Решени' },
-];
+  { key: 'ACTIVE', labelKey: 'alerts.active' },
+  { key: 'SNOOZED', labelKey: 'alerts.snoozed' },
+  { key: 'RESOLVED', labelKey: 'alerts.resolved' },
+] as const;
 
 export default function AlertsPage() {
   const [status, setStatus] = useState('ACTIVE');
   const qc = useQueryClient();
+  const t = useT();
+  const severityConfig = getSeverityConfig(t);
 
   const { data: alerts = [], isLoading } = useQuery({
     queryKey: ['alerts', status],
@@ -59,10 +64,10 @@ export default function AlertsPage() {
       {/* Header */}
       <section className="flex justify-between items-end">
         <div>
-          <p className="font-label-caps text-label-caps text-primary mb-2">СИСТЕМА ЗА МОНИТОРИНГ</p>
-          <h2 className="font-headline text-headline-lg text-on-surface">Сигнали</h2>
+          <p className="font-label-caps text-label-caps text-primary mb-2">{t('alerts.label')}</p>
+          <h2 className="font-headline text-headline-lg text-on-surface">{t('alerts.title')}</h2>
           <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-            Проблеми, ДДС рискове и пропуснати документи
+            {t('alerts.subtitle')}
           </p>
         </div>
         <button
@@ -73,7 +78,7 @@ export default function AlertsPage() {
           <span className={`material-symbols-outlined text-[18px] ${generate.isPending ? 'animate-spin' : ''}`}>
             refresh
           </span>
-          Обнови анализа
+          {t('alerts.refresh')}
         </button>
       </section>
 
@@ -89,7 +94,7 @@ export default function AlertsPage() {
 
       {/* Filter tabs */}
       <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
-        {STATUS_TABS.map(({ key, label }) => (
+        {STATUS_TABS.map(({ key, labelKey }) => (
           <button
             key={key}
             onClick={() => setStatus(key)}
@@ -99,7 +104,7 @@ export default function AlertsPage() {
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
@@ -114,8 +119,8 @@ export default function AlertsPage() {
       ) : !(alerts as any[]).length ? (
         <div className="bg-surface-container-low border border-outline-variant/10 p-16 flex flex-col items-center text-center">
           <span className="material-symbols-outlined text-primary text-5xl mb-4">check_circle</span>
-          <p className="font-label-caps text-label-caps text-on-surface mb-1">ВСИЧКО Е НАРЕД</p>
-          <p className="font-body-sm text-body-sm text-on-surface-variant">Няма сигнали в тази категория</p>
+          <p className="font-label-caps text-label-caps text-on-surface mb-1">{t('alerts.allClear')}</p>
+          <p className="font-body-sm text-body-sm text-on-surface-variant">{t('alerts.noAlerts')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -171,13 +176,13 @@ export default function AlertsPage() {
                         onClick={() => snoozeTomorrow(alert.id)}
                         className="btn-secondary text-xs py-1.5 px-3"
                       >
-                        Отложи
+                        {t('alerts.snooze')}
                       </button>
                       <button
                         onClick={() => updateAlert.mutate({ id: alert.id, payload: { status: 'RESOLVED' } })}
                         className="btn-primary text-xs py-1.5 px-3"
                       >
-                        Решено
+                        {t('alerts.resolve')}
                       </button>
                     </div>
                   )}

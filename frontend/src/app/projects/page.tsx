@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { api, fmtDate } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
 
@@ -24,12 +25,14 @@ const projectImages = [
   'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=600&q=60',
   'https://images.unsplash.com/photo-1600210492493-0946911123ea?w=600&q=60',
 ];
-const statusTabs = [
-  { label: 'Всички', value: '' },
-  { label: 'ACTIVE', value: 'ACTIVE' },
-  { label: 'COMPLETED', value: 'COMPLETED' },
-  { label: 'ON_HOLD', value: 'ON_HOLD' },
-];
+function getStatusTabs(t: ReturnType<typeof useT>) {
+  return [
+    { label: t('proj.all'), value: '' },
+    { label: t('proj.active'), value: 'ACTIVE' },
+    { label: t('proj.completed'), value: 'COMPLETED' },
+    { label: t('proj.onHold'), value: 'ON_HOLD' },
+  ];
+}
 const yearTabs = [2024, 2025, 2026];
 
 function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -119,9 +122,9 @@ function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
-function ProjectStatusBadge({ status }: { status: string }) {
+function ProjectStatusBadge({ status, activeLabel }: { status: string; activeLabel: string }) {
   const label = status === 'ACTIVE'
-    ? 'ACTIVE'
+    ? activeLabel
     : status === 'COMPLETED'
       ? 'COMPLETED'
       : status === 'ON_HOLD'
@@ -158,6 +161,8 @@ export default function ProjectsPage() {
     queryFn: () => api.get(`/projects?${params}`).then(r => r.data),
     staleTime: 30000,
   });
+  const t = useT();
+  const statusTabs = getStatusTabs(t);
 
   const projects: Project[] = Array.isArray(data) ? data : (data as any).data || [];
 
@@ -174,12 +179,12 @@ export default function ProjectsPage() {
       <div className="mx-auto max-w-7xl space-y-section-gap">
         <section className="flex justify-between items-end mb-section-gap">
           <div>
-            <p className="font-label-caps text-label-caps text-primary mb-2">ПРОЕКТИ</p>
-            <h2 className="font-headline text-headline-lg text-on-surface">Проекти</h2>
+            <p className="font-label-caps text-label-caps text-primary mb-2">{t('proj.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">{t('proj.title')}</h2>
           </div>
           <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px]">add</span>
-            Нов проект
+            {t('proj.new')}
           </button>
         </section>
 
@@ -235,7 +240,7 @@ export default function ProjectsPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="bg-surface-container-low border border-outline-variant/10 p-12 text-center text-on-surface-variant">
-              Няма проекти
+              {t('proj.none')}
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -261,7 +266,7 @@ export default function ProjectsPage() {
                     </div>
 
                     <div className="space-y-4">
-                      <ProjectStatusBadge status={project.status} />
+                      <ProjectStatusBadge status={project.status} activeLabel={t('proj.activeLabel')} />
                       <div>
                         <h3 className="font-headline text-headline-md text-on-surface">{project.name}</h3>
                         <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant">Година {project.year}</p>
@@ -269,13 +274,13 @@ export default function ProjectsPage() {
 
                       <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
                         <div>
-                          <p className="font-label-caps text-label-caps text-on-surface-variant">Revenue</p>
+                          <p className="font-label-caps text-label-caps text-on-surface-variant">{t('proj.revenue')}</p>
                           <p className="mt-2 font-data-mono text-data-mono text-on-surface">
                             {(project.revenue || 0).toLocaleString('bg-BG', { minimumFractionDigits: 0 })} BGN
                           </p>
                         </div>
                         <div>
-                          <p className="font-label-caps text-label-caps text-on-surface-variant">Invoices</p>
+                          <p className="font-label-caps text-label-caps text-on-surface-variant">{t('proj.invoices')}</p>
                           <p className="mt-2 font-data-mono text-data-mono text-on-surface">{project.invoiceCount ?? 0}</p>
                         </div>
                       </div>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { RevenueChart } from '@/components/RevenueChart';
 import { useState } from 'react';
+import { useT } from '@/lib/i18n';
 
 // Premium Unsplash interiors — stable CDN URLs
 const HERO_IMG     = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&auto=format&q=80';
@@ -38,6 +39,7 @@ export default function DashboardPage() {
     queryKey: ['top-suppliers-dash'],
     queryFn: () => api.get('/purchases?limit=100').then(r => r.data),
   });
+  const t = useT();
 
   if (isLoading) return <LoadingSkeleton />;
 
@@ -72,8 +74,8 @@ export default function DashboardPage() {
 
         {/* overlaid text */}
         <div className="absolute inset-0 flex flex-col justify-end p-container-padding pb-8">
-          <p className="font-label-caps text-label-caps text-primary mb-2 tracking-widest">OPERATIONAL OVERVIEW</p>
-          <h2 className="font-headline text-headline-lg text-on-surface">Executive Dashboard</h2>
+          <p className="font-label-caps text-label-caps text-primary mb-2 tracking-widest">{t('dash.overviewLabel')}</p>
+          <h2 className="font-headline text-headline-lg text-on-surface">{t('dash.title')}</h2>
           <p className="font-label-caps text-[10px] text-on-surface-variant/60 mt-2 tracking-widest">
             Studio Botema ЕООД · {year}
           </p>
@@ -96,7 +98,7 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
-          <button className="btn-secondary bg-surface/60 backdrop-blur-sm">EXPORT REPORT</button>
+          <button className="btn-secondary bg-surface/60 backdrop-blur-sm">{t('dash.exportReport')}</button>
         </div>
       </div>
 
@@ -122,7 +124,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
               <span className="font-label-caps text-label-caps text-on-surface">
-                {pendingDocs.length} DOCUMENT{pendingDocs.length > 1 ? 'S' : ''} PENDING REVIEW
+                {pendingDocs.length} {t('dash.pendingReview')}
               </span>
             </div>
             <a href="/documents" className="font-label-caps text-label-caps text-primary hover:opacity-80">REVIEW →</a>
@@ -135,20 +137,20 @@ export default function DashboardPage() {
           <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden group hover:border-primary-container/30 transition-colors">
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary-container/8 rounded-bl-full translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-500" />
             <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.5)]" />
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">TOTAL TURNOVER (EUR)</p>
+            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.totalEur')}</p>
             <div className="flex items-baseline gap-2">
               <span className="font-headline text-headline-xl text-on-surface">304,501</span>
               <span className="font-data-mono text-data-mono text-primary">EUR</span>
             </div>
             <div className="mt-4 flex items-center gap-2 text-primary">
               <span className="material-symbols-outlined text-[16px]">trending_up</span>
-              <span className="font-label-caps text-[10px]">ALL CURRENCIES COMBINED</span>
+              <span className="font-label-caps text-[10px]">{t('dash.allCurrCombined')}</span>
             </div>
           </div>
 
           {/* BGN */}
           <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden hover:border-outline-variant/20 transition-colors">
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">REVENUE (BGN)</p>
+            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.revenueBgn')}</p>
             <div className="flex items-baseline gap-2">
               <span className="font-headline text-headline-xl text-on-surface">
                 {(kpis.revenue || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
@@ -162,13 +164,13 @@ export default function DashboardPage() {
 
           {/* Margin */}
           <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden hover:border-outline-variant/20 transition-colors">
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">GROSS MARGIN</p>
+            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.grossMargin')}</p>
             <div className="flex items-baseline gap-2">
               <span className="font-headline text-headline-xl text-on-surface">{margin || '—'}%</span>
             </div>
             <div className="mt-4 flex items-center gap-2 text-on-surface-variant/60">
               <span className="material-symbols-outlined text-[16px]">analytics</span>
-              <span className="font-label-caps text-[10px]">{kpis.invoiceCount || 0} INVOICES</span>
+              <span className="font-label-caps text-[10px]">{kpis.invoiceCount || 0} {t('dash.invoices')}</span>
             </div>
           </div>
         </section>
@@ -179,7 +181,7 @@ export default function DashboardPage() {
           {/* Top Suppliers — col 8 */}
           <div className="col-span-12 lg:col-span-8 bg-surface-container-low p-8 border border-outline-variant/10">
             <div className="flex justify-between items-center mb-10">
-              <h3 className="font-label-caps text-label-caps text-on-surface">TOP PROCUREMENT SUPPLIERS</h3>
+              <h3 className="font-label-caps text-label-caps text-on-surface">{t('dash.suppliers')}</h3>
               <span className="font-data-mono text-data-mono text-on-surface-variant">{topSuppliers.length} suppliers</span>
             </div>
             <div className="space-y-7">
@@ -212,23 +214,23 @@ export default function DashboardPage() {
             {/* Stats row */}
             <div className="mt-10 grid grid-cols-4 border-t border-outline-variant/10 pt-6 gap-4">
               <div className="text-center">
-                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">TOTAL PURCHASES</p>
+                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{t('dash.totalPurchases')}</p>
                 <p className="font-data-mono text-on-surface text-lg">
                   {Array.isArray(purchases) ? purchases.length : (purchases.data?.length ?? 0)}
                 </p>
               </div>
               <div className="text-center">
-                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">ACTIVE SUPPLIERS</p>
+                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{t('dash.activeSuppliers')}</p>
                 <p className="font-data-mono text-on-surface text-lg">{topSuppliers.length}</p>
               </div>
               <div className="text-center">
-                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">TOTAL COST</p>
+                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{t('dash.totalCost')}</p>
                 <p className="font-data-mono text-primary text-lg">
                   {topSuppliers.reduce((s, [, v]) => s + v, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} EUR
                 </p>
               </div>
               <div className="text-center">
-                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">INVOICES</p>
+                <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{t('dash.invoices')}</p>
                 <p className="font-data-mono text-on-surface text-lg">{kpis.invoiceCount || '—'}</p>
               </div>
             </div>
@@ -240,7 +242,7 @@ export default function DashboardPage() {
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container/6 rounded-full blur-2xl pointer-events-none" />
             <div className="flex items-center gap-2 mb-8 relative">
               <span className="material-symbols-outlined text-primary">auto_awesome</span>
-              <h3 className="font-label-caps text-label-caps text-on-surface">AI DOCUMENT CENTER</h3>
+              <h3 className="font-label-caps text-label-caps text-on-surface">{t('dash.aiCenter')}</h3>
             </div>
             <div className="space-y-5 relative">
               {(Array.isArray(pendingDocs) ? pendingDocs : []).slice(0, 4).map((doc: any) => (
@@ -253,7 +255,7 @@ export default function DashboardPage() {
                     <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{doc.senderEmail || ''}</p>
                     <div className="mt-2">
                       <span className="px-2 py-0.5 bg-primary-container/15 text-primary font-label-caps text-[8px] border border-primary-container/20">
-                        PENDING REVIEW
+                        {t('dash.pendingReview')}
                       </span>
                     </div>
                   </div>
@@ -262,12 +264,12 @@ export default function DashboardPage() {
               {(Array.isArray(pendingDocs) ? pendingDocs : []).length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center opacity-50">
                   <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">check_circle</span>
-                  <p className="font-label-caps text-label-caps text-on-surface-variant">ALL CLEAR</p>
+                  <p className="font-label-caps text-label-caps text-on-surface-variant">{t('dash.allClear')}</p>
                 </div>
               )}
             </div>
             <a href="/documents" className="block w-full mt-8 py-3 border border-outline-variant/20 font-label-caps text-label-caps text-center text-on-surface-variant hover:bg-surface-variant/10 transition-colors relative">
-              VIEW ALL QUEUE
+              {t('dash.viewQueue')}
             </a>
           </div>
         </section>
@@ -276,19 +278,19 @@ export default function DashboardPage() {
         {vat && (
           <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
             <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">OUTGOING VAT</p>
+              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.outVat')}</p>
               <p className="font-headline text-headline-md text-on-surface">
                 {vat.outputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
               </p>
             </div>
             <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">INPUT VAT</p>
+              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.inVat')}</p>
               <p className="font-headline text-headline-md text-on-surface">
                 {vat.estimatedInputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
               </p>
             </div>
             <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">NET VAT POSITION</p>
+              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.netVat')}</p>
               <p className={`font-headline text-headline-md ${vat.netVat >= 0 ? 'text-error' : 'text-primary'}`}>
                 {vat.netVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
               </p>
@@ -304,11 +306,11 @@ export default function DashboardPage() {
         {/* ── REVENUE CHART + RECENT INVOICES ────────────────────────────────── */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
           <div className="lg:col-span-2 bg-surface-container-low p-8 border border-outline-variant/10">
-            <h3 className="font-label-caps text-label-caps text-on-surface mb-8">REVENUE BY MONTH</h3>
+            <h3 className="font-label-caps text-label-caps text-on-surface mb-8">{t('dash.revenueByMonth')}</h3>
             <RevenueChart data={data?.revenueByMonth || []} />
           </div>
           <div className="bg-surface-container-low p-8 border border-outline-variant/10">
-            <h3 className="font-label-caps text-label-caps text-on-surface mb-8">RECENT INVOICES</h3>
+            <h3 className="font-label-caps text-label-caps text-on-surface mb-8">{t('dash.recentInvoices')}</h3>
             <div className="space-y-3">
               {(data?.recentInvoices || []).slice(0, 6).map((inv: any) => (
                 <div key={inv.id} className="flex justify-between items-center py-3 border-b border-outline-variant/5 group/inv hover:bg-surface-container-high -mx-2 px-2 transition-colors">
@@ -330,10 +332,10 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <p className="font-label-caps text-label-caps text-primary mb-1">PROJECT PORTFOLIO</p>
-              <h3 className="font-headline text-headline-md text-on-surface">Active Design Projects</h3>
+              <h3 className="font-headline text-headline-md text-on-surface">{t('dash.activeProjects')}</h3>
             </div>
             <a href="/projects" className="btn-ghost flex items-center gap-2">
-              <span>VIEW ALL</span>
+              <span>{t('dash.viewAll')}</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </a>
           </div>
@@ -350,7 +352,7 @@ export default function DashboardPage() {
                 {/* hover glow */}
                 <div className="absolute inset-0 border border-primary-container/0 group-hover:border-primary-container/40 transition-colors" />
                 <div className="absolute bottom-0 left-0 right-0 p-5">
-                  <p className="font-label-caps text-[9px] text-primary mb-1 tracking-widest">ACTIVE PROJECT</p>
+                  <p className="font-label-caps text-[9px] text-primary mb-1 tracking-widest">{t('dash.activeProject')}</p>
                   <p className="font-label-caps text-label-caps text-on-surface">{PROJ_LABELS[i]}</p>
                 </div>
                 <div className="absolute top-3 right-3">

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import { Modal } from '@/components/Modal';
 
 interface Client {
@@ -140,11 +141,13 @@ const brandLabels: Record<string, string> = {
   STUDIO_BOTEMA: 'Studio Botema', LUMINAVERA: 'Luminavera', BOTH: 'И двете'
 };
 
-const brandTabs = [
-  { label: 'Всички', value: '' },
-  { label: 'Studio Botema', value: 'STUDIO_BOTEMA' },
-  { label: 'Luminavera', value: 'LUMINAVERA' },
-];
+function getBrandTabs(t: ReturnType<typeof useT>) {
+  return [
+    { label: t('clients.allBrands'), value: '' },
+    { label: 'Studio Botema', value: 'STUDIO_BOTEMA' },
+    { label: 'Luminavera', value: 'LUMINAVERA' },
+  ];
+}
 
 export default function ClientsPage() {
   const [search, setSearch] = useState('');
@@ -157,6 +160,8 @@ export default function ClientsPage() {
     queryFn: () => api.get(`/clients${brand ? `?brand=${brand}` : ''}`).then(r => r.data),
     staleTime: 30000,
   });
+  const t = useT();
+  const brandTabs = getBrandTabs(t);
 
   const clients: Client[] = Array.isArray(data) ? data : (data as any).data || [];
 
@@ -176,12 +181,12 @@ export default function ClientsPage() {
       <div className="mx-auto max-w-7xl space-y-section-gap">
         <section className="flex justify-between items-end mb-section-gap">
           <div>
-            <p className="font-label-caps text-label-caps text-primary mb-2">КОНТРАГЕНТИ</p>
-            <h2 className="font-headline text-headline-lg text-on-surface">Клиенти</h2>
+            <p className="font-label-caps text-label-caps text-primary mb-2">{t('clients.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">{t('clients.title')}</h2>
           </div>
           <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px]">add</span>
-            Нов клиент
+            {t('clients.new')}
           </button>
         </section>
 
@@ -209,7 +214,7 @@ export default function ClientsPage() {
             <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">search</span>
             <input
               className="input w-full py-3 pl-12"
-              placeholder="Търси фирма, имейл, град..."
+              placeholder={t('clients.search')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -219,12 +224,12 @@ export default function ClientsPage() {
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="table-header">Фирма</th>
-                  <th className="table-header">Тип</th>
-                  <th className="table-header">Град</th>
-                  <th className="table-header">Имейл</th>
-                  <th className="table-header">Марка</th>
-                  <th className="table-header text-right">Фактури</th>
+                  <th className="table-header">{t('clients.colName')}</th>
+                  <th className="table-header">{t('clients.colType')}</th>
+                  <th className="table-header">{t('clients.colCity')}</th>
+                  <th className="table-header">{t('clients.colEmail')}</th>
+                  <th className="table-header">{t('clients.colBrand')}</th>
+                  <th className="table-header text-right">{t('clients.colInvoices')}</th>
                   <th className="table-header w-16"></th>
                 </tr>
               </thead>
@@ -239,7 +244,7 @@ export default function ClientsPage() {
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">Няма клиенти</td>
+                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">{t('clients.none')}</td>
                   </tr>
                 ) : (
                   filtered.map(c => (

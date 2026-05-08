@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import { Modal } from '@/components/Modal';
 
 interface Purchase {
@@ -212,6 +213,7 @@ export default function PurchasesPage() {
     queryFn: () => api.get(`/purchases?${params}`).then(r => r.data),
     staleTime: 30000,
   });
+  const t = useT();
 
   const purchases: Purchase[] = Array.isArray(data) ? data : (data as any).data || [];
 
@@ -224,8 +226,8 @@ export default function PurchasesPage() {
         {/* Page Title */}
         <div className="flex justify-between items-end mb-8">
           <div>
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">PROCUREMENT</p>
-            <h2 className="font-headline text-headline-lg text-on-background">Purchases Ledger</h2>
+            <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">{t('pur.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-background">{t('pur.title')}</h2>
             <p className="text-on-surface-variant font-body-md mt-2">
               Manage and reconcile procurement activities across all design entities.
             </p>
@@ -239,7 +241,7 @@ export default function PurchasesPage() {
               className="px-6 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:opacity-90 transition-opacity flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-[16px]">add</span>
-              Record Invoice
+              {t('pur.newPurchase')}
             </button>
           </div>
         </div>
@@ -272,7 +274,7 @@ export default function PurchasesPage() {
               value={supplierId}
               onChange={e => setSupplierId(e.target.value)}
             >
-              <option value="">All Suppliers</option>
+              <option value="">{t('pur.allCompanies')}</option>
               {(suppliers as any[]).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
@@ -291,7 +293,7 @@ export default function PurchasesPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-high">
-                {['Date', 'Supplier', 'Project', 'Amount', 'Currency', 'Status', ''].map(h => (
+                {[t('pur.colDate'), t('pur.colSupplier'), t('pur.colInvoice'), t('pur.colAmount'), t('pur.colCurrency'), t('pur.colStatus'), ''].map(h => (
                   <th key={h} className="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant border-b border-outline-variant/10">
                     {h}
                   </th>
@@ -312,7 +314,7 @@ export default function PurchasesPage() {
               ) : purchases.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-16 text-center text-on-surface-variant font-body-sm">
-                    No purchases found for the selected filters
+                    {t('pur.noData')}
                   </td>
                 </tr>
               ) : (
@@ -322,19 +324,8 @@ export default function PurchasesPage() {
                   return (
                     <tr key={p.id} className="hover:bg-surface-variant/10 transition-colors group">
                       <td className="px-6 py-4 font-data-mono text-data-mono">{fmtDate(p.date)}</td>
-                      <td className="px-6 py-4">
-                        <div className="font-body-md font-semibold text-on-surface">{p.supplier?.name || '—'}</div>
-                        <div className="text-xs text-on-surface-variant">{p.invoiceNo || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {p.project ? (
-                          <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold tracking-wider uppercase border border-primary/20">
-                            {p.project.code}
-                          </span>
-                        ) : (
-                          <span className="text-on-surface-variant/30">—</span>
-                        )}
-                      </td>
+                      <td className="px-6 py-4 font-body-md font-semibold text-on-surface">{p.supplier?.name || '—'}</td>
+                      <td className="px-6 py-4 text-on-surface-variant">{p.invoiceNo || '—'}</td>
                       <td className={`px-6 py-4 font-data-mono text-data-mono ${isZero ? 'text-error' : 'text-primary'}`}>
                         {fmt(p.amount, p.currency)}
                       </td>
@@ -347,7 +338,7 @@ export default function PurchasesPage() {
                               : 'bg-outline'
                           }`} />
                           <span className={`font-label-caps text-label-caps ${isPaid ? 'text-primary-container' : 'text-on-surface-variant'}`}>
-                            {isPaid ? 'Paid' : 'Pending'}
+                            {isPaid ? 'PAID' : t('pur.pending')}
                           </span>
                         </div>
                       </td>
@@ -371,7 +362,7 @@ export default function PurchasesPage() {
         {!isLoading && purchases.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter">
             <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
-              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Total Committed</span>
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.totalEur')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
                   {(total / 1.95583).toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} EUR
@@ -380,7 +371,7 @@ export default function PurchasesPage() {
               </div>
             </div>
             <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
-              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">BGN Total</span>
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.totalBgn')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
                   {total.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} BGN
@@ -389,7 +380,7 @@ export default function PurchasesPage() {
               </div>
             </div>
             <div className="bg-surface-container-high p-6 border border-error/20 flex flex-col justify-between">
-              <span className="font-label-caps text-label-caps text-error uppercase">Zero Amount</span>
+              <span className="font-label-caps text-label-caps text-error uppercase">{t('pur.zeroAmt')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-error">
                   {purchases.filter(p => Number(p.amount) === 0).length}
@@ -398,7 +389,7 @@ export default function PurchasesPage() {
               </div>
             </div>
             <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
-              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Pending</span>
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.pending')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
                   {purchases.filter(p => p.status !== 'PAID').length}
