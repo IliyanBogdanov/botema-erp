@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 import { Modal } from '@/components/Modal';
-import { Plus, Pencil } from 'lucide-react';
 
 interface Purchase {
   id: string;
@@ -42,11 +41,11 @@ function EditPurchaseModal({ purchase, onClose }: { purchase: Purchase; onClose:
       <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, amount: Number(form.amount) }); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Фактура №</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Фактура №</label>
             <input className="input" value={form.invoiceNo} onChange={e => setField('invoiceNo', e.target.value)} placeholder="0000012345" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Статус</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Статус</label>
             <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
               <option value="PENDING">Чака</option>
               <option value="PAID">Платено</option>
@@ -55,11 +54,11 @@ function EditPurchaseModal({ purchase, onClose }: { purchase: Purchase; onClose:
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Сума *</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Сума *</label>
             <input type="number" required min="0" step="0.01" className="input" value={form.amount} onChange={e => setField('amount', e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Валута</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Валута</label>
             <select className="input" value={form.currency} onChange={e => setField('currency', e.target.value)}>
               <option value="BGN">BGN</option>
               <option value="EUR">EUR</option>
@@ -68,12 +67,12 @@ function EditPurchaseModal({ purchase, onClose }: { purchase: Purchase; onClose:
           </div>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Описание</label>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Описание</label>
           <textarea className="input" rows={2} value={form.description} onChange={e => setField('description', e.target.value)} />
         </div>
         {error && (
-          <div className="bg-[rgba(255,69,58,0.1)] border border-[rgba(255,69,58,0.3)] rounded-lg px-3 py-2">
-            <p className="text-[#ff453a] text-sm">{error}</p>
+          <div className="bg-error-container/20 border border-error/30 px-3 py-2">
+            <p className="text-error text-body-sm">{error}</p>
           </div>
         )}
         <div className="flex justify-end gap-2">
@@ -123,17 +122,17 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
       <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, amount: Number(form.amount) }); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Дата *</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Дата *</label>
             <input type="date" required className="input" value={form.date} onChange={e => setField('date', e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Фактура №</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Фактура №</label>
             <input className="input" value={form.invoiceNo} onChange={e => setField('invoiceNo', e.target.value)} placeholder="0000012345" />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Доставчик *</label>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Доставчик *</label>
           <select required className="input" value={form.supplierId} onChange={e => setField('supplierId', e.target.value)}>
             <option value="">— Избери доставчик —</option>
             {(suppliers as any[]).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -141,7 +140,7 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Проект</label>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Проект</label>
           <select className="input" value={form.projectId} onChange={e => setField('projectId', e.target.value)}>
             <option value="">— Без проект —</option>
             {(projects as any[]).map((p: any) => <option key={p.id} value={p.id}>{p.code} – {p.name}</option>)}
@@ -150,11 +149,11 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Сума *</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Сума *</label>
             <input type="number" required min="0" step="0.01" className="input" value={form.amount} onChange={e => setField('amount', e.target.value)} placeholder="0.00" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Валута</label>
+            <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Валута</label>
             <select className="input" value={form.currency} onChange={e => setField('currency', e.target.value)}>
               <option value="BGN">BGN</option>
               <option value="EUR">EUR</option>
@@ -164,7 +163,7 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Статус</label>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Статус</label>
           <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
             <option value="PENDING">Чака</option>
             <option value="PAID">Платено</option>
@@ -172,13 +171,13 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Описание</label>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Описание</label>
           <textarea className="input" rows={2} value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Описание на доставката..." />
         </div>
 
         {error && (
-          <div className="bg-[rgba(255,69,58,0.1)] border border-[rgba(255,69,58,0.3)] rounded-lg px-3 py-2">
-            <p className="text-[#ff453a] text-sm">{error}</p>
+          <div className="bg-error-container/20 border border-error/30 px-3 py-2">
+            <p className="text-error text-body-sm">{error}</p>
           </div>
         )}
 
@@ -219,90 +218,197 @@ export default function PurchasesPage() {
   const total = purchases.reduce((s, p) => s + (p.currency === 'BGN' ? p.amount : p.amount * 1.95583), 0);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Доставки</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">{purchases.length} записа</p>
-        </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Нова доставка
-        </button>
-      </div>
+    <div className="p-container-padding">
+      <div className="max-w-7xl mx-auto space-y-element-gap">
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <div className="flex gap-1 bg-[#1d1d1f] p-1 rounded-xl">
-          {[2024, 2025, 2026].map(y => (
-            <button key={y} onClick={() => setYear(y)}
-              className={`px-3 py-1 rounded-lg text-sm font-semibold transition-all ${
-                year === y ? 'bg-[#0a84ff] text-white' : 'text-[#71717a] hover:text-white'
-              }`}>{y}</button>
-          ))}
+        {/* Page Title */}
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">PROCUREMENT</p>
+            <h2 className="font-headline text-headline-lg text-on-background">Purchases Ledger</h2>
+            <p className="text-on-surface-variant font-body-md mt-2">
+              Manage and reconcile procurement activities across all design entities.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <button className="px-6 py-2 border border-outline text-on-surface font-label-caps text-label-caps hover:bg-surface-container-high transition-colors">
+              Export Report
+            </button>
+            <button
+              onClick={() => setModalOpen(true)}
+              className="px-6 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:opacity-90 transition-opacity flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>
+              Record Invoice
+            </button>
+          </div>
         </div>
-        <select className="input w-52" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
-          <option value="">Всички доставчици</option>
-          {(suppliers as any[]).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="table-header">Дата</th>
-              <th className="table-header">Доставчик</th>
-              <th className="table-header">Проект</th>
-              <th className="table-header">Фактура №</th>
-              <th className="table-header text-right">Сума</th>
-              <th className="table-header">Валута</th>
-              <th className="table-header">Описание</th>
-              <th className="table-header"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(5)].map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  {[...Array(7)].map((_, j) => (
-                    <td key={j} className="table-cell"><div className="h-4 bg-[#27272a] rounded" /></td>
-                  ))}
-                </tr>
-              ))
-            ) : purchases.length === 0 ? (
-              <tr><td colSpan={7} className="table-cell text-center text-[#52525b] py-10">Няма доставки</td></tr>
-            ) : (
-              purchases.map(p => (
-                <tr key={p.id} className="hover:bg-[#1d1d1f] transition-colors">
-                  <td className="table-cell text-[#a1a1aa]">{fmtDate(p.date)}</td>
-                  <td className="table-cell font-medium text-white">{p.supplier?.name || '—'}</td>
-                  <td className="table-cell text-xs text-[#0a84ff]">{p.project?.code || '—'}</td>
-                  <td className="table-cell font-mono text-xs text-[#a1a1aa]">{p.invoiceNo || '—'}</td>
-                  <td className={`table-cell text-right font-semibold ${Number(p.amount) === 0 ? 'text-[#ff9f0a]' : 'text-white'}`}>{fmt(p.amount, p.currency)}</td>
-                  <td className="table-cell text-[#71717a] text-xs">{p.currency}</td>
-                  <td className="table-cell text-[#71717a] truncate max-w-[200px]">{p.description || '—'}</td>
-                  <td className="table-cell w-8">
-                    <button onClick={() => setEditPurchase(p)} className="text-[#71717a] hover:text-[#0a84ff] transition-colors" title="Редактирай">
-                      <Pencil size={14} />
-                    </button>
+        {/* Filter Bar */}
+        <div className="bg-surface-container-low p-4 flex flex-wrap items-center gap-gutter border border-outline-variant/10">
+          <div className="flex items-center gap-3">
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Year:</span>
+            <div className="flex gap-2">
+              {[2024, 2025, 2026].map(y => (
+                <button
+                  key={y}
+                  onClick={() => setYear(y)}
+                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    year === y
+                      ? 'bg-primary-container/20 text-primary-container border border-primary-container/30'
+                      : 'bg-surface-container-high text-on-surface-variant border border-transparent hover:border-outline-variant'
+                  }`}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-6 w-px bg-outline-variant/20" />
+          <div className="flex items-center gap-3">
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Supplier:</span>
+            <select
+              className="bg-surface-container-high border-none text-body-sm font-body-sm py-1.5 pl-4 pr-10 text-on-surface focus:ring-1 focus:ring-primary-container"
+              value={supplierId}
+              onChange={e => setSupplierId(e.target.value)}
+            >
+              <option value="">All Suppliers</option>
+              {(suppliers as any[]).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button className="p-2 text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined">filter_list</span>
+            </button>
+            <button className="p-2 text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined">sort_by_alpha</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="bg-surface-container-low border border-outline-variant/10 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container-high">
+                {['Date', 'Supplier', 'Project', 'Amount', 'Currency', 'Status', ''].map(h => (
+                  <th key={h} className="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant border-b border-outline-variant/10">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant/5">
+              {isLoading ? (
+                [...Array(8)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    {[...Array(7)].map((_, j) => (
+                      <td key={j} className="px-6 py-4">
+                        <div className="h-3 bg-surface-container-high rounded" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : purchases.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-16 text-center text-on-surface-variant font-body-sm">
+                    No purchases found for the selected filters
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-          {!isLoading && purchases.length > 0 && (
-            <tfoot>
-              <tr className="bg-[#1d1d1f]">
-                <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (в BGN)</td>
-                <td className="table-cell text-right font-bold text-white text-base">
-                  {total.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} BGN
-                </td>
-                <td colSpan={3} className="table-cell" />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+              ) : (
+                purchases.map(p => {
+                  const isPaid = p.status === 'PAID';
+                  const isZero = Number(p.amount) === 0;
+                  return (
+                    <tr key={p.id} className="hover:bg-surface-variant/10 transition-colors group">
+                      <td className="px-6 py-4 font-data-mono text-data-mono">{fmtDate(p.date)}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-body-md font-semibold text-on-surface">{p.supplier?.name || '—'}</div>
+                        <div className="text-xs text-on-surface-variant">{p.invoiceNo || '—'}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {p.project ? (
+                          <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold tracking-wider uppercase border border-primary/20">
+                            {p.project.code}
+                          </span>
+                        ) : (
+                          <span className="text-on-surface-variant/30">—</span>
+                        )}
+                      </td>
+                      <td className={`px-6 py-4 font-data-mono text-data-mono ${isZero ? 'text-error' : 'text-primary'}`}>
+                        {fmt(p.amount, p.currency)}
+                      </td>
+                      <td className="px-6 py-4 font-label-caps text-[12px] text-on-surface-variant">{p.currency}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            isPaid
+                              ? 'bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.4)]'
+                              : 'bg-outline'
+                          }`} />
+                          <span className={`font-label-caps text-label-caps ${isPaid ? 'text-primary-container' : 'text-on-surface-variant'}`}>
+                            {isPaid ? 'Paid' : 'Pending'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => setEditPurchase(p)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity material-symbols-outlined text-[20px] text-on-surface-variant hover:text-primary"
+                        >
+                          more_vert
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Summary Grid */}
+        {!isLoading && purchases.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter">
+            <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Total Committed</span>
+              <div className="mt-4">
+                <span className="font-headline text-headline-md text-on-background">
+                  {(total / 1.95583).toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} EUR
+                </span>
+                <div className="text-xs text-primary mt-1">{purchases.length} invoices</div>
+              </div>
+            </div>
+            <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">BGN Total</span>
+              <div className="mt-4">
+                <span className="font-headline text-headline-md text-on-background">
+                  {total.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} BGN
+                </span>
+                <div className="text-xs text-on-surface-variant mt-1">at rate 1.95583</div>
+              </div>
+            </div>
+            <div className="bg-surface-container-high p-6 border border-error/20 flex flex-col justify-between">
+              <span className="font-label-caps text-label-caps text-error uppercase">Zero Amount</span>
+              <div className="mt-4">
+                <span className="font-headline text-headline-md text-error">
+                  {purchases.filter(p => Number(p.amount) === 0).length}
+                </span>
+                <div className="text-xs text-on-surface-variant mt-1">invoices need review</div>
+              </div>
+            </div>
+            <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Pending</span>
+              <div className="mt-4">
+                <span className="font-headline text-headline-md text-on-background">
+                  {purchases.filter(p => p.status !== 'PAID').length}
+                </span>
+                <div className="text-xs text-on-surface-variant mt-1">unpaid invoices</div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       <PurchaseModal open={modalOpen} onClose={() => setModalOpen(false)} />
