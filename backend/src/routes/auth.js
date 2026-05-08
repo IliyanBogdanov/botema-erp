@@ -39,4 +39,25 @@ router.get('/me', require('../middleware/auth').auth, (req, res) => {
   res.json({ id: req.user.id, email: req.user.email, name: req.user.name, role: req.user.role });
 });
 
+// POST /api/auth/reset-admin — one-time admin password reset (requires ADMIN_PASSWORD env)
+router.post('/reset-admin', async (req, res) => {
+  try {
+    const { secret, newPassword } = req.body;
+    if (!secret || secret !== process.env.ADMIN_PASSWORD) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'newPassword required (min 8 chars)' });
+    }
+    const hashed = await bcrypt.hash(newPassword, 12);
+    const user = await prisma.user.update({
+      where: { email: 'office@studiobotema.com' },
+      data: { password: hashed },
+    });
+    res.json({ ok: true, email: user.email });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

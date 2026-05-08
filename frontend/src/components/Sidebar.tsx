@@ -42,7 +42,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="h-screen w-64 flex-shrink-0 bg-surface-container-lowest flex flex-col py-gutter px-4 z-50">
+    <aside className="h-screen w-72 flex-shrink-0 bg-surface-container-lowest flex flex-col py-gutter px-4 z-50">
       {/* Brand */}
       <div className="mb-10 px-2">
         <h1 className="font-headline text-headline-md font-bold text-primary tracking-tight">
@@ -67,8 +67,8 @@ export function Sidebar() {
                   : 'text-on-surface-variant hover:bg-surface-container-high'
               }`}
             >
-              <span className="material-symbols-outlined text-[20px]">{icon}</span>
-              <span>{label}</span>
+              <span className="material-symbols-outlined text-[20px] flex-shrink-0">{icon}</span>
+              <span className="min-w-0 flex-1 truncate">{label}</span>
               {href === '/alerts' && alertCount > 0 && (
                 <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
                   {alertCount > 9 ? '9+' : alertCount}

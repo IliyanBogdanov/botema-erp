@@ -47,7 +47,7 @@ router.get('/', auth, async (req, res) => {
       prisma.$queryRaw`
         SELECT 
           EXTRACT(MONTH FROM date) as month,
-          SUM(amount_net) as revenue,
+          SUM("amountNet") as revenue,
           brand
         FROM invoices
         WHERE EXTRACT(YEAR FROM date) = ${yearNum}
