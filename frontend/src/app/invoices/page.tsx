@@ -4,9 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate, statusConfig } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
-import { Plus, Search, ChevronDown, Trash2 } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface InvoiceItem {
   description: string;
   qty: number;
@@ -28,7 +26,8 @@ interface Invoice {
   project?: { id: string; code: string; name: string };
 }
 
-// ─── Invoice Modal ────────────────────────────────────────────────────────────
+const modalLabelClass = 'block font-label-caps text-label-caps text-on-surface-variant mb-1.5';
+
 function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
@@ -77,17 +76,16 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
   return (
     <Modal open={open} onClose={onClose} title="Нова фактура" size="xl">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Row 1 */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Клиент *</label>
+            <label className={modalLabelClass}>Клиент *</label>
             <select required className="input" value={form.clientId} onChange={e => setField('clientId', e.target.value)}>
               <option value="">— Избери —</option>
               {(clients as any[]).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Проект</label>
+            <label className={modalLabelClass}>Проект</label>
             <select className="input" value={form.projectId} onChange={e => setField('projectId', e.target.value)}>
               <option value="">— Без проект —</option>
               {(projects as any[]).map((p: any) => <option key={p.id} value={p.id}>{p.code} – {p.name}</option>)}
@@ -95,10 +93,9 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
           </div>
         </div>
 
-        {/* Row 2 */}
         <div className="grid grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Тип</label>
+            <label className={modalLabelClass}>Тип</label>
             <select className="input" value={form.type} onChange={e => setField('type', e.target.value)}>
               <option value="INVOICE">Фактура</option>
               <option value="PROFORMA">Проформа</option>
@@ -106,46 +103,45 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Марка</label>
+            <label className={modalLabelClass}>Марка</label>
             <select className="input" value={form.brand} onChange={e => setField('brand', e.target.value)}>
               <option value="STUDIO_BOTEMA">Studio Botema</option>
               <option value="LUMINAVERA">Luminavera</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Валута</label>
+            <label className={modalLabelClass}>Валута</label>
             <select className="input" value={form.currency} onChange={e => setField('currency', e.target.value)}>
               <option value="BGN">BGN</option>
               <option value="EUR">EUR</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Дата</label>
+            <label className={modalLabelClass}>Дата</label>
             <input type="date" required className="input" value={form.date} onChange={e => setField('date', e.target.value)} />
           </div>
         </div>
 
-        {/* Row 3 */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Падеж</label>
+            <label className={modalLabelClass}>Падеж</label>
             <input type="date" className="input" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Описание</label>
+            <label className={modalLabelClass}>Описание</label>
             <input type="text" className="input" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Описание на фактурата" />
           </div>
         </div>
 
-        {/* Items table */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold text-[#71717a] uppercase tracking-wider">Артикули</label>
-            <button type="button" onClick={addItem} className="btn-secondary text-xs py-1 px-2 flex items-center gap-1">
-              <Plus size={12} /> Добави ред
+          <div className="mb-2 flex items-center justify-between">
+            <label className={modalLabelClass}>Артикули</label>
+            <button type="button" onClick={addItem} className="btn-secondary flex items-center gap-1 px-2 py-1 text-xs">
+              <span className="material-symbols-outlined text-[16px]">add</span>
+              Добави ред
             </button>
           </div>
-          <div className="border border-[#27272a] rounded-xl overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-[#27272a]">
             <table className="w-full text-sm">
               <thead>
                 <tr>
@@ -177,8 +173,8 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
                     </td>
                     <td className="table-cell text-center">
                       {items.length > 1 && (
-                        <button type="button" onClick={() => removeItem(i)} className="text-[#71717a] hover:text-[#ff453a] transition-colors">
-                          <Trash2 size={13} />
+                        <button type="button" onClick={() => removeItem(i)} className="text-[#71717a] transition-colors hover:text-[#ff453a]">
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
                         </button>
                       )}
                     </td>
@@ -188,9 +184,8 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
             </table>
           </div>
 
-          {/* Totals */}
           <div className="mt-3 flex justify-end">
-            <div className="space-y-1 text-sm min-w-[200px]">
+            <div className="min-w-[200px] space-y-1 text-sm">
               <div className="flex justify-between text-[#71717a]">
                 <span>Нето:</span>
                 <span className="font-semibold text-white">{fmt(net, form.currency)}</span>
@@ -207,9 +202,8 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
           </div>
         </div>
 
-        {/* Notes */}
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Забележки</label>
+          <label className={modalLabelClass}>Забележки</label>
           <textarea className="input" rows={2} value={form.notes} onChange={e => setField('notes', e.target.value)} placeholder="Допълнителни бележки..." />
         </div>
 
@@ -230,7 +224,33 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
-// ─── Status Action Menu ───────────────────────────────────────────────────────
+const cleanStatusLabel = (value: string) => value.replace(/^[^A-Za-zА-Яа-я0-9]+/, '').trim();
+
+function StitchStatusBadge({ status }: { status: string }) {
+  const label = cleanStatusLabel(statusConfig[status]?.label || status);
+  const className = status === 'PAID'
+    ? 'bg-primary-container/20 text-primary border-primary-container/30'
+    : status === 'CANCELLED'
+      ? 'bg-error-container/20 text-error border-error/30'
+      : 'bg-surface-container-high text-on-surface-variant border-outline-variant/20';
+
+  return (
+    <span className={`inline-flex items-center border px-2 py-0.5 font-label-caps text-[9px] ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function MetricCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="bg-surface-container-low border border-outline-variant/10 p-5">
+      <p className="font-label-caps text-label-caps text-on-surface-variant">{label}</p>
+      <p className="mt-3 font-headline text-headline-md text-on-surface">{value}</p>
+      <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant">{sub}</p>
+    </div>
+  );
+}
+
 function StatusMenu({ invoice }: { invoice: Invoice }) {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
@@ -247,18 +267,23 @@ function StatusMenu({ invoice }: { invoice: Invoice }) {
 
   return (
     <div className="relative">
-      <button onClick={() => setOpen(o => !o)} className="btn-secondary text-xs py-1 px-2 flex items-center gap-1">
-        <ChevronDown size={12} />
+      <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-2 border border-outline-variant/20 bg-surface-container px-3 py-2 font-label-caps text-label-caps text-on-surface transition-colors hover:bg-surface-container-high">
+        <span className="material-symbols-outlined text-[18px]">visibility</span>
+        View
+        <span className="material-symbols-outlined text-[18px]">expand_more</span>
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 bg-[#1d1d1f] border border-[#27272a] rounded-xl shadow-xl z-10 py-1 min-w-[130px]">
+        <div className="absolute right-0 z-10 mt-2 min-w-[140px] border border-outline-variant/10 bg-surface-container-low py-1 shadow-xl">
           {statuses.map(s => {
             const cfg = statusConfig[s] || { label: s };
+            const label = cleanStatusLabel(cfg.label);
             return (
-              <button key={s} onClick={() => setStatus(s)}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-[#27272a] transition-colors"
-                style={{ color: statusConfig[s]?.color || '#e4e4e7' }}>
-                {cfg.label}
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                className="w-full px-3 py-2 text-left font-label-caps text-label-caps text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              >
+                {label}
               </button>
             );
           })}
@@ -268,7 +293,15 @@ function StatusMenu({ invoice }: { invoice: Invoice }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+const yearTabs = [2024, 2025, 2026];
+const statusTabs = [
+  { label: 'Всички', value: '' },
+  { label: 'DRAFT', value: 'PENDING' },
+  { label: 'SENT', value: 'OVERDUE' },
+  { label: 'PAID', value: 'PAID' },
+  { label: 'CANCELLED', value: 'CANCELLED' },
+];
+
 export default function InvoicesPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [status, setStatus] = useState('');
@@ -287,92 +320,129 @@ export default function InvoicesPage() {
   });
 
   const invoices: Invoice[] = Array.isArray(data) ? data : (data as any).data || [];
+  const totalAmount = invoices.reduce((sum, invoice) => sum + invoice.amountTotal, 0);
+  const outstanding = invoices.filter(invoice => !['PAID', 'CANCELLED'].includes(invoice.status)).reduce((sum, invoice) => sum + invoice.amountTotal, 0);
+  const paidCount = invoices.filter(invoice => invoice.status === 'PAID').length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Фактури</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">{invoices.length} резултата</p>
-        </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Нова фактура
-        </button>
-      </div>
+    <div className="min-h-screen bg-surface-container-lowest p-container-padding text-on-surface">
+      <div className="mx-auto max-w-7xl space-y-section-gap">
+        <section className="flex justify-between items-end mb-section-gap">
+          <div>
+            <p className="font-label-caps text-label-caps text-primary mb-2">ФИНАНСИ</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">Фактури</h2>
+          </div>
+          <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Нова фактура
+          </button>
+        </section>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <div className="flex gap-1 bg-[#1d1d1f] p-1 rounded-xl">
-          {[2024, 2025, 2026].map(y => (
-            <button key={y} onClick={() => setYear(y)}
-              className={`px-3 py-1 rounded-lg text-sm font-semibold transition-all ${
-                year === y ? 'bg-[#0a84ff] text-white' : 'text-[#71717a] hover:text-white'
-              }`}>{y}</button>
-          ))}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="Всички фактури" value={String(invoices.length)} sub={`${year} година`} />
+          <MetricCard label="Общо BGN" value={fmt(totalAmount, 'BGN')} sub="фактурирана стойност" />
+          <MetricCard label="За събиране" value={fmt(outstanding, 'BGN')} sub="неприключени фактури" />
+          <MetricCard label="Платени" value={String(paidCount)} sub="приключени плащания" />
         </div>
-        <select className="input w-40" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="">Всички статуси</option>
-          <option value="PENDING">Чака</option>
-          <option value="PAID">Платено</option>
-          <option value="OVERDUE">Просрочено</option>
-          <option value="CANCELLED">Анулирана</option>
-        </select>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#52525b]" />
-          <input className="input pl-8" placeholder="Търси клиент, №..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-      </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="table-header">№</th>
-              <th className="table-header">Дата</th>
-              <th className="table-header">Клиент</th>
-              <th className="table-header">Проект</th>
-              <th className="table-header text-right">Нето</th>
-              <th className="table-header text-right">ДДС</th>
-              <th className="table-header text-right">Общо</th>
-              <th className="table-header">Статус</th>
-              <th className="table-header w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(6)].map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  {[...Array(9)].map((_, j) => (
-                    <td key={j} className="table-cell">
-                      <div className="h-4 bg-[#27272a] rounded w-full" />
-                    </td>
-                  ))}
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
+              {statusTabs.map(tab => (
+                <button
+                  key={tab.label}
+                  onClick={() => setStatus(tab.value)}
+                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    status === tab.value
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1">
+              {yearTabs.map(tabYear => (
+                <button
+                  key={tabYear}
+                  onClick={() => setYear(tabYear)}
+                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    year === tabYear
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  {tabYear}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative">
+            <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">search</span>
+            <input
+              className="input w-full py-3 pl-12"
+              placeholder="Търси клиент, проект или номер..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="overflow-hidden bg-surface-container-low border border-outline-variant/10">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className="table-header">#Фактура</th>
+                  <th className="table-header">Клиент</th>
+                  <th className="table-header">Проект</th>
+                  <th className="table-header">Дата</th>
+                  <th className="table-header">Падеж</th>
+                  <th className="table-header text-right">Сума</th>
+                  <th className="table-header">Статус</th>
+                  <th className="table-header w-[140px]"></th>
                 </tr>
-              ))
-            ) : invoices.length === 0 ? (
-              <tr><td colSpan={9} className="table-cell text-center text-[#52525b] py-10">Няма фактури</td></tr>
-            ) : (
-              invoices.map(inv => (
-                <tr key={inv.id} className="hover:bg-[#1d1d1f] transition-colors">
-                  <td className="table-cell font-mono text-xs text-[#a1a1aa]">{inv.number}</td>
-                  <td className="table-cell text-[#a1a1aa]">{fmtDate(inv.date)}</td>
-                  <td className="table-cell font-medium text-white">{inv.client?.name || '—'}</td>
-                  <td className="table-cell text-[#a1a1aa] text-xs">{inv.project?.code || '—'}</td>
-                  <td className="table-cell text-right font-semibold text-white">{fmt(inv.amountNet, inv.currency)}</td>
-                  <td className="table-cell text-right text-[#71717a]">{fmt(inv.vatAmount, inv.currency)}</td>
-                  <td className="table-cell text-right font-bold text-white">{fmt(inv.amountTotal, inv.currency)}</td>
-                  <td className="table-cell"><StatusBadge status={inv.status} /></td>
-                  <td className="table-cell"><StatusMenu invoice={inv} /></td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  [...Array(6)].map((_, i) => (
+                    <tr key={i} className="animate-pulse hover:bg-surface-container-high">
+                      {[...Array(8)].map((_, j) => (
+                        <td key={j} className="table-cell"><div className="h-4 w-full rounded bg-surface-container-high" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : invoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="table-cell py-12 text-center text-on-surface-variant">Няма фактури</td>
+                  </tr>
+                ) : (
+                  invoices.map(inv => (
+                    <tr key={inv.id} className="transition-colors hover:bg-surface-container-high">
+                      <td className="table-cell font-data-mono text-data-mono text-primary">{inv.number}</td>
+                      <td className="table-cell">
+                        <div>
+                          <p className="font-medium text-on-surface">{inv.client?.name || '—'}</p>
+                          <p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">{inv.currency}</p>
+                        </div>
+                      </td>
+                      <td className="table-cell text-on-surface-variant">{inv.project?.name || inv.project?.code || '—'}</td>
+                      <td className="table-cell text-on-surface-variant">{fmtDate(inv.date)}</td>
+                      <td className="table-cell text-on-surface-variant">{inv.dueDate ? fmtDate(inv.dueDate) : '—'}</td>
+                      <td className="table-cell text-right font-data-mono text-data-mono">{fmt(inv.amountTotal, inv.currency)}</td>
+                      <td className="table-cell"><StitchStatusBadge status={inv.status} /></td>
+                      <td className="table-cell"><StatusMenu invoice={inv} /></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <InvoiceModal open={modalOpen} onClose={() => setModalOpen(false)} />
+        <InvoiceModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      </div>
     </div>
   );
 }

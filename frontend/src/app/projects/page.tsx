@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { api, fmtDate } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
-import { Plus, Search, ArrowRight } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -18,6 +17,20 @@ interface Project {
   invoiceCount?: number;
   client?: { id: string; name: string };
 }
+
+const modalLabelClass = 'block font-label-caps text-label-caps text-on-surface-variant mb-1.5';
+const projectImages = [
+  'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=60',
+  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=600&q=60',
+  'https://images.unsplash.com/photo-1600210492493-0946911123ea?w=600&q=60',
+];
+const statusTabs = [
+  { label: 'Всички', value: '' },
+  { label: 'ACTIVE', value: 'ACTIVE' },
+  { label: 'COMPLETED', value: 'COMPLETED' },
+  { label: 'ON_HOLD', value: 'ON_HOLD' },
+];
+const yearTabs = [2024, 2025, 2026];
 
 function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -46,30 +59,30 @@ function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void })
       <form onSubmit={e => { e.preventDefault(); mutation.mutate(form); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Код *</label>
+            <label className={modalLabelClass}>Код *</label>
             <input required className="input" value={form.code} onChange={e => setField('code', e.target.value)} placeholder="SB-2025-001" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Година</label>
+            <label className={modalLabelClass}>Година</label>
             <input type="number" className="input" value={form.year} onChange={e => setField('year', Number(e.target.value))} />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Наименование *</label>
+          <label className={modalLabelClass}>Наименование *</label>
           <input required className="input" value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Описание на проекта" />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Клиент</label>
+            <label className={modalLabelClass}>Клиент</label>
             <select className="input" value={form.clientId} onChange={e => setField('clientId', e.target.value)}>
               <option value="">— Без клиент —</option>
               {(clients as any[]).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Статус</label>
+            <label className={modalLabelClass}>Статус</label>
             <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
               <option value="ACTIVE">Активен</option>
               <option value="COMPLETED">Приключен</option>
@@ -80,12 +93,12 @@ function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void })
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Начална дата</label>
+          <label className={modalLabelClass}>Начална дата</label>
           <input type="date" className="input" value={form.startDate} onChange={e => setField('startDate', e.target.value)} />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Бележки</label>
+          <label className={modalLabelClass}>Бележки</label>
           <textarea className="input" rows={2} value={form.notes} onChange={e => setField('notes', e.target.value)} placeholder="Допълнителна информация..." />
         </div>
 
@@ -103,6 +116,29 @@ function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void })
         </div>
       </form>
     </Modal>
+  );
+}
+
+function ProjectStatusBadge({ status }: { status: string }) {
+  const label = status === 'ACTIVE'
+    ? 'ACTIVE'
+    : status === 'COMPLETED'
+      ? 'COMPLETED'
+      : status === 'ON_HOLD'
+        ? 'ON HOLD'
+        : status;
+
+  const className = status === 'ACTIVE'
+    ? 'bg-primary-container/20 text-primary border-primary-container/30'
+    : status === 'CANCELLED'
+      ? 'bg-error-container/20 text-error border-error/30'
+      : 'bg-surface-container-high text-on-surface-variant border-outline-variant/20';
+
+  return (
+    <span className={`inline-flex items-center gap-2 border px-2 py-0.5 font-label-caps text-[9px] ${className}`}>
+      {status === 'ACTIVE' && <div className="h-2 w-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.4)]" />}
+      {label}
+    </span>
   );
 }
 
@@ -133,101 +169,126 @@ export default function ProjectsPage() {
       )
     : projects;
 
-  const margin = (p: Project) => {
-    const rev = p.revenue || 0;
-    const cost = p.costs || 0;
-    if (!rev) return '—';
-    return `${(((rev - cost) / rev) * 100).toFixed(1)}%`;
-  };
-
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Проекти</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">{filtered.length} резултата</p>
-        </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Нов проект
-        </button>
-      </div>
+    <div className="min-h-screen bg-surface-container-lowest p-container-padding text-on-surface">
+      <div className="mx-auto max-w-7xl space-y-section-gap">
+        <section className="flex justify-between items-end mb-section-gap">
+          <div>
+            <p className="font-label-caps text-label-caps text-primary mb-2">ПРОЕКТИ</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">Проекти</h2>
+          </div>
+          <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Нов проект
+          </button>
+        </section>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <div className="flex gap-1 bg-[#1d1d1f] p-1 rounded-xl">
-          {[2024, 2025, 2026].map(y => (
-            <button key={y} onClick={() => setYear(y)}
-              className={`px-3 py-1 rounded-lg text-sm font-semibold transition-all ${
-                year === y ? 'bg-[#0a84ff] text-white' : 'text-[#71717a] hover:text-white'
-              }`}>{y}</button>
-          ))}
-        </div>
-        <select className="input w-40" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="">Всички статуси</option>
-          <option value="ACTIVE">Активен</option>
-          <option value="COMPLETED">Приключен</option>
-          <option value="ON_HOLD">Пауза</option>
-          <option value="CANCELLED">Анулиран</option>
-        </select>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#52525b]" />
-          <input className="input pl-8" placeholder="Търси код, наименование..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-      </div>
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
+              {statusTabs.map(tab => (
+                <button
+                  key={tab.label}
+                  onClick={() => setStatus(tab.value)}
+                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    status === tab.value
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1">
+              {yearTabs.map(tabYear => (
+                <button
+                  key={tabYear}
+                  onClick={() => setYear(tabYear)}
+                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    year === tabYear
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  {tabYear}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="table-header">Код</th>
-              <th className="table-header">Наименование</th>
-              <th className="table-header">Клиент</th>
-              <th className="table-header text-right">Приходи</th>
-              <th className="table-header text-right">Разходи</th>
-              <th className="table-header text-right">Марж %</th>
-              <th className="table-header">Статус</th>
-              <th className="table-header w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(5)].map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  {[...Array(8)].map((_, j) => (
-                    <td key={j} className="table-cell"><div className="h-4 bg-[#27272a] rounded" /></td>
-                  ))}
-                </tr>
-              ))
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="table-cell text-center text-[#52525b] py-10">Няма проекти</td></tr>
-            ) : (
-              filtered.map(p => (
-                <tr key={p.id} className="hover:bg-[#1d1d1f] transition-colors cursor-pointer" onClick={() => router.push(`/projects/${p.id}`)}>
-                  <td className="table-cell font-mono text-xs font-bold text-[#0a84ff]">{p.code}</td>
-                  <td className="table-cell font-medium text-white">{p.name}</td>
-                  <td className="table-cell text-[#a1a1aa]">{p.client?.name || '—'}</td>
-                  <td className="table-cell text-right font-semibold text-[#30d158]">
-                    {(p.revenue || 0).toLocaleString('bg-BG', { minimumFractionDigits: 0 })} BGN
-                  </td>
-                  <td className="table-cell text-right text-[#ff453a]">
-                    {(p.costs || 0).toLocaleString('bg-BG', { minimumFractionDigits: 0 })} BGN
-                  </td>
-                  <td className="table-cell text-right font-bold text-white">{margin(p)}</td>
-                  <td className="table-cell"><StatusBadge status={p.status} /></td>
-                  <td className="table-cell">
-                    <button className="p-1.5 rounded-lg hover:bg-[#27272a] text-[#71717a] hover:text-white transition-colors">
-                      <ArrowRight size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+          <div className="relative">
+            <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">search</span>
+            <input
+              className="input w-full py-3 pl-12"
+              placeholder="Търси код, проект или клиент..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
 
-      <ProjectModal open={modalOpen} onClose={() => setModalOpen(false)} />
+          {isLoading ? (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="h-[320px] animate-pulse bg-surface-container-low border border-outline-variant/10" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-surface-container-low border border-outline-variant/10 p-12 text-center text-on-surface-variant">
+              Няма проекти
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((project, index) => (
+                <button
+                  key={project.id}
+                  onClick={() => router.push(`/projects/${project.id}`)}
+                  className="group relative h-[320px] overflow-hidden border border-outline-variant/10 bg-surface-container-low text-left"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, rgba(14,14,16,0.08) 0%, rgba(14,14,16,0.78) 55%, rgba(14,14,16,0.94) 100%), url(${projectImages[index % projectImages.length]})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                >
+                  <div className="absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/0" />
+                  <div className="relative flex h-full flex-col justify-between p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-data-mono text-data-mono text-primary">{project.code}</p>
+                        <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant">{project.client?.name || 'Без клиент'}</p>
+                      </div>
+                      <span className="material-symbols-outlined text-[20px] text-on-surface-variant transition-colors group-hover:text-on-surface">arrow_outward</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <ProjectStatusBadge status={project.status} />
+                      <div>
+                        <h3 className="font-headline text-headline-md text-on-surface">{project.name}</h3>
+                        <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant">Година {project.year}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+                        <div>
+                          <p className="font-label-caps text-label-caps text-on-surface-variant">Revenue</p>
+                          <p className="mt-2 font-data-mono text-data-mono text-on-surface">
+                            {(project.revenue || 0).toLocaleString('bg-BG', { minimumFractionDigits: 0 })} BGN
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-label-caps text-label-caps text-on-surface-variant">Invoices</p>
+                          <p className="mt-2 font-data-mono text-data-mono text-on-surface">{project.invoiceCount ?? 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <ProjectModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      </div>
     </div>
   );
 }

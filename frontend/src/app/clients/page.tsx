@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Modal } from '@/components/Modal';
-import { Plus, Search, Pencil } from 'lucide-react';
 
 interface Client {
   id: string;
@@ -17,6 +16,8 @@ interface Client {
   eik?: string;
   vat?: string;
 }
+
+const modalLabelClass = 'block font-label-caps text-label-caps text-on-surface-variant mb-1.5';
 
 function ClientModal({
   open, onClose, existing
@@ -56,11 +57,11 @@ function ClientModal({
       <form onSubmit={e => { e.preventDefault(); mutation.mutate(form); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Фирма / Имe *</label>
+            <label className={modalLabelClass}>Фирма / Имe *</label>
             <input required className="input" value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Фирма ЕООД" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Тип</label>
+            <label className={modalLabelClass}>Тип</label>
             <select className="input" value={form.type} onChange={e => setField('type', e.target.value)}>
               <option value="COMPANY">ЕООД / АД</option>
               <option value="PERSON">Физическо лице</option>
@@ -68,7 +69,7 @@ function ClientModal({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Марка</label>
+            <label className={modalLabelClass}>Марка</label>
             <select className="input" value={form.brand} onChange={e => setField('brand', e.target.value)}>
               <option value="STUDIO_BOTEMA">Studio Botema</option>
               <option value="LUMINAVERA">Luminavera</option>
@@ -76,41 +77,41 @@ function ClientModal({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">ЕИК</label>
+            <label className={modalLabelClass}>ЕИК</label>
             <input className="input" value={form.eik} onChange={e => setField('eik', e.target.value)} placeholder="123456789" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">ДДС номер</label>
+            <label className={modalLabelClass}>ДДС номер</label>
             <input className="input" value={form.vat} onChange={e => setField('vat', e.target.value)} placeholder="BG123456789" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">МОЛ</label>
+            <label className={modalLabelClass}>МОЛ</label>
             <input className="input" value={form.mol} onChange={e => setField('mol', e.target.value)} placeholder="Иван Иванов" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Град</label>
+            <label className={modalLabelClass}>Град</label>
             <input className="input" value={form.city} onChange={e => setField('city', e.target.value)} placeholder="София" />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Адрес</label>
+            <label className={modalLabelClass}>Адрес</label>
             <input className="input" value={form.address} onChange={e => setField('address', e.target.value)} placeholder="ул. Примерна 1" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Имейл</label>
+            <label className={modalLabelClass}>Имейл</label>
             <input type="email" className="input" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="office@firma.bg" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Телефон</label>
+            <label className={modalLabelClass}>Телефон</label>
             <input className="input" value={form.phone} onChange={e => setField('phone', e.target.value)} placeholder="+359 88 888 8888" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Клиент от</label>
+            <label className={modalLabelClass}>Клиент от</label>
             <input type="date" className="input" value={form.since} onChange={e => setField('since', e.target.value)} />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-1.5">Бележки</label>
+          <label className={modalLabelClass}>Бележки</label>
           <textarea className="input" rows={2} value={form.notes} onChange={e => setField('notes', e.target.value)} />
         </div>
 
@@ -139,6 +140,12 @@ const brandLabels: Record<string, string> = {
   STUDIO_BOTEMA: 'Studio Botema', LUMINAVERA: 'Luminavera', BOTH: 'И двете'
 };
 
+const brandTabs = [
+  { label: 'Всички', value: '' },
+  { label: 'Studio Botema', value: 'STUDIO_BOTEMA' },
+  { label: 'Luminavera', value: 'LUMINAVERA' },
+];
+
 export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [brand, setBrand] = useState('');
@@ -165,84 +172,109 @@ export default function ClientsPage() {
   const closeModal = () => { setModalOpen(false); setEditing(null); };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Клиенти</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">{filtered.length} клиента</p>
-        </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Нов клиент
-        </button>
-      </div>
+    <div className="min-h-screen bg-surface-container-lowest p-container-padding text-on-surface">
+      <div className="mx-auto max-w-7xl space-y-section-gap">
+        <section className="flex justify-between items-end mb-section-gap">
+          <div>
+            <p className="font-label-caps text-label-caps text-primary mb-2">КОНТРАГЕНТИ</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">Клиенти</h2>
+          </div>
+          <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Нов клиент
+          </button>
+        </section>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <select className="input w-44" value={brand} onChange={e => setBrand(e.target.value)}>
-          <option value="">Всички марки</option>
-          <option value="STUDIO_BOTEMA">Studio Botema</option>
-          <option value="LUMINAVERA">Luminavera</option>
-        </select>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#52525b]" />
-          <input className="input pl-8" placeholder="Търси фирма, имейл, град..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-      </div>
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
+              {brandTabs.map(tab => (
+                <button
+                  key={tab.label}
+                  onClick={() => setBrand(tab.value)}
+                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    brand === tab.value
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <p className="font-label-caps text-label-caps text-on-surface-variant">{filtered.length} клиента</p>
+          </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="table-header">Фирма</th>
-              <th className="table-header">Тип</th>
-              <th className="table-header">Град</th>
-              <th className="table-header">Имейл</th>
-              <th className="table-header">Телефон</th>
-              <th className="table-header">Марка</th>
-              <th className="table-header text-right">Фактури</th>
-              <th className="table-header w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(6)].map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  {[...Array(8)].map((_, j) => (
-                    <td key={j} className="table-cell"><div className="h-4 bg-[#27272a] rounded" /></td>
-                  ))}
+          <div className="relative">
+            <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">search</span>
+            <input
+              className="input w-full py-3 pl-12"
+              placeholder="Търси фирма, имейл, град..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="overflow-hidden bg-surface-container-low border border-outline-variant/10">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className="table-header">Фирма</th>
+                  <th className="table-header">Тип</th>
+                  <th className="table-header">Град</th>
+                  <th className="table-header">Имейл</th>
+                  <th className="table-header">Марка</th>
+                  <th className="table-header text-right">Фактури</th>
+                  <th className="table-header w-16"></th>
                 </tr>
-              ))
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="table-cell text-center text-[#52525b] py-10">Няма клиенти</td></tr>
-            ) : (
-              filtered.map(c => (
-                <tr key={c.id} className="hover:bg-[#1d1d1f] transition-colors">
-                  <td className="table-cell font-medium text-white">{c.name}</td>
-                  <td className="table-cell text-[#71717a] text-xs">{typeLabels[c.type] || c.type}</td>
-                  <td className="table-cell text-[#a1a1aa]">{c.city || '—'}</td>
-                  <td className="table-cell text-[#a1a1aa] text-xs">{c.email || '—'}</td>
-                  <td className="table-cell text-[#a1a1aa] text-xs">{c.phone || '—'}</td>
-                  <td className="table-cell">
-                    <span className="text-xs text-[#71717a]">{brandLabels[c.brand || ''] || c.brand || '—'}</span>
-                  </td>
-                  <td className="table-cell text-right font-semibold text-white">{c.invoiceCount ?? 0}</td>
-                  <td className="table-cell">
-                    <button
-                      onClick={() => openEdit(c)}
-                      className="p-1.5 rounded-lg hover:bg-[#27272a] text-[#71717a] hover:text-white transition-colors"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  [...Array(6)].map((_, i) => (
+                    <tr key={i} className="animate-pulse hover:bg-surface-container-high">
+                      {[...Array(7)].map((_, j) => (
+                        <td key={j} className="table-cell"><div className="h-4 rounded bg-surface-container-high" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">Няма клиенти</td>
+                  </tr>
+                ) : (
+                  filtered.map(c => (
+                    <tr key={c.id} className="transition-colors hover:bg-surface-container-high">
+                      <td className="table-cell">
+                        <div>
+                          <p className="font-medium text-on-surface">{c.name}</p>
+                          <p className="mt-1 font-data-mono text-data-mono text-on-surface-variant">{c.phone || '—'}</p>
+                        </div>
+                      </td>
+                      <td className="table-cell text-on-surface-variant">{typeLabels[c.type] || c.type}</td>
+                      <td className="table-cell text-on-surface-variant">{c.city || '—'}</td>
+                      <td className="table-cell text-on-surface-variant">{c.email || '—'}</td>
+                      <td className="table-cell">
+                        <span className="font-label-caps text-label-caps text-on-surface-variant">{brandLabels[c.brand || ''] || c.brand || '—'}</span>
+                      </td>
+                      <td className="table-cell text-right font-data-mono text-data-mono">{c.invoiceCount ?? 0}</td>
+                      <td className="table-cell">
+                        <button
+                          onClick={() => openEdit(c)}
+                          className="ml-auto flex h-9 w-9 items-center justify-center text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+                        >
+                          <span className="material-symbols-outlined text-[20px]">edit</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <ClientModal open={modalOpen} onClose={closeModal} existing={editing} />
+        <ClientModal open={modalOpen} onClose={closeModal} existing={editing} />
+      </div>
     </div>
   );
 }
