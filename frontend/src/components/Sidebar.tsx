@@ -16,6 +16,7 @@ const navItems = [
   { key: 'nav.suppliers',  href: '/suppliers', icon: 'local_shipping' },
   { key: 'nav.inventory',  href: '/inventory', icon: 'inventory_2' },
   { key: 'nav.expenses',   href: '/expenses',  icon: 'receipt' },
+  { key: 'nav.orders',     href: '/orders',    icon: 'shopping_bag' },
   { key: 'nav.vat',        href: '/vat',            icon: 'account_balance' },
   { key: 'nav.reconciliation', href: '/reconciliation', icon: 'account_tree' },
   { key: 'nav.inbox',          href: '/inbox',           icon: 'inbox' },

@@ -155,8 +155,8 @@ model Invoice {
   number      String        @unique
   date        DateTime
   dueDate     DateTime?
-  clientId    String
-  client      Client        @relation(fields: [clientId], references: [id])
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id])
   projectId   String?
   project     Project?      @relation(fields: [projectId], references: [id])
   type        InvoiceType   @default(INVOICE)

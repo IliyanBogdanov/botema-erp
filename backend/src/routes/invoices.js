@@ -67,7 +67,10 @@ router.post('/', auth, async (req, res) => {
 
     const invoice = await prisma.invoice.create({
       data: {
-        number, clientId, projectId, type, brand, currency,
+        number,
+        ...(clientId  ? { clientId }  : {}),
+        ...(projectId ? { projectId } : {}),
+        type, brand, currency,
         date: new Date(date), dueDate: dueDate ? new Date(dueDate) : null,
         description, notes, amountNet, vatAmount, amountTotal,
         status: 'PENDING',

@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 
@@ -71,8 +71,15 @@ function LinkTypeTab({ type, count, active, onClick }: { type: string; count: nu
 
 export default function ReconciliationPage() {
   const t = useT();
-  const [tab, setTab] = useState<'links' | 'missing' | 'coverage'>('links');
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<'links' | 'missing' | 'coverage' | 'bank'>('links');
   const [linkTypeFilter, setLinkTypeFilter] = useState('');
+  const [bankYear, setBankYear] = useState(new Date().getFullYear().toString());
+  const [bankStatus, setBankStatus] = useState('');
+  const [bankPage, setBankPage] = useState(1);
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: number; currency?: string } | null>(null);
+  const [matchResult, setMatchResult] = useState<{ matched: number; partial: number; unmatched: number; totalProcessed: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: links = [], isLoading: linksLoading } = useQuery({
     queryKey: ['reconciliation-links', linkTypeFilter],
@@ -87,6 +94,32 @@ export default function ReconciliationPage() {
   const { data: coverage = [] } = useQuery({
     queryKey: ['reconciliation-coverage'],
     queryFn: () => api.get('/reconciliation/coverage').then(r => r.data),
+  });
+
+  const { data: paymentsData, isLoading: paymentsLoading } = useQuery({
+    queryKey: ['payments', bankYear, bankStatus, bankPage],
+    queryFn: () => api.get(`/payments?year=${bankYear}&status=${bankStatus}&page=${bankPage}&limit=50`).then(r => r.data),
+    enabled: tab === 'bank',
+  });
+
+  const importCsv = useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return api.post('/payments/import-csv', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+    },
+    onSuccess: (data) => {
+      setImportResult(data);
+      qc.invalidateQueries({ queryKey: ['payments'] });
+    },
+  });
+
+  const autoMatch = useMutation({
+    mutationFn: () => api.post(`/reconciliation/auto-match?year=${bankYear}`).then(r => r.data),
+    onSuccess: (data) => {
+      setMatchResult(data);
+      qc.invalidateQueries({ queryKey: ['payments'] });
+    },
   });
 
   // Group links by type for tabs
@@ -129,11 +162,12 @@ export default function ReconciliationPage() {
         </div>
 
         {/* main tabs */}
-        <div className="px-8 flex gap-0 border-t border-outline-variant/5">
+        <div className="px-8 flex gap-0 border-t border-outline-variant/5 overflow-x-auto">
           {[
             { key: 'links', icon: 'account_tree', label: 'Документни вериги', count: (links as any[]).length },
             { key: 'missing', icon: 'report_problem', label: 'Липсващи документи', count: (missing as any[]).length },
             { key: 'coverage', icon: 'fact_check', label: 'Покритие', count: (coverage as any[]).length },
+            { key: 'bank', icon: 'account_balance', label: 'Банка', count: paymentsData?.total ?? 0 },
           ].map(item => (
             <button
               key={item.key}
@@ -347,6 +381,159 @@ export default function ReconciliationPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: BANK ──────────────────────────────────────────────────────── */}
+        {tab === 'bank' && (
+          <div className="space-y-4">
+            {/* toolbar */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={bankYear}
+                onChange={e => { setBankYear(e.target.value); setBankPage(1); }}
+                className="border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary"
+              >
+                {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <select
+                value={bankStatus}
+                onChange={e => { setBankStatus(e.target.value); setBankPage(1); }}
+                className="border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary"
+              >
+                <option value="">Всички статуси</option>
+                <option value="UNMATCHED">UNMATCHED</option>
+                <option value="PARTIAL">PARTIAL</option>
+                <option value="MATCHED">MATCHED</option>
+              </select>
+              <div className="flex-1" />
+              <input type="file" accept=".csv" ref={fileInputRef} className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) importCsv.mutate(f); e.target.value = ''; }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importCsv.isPending}
+                className="flex items-center gap-2 px-4 py-2 border border-outline-variant/30 bg-surface-container-low font-label-caps text-label-caps text-on-surface hover:bg-surface-container disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                {importCsv.isPending ? 'Зарежда...' : 'Импорт CSV'}
+              </button>
+              <button
+                onClick={() => autoMatch.mutate()}
+                disabled={autoMatch.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:bg-primary/90 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">auto_fix_high</span>
+                {autoMatch.isPending ? 'Обработва...' : 'Авто-Match'}
+              </button>
+            </div>
+
+            {/* result banners */}
+            {importResult && (
+              <div className="flex items-center gap-4 border border-primary/20 bg-primary/5 px-4 py-3">
+                <span className="material-symbols-outlined text-[18px] text-primary">check_circle</span>
+                <span className="font-label-caps text-label-caps text-on-surface">
+                  Импорт завършен: <span className="text-primary">{importResult.created} нови</span>, {importResult.skipped} пропуснати
+                  {importResult.currency && ` · ${importResult.currency}`}
+                </span>
+                <button onClick={() => setImportResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
+            {matchResult && (
+              <div className="flex items-center gap-4 border border-primary/20 bg-primary/5 px-4 py-3">
+                <span className="material-symbols-outlined text-[18px] text-primary">auto_fix_high</span>
+                <span className="font-label-caps text-label-caps text-on-surface">
+                  Auto-match: <span className="text-primary">{matchResult.matched} съвпадения</span>, {matchResult.partial} частични, {matchResult.unmatched} без съвпадение
+                  {' '}· {matchResult.totalProcessed} обработени
+                </span>
+                <button onClick={() => setMatchResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
+
+            {/* payments table */}
+            {paymentsLoading ? (
+              <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-14 bg-surface-container-low border border-outline-variant/10 animate-pulse" />)}</div>
+            ) : (paymentsData?.data ?? []).length === 0 ? (
+              <div className="py-16 text-center border border-outline-variant/10 bg-surface-container-low">
+                <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-3">account_balance</span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant/60">Няма банкови транзакции за {bankYear}</p>
+              </div>
+            ) : (
+              <>
+                <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <th className="table-header">ДАТА</th>
+                        <th className="table-header">КОНТРАГЕНТ</th>
+                        <th className="table-header">ОСНОВАНИЕ</th>
+                        <th className="table-header text-right">ДЕБИТ</th>
+                        <th className="table-header text-right">КРЕДИТ</th>
+                        <th className="table-header">ВАЛ.</th>
+                        <th className="table-header">СТАТУС</th>
+                        <th className="table-header">ДОКУМЕНТ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(paymentsData?.data ?? []).map((p: any) => {
+                        const statusColors: Record<string, string> = {
+                          MATCHED: 'border-primary/30 bg-primary/10 text-primary',
+                          PARTIAL: 'border-warning/30 bg-warning/10 text-warning',
+                          UNMATCHED: 'border-outline-variant/30 text-on-surface-variant',
+                        };
+                        const linkedDoc = p.reconciliationLinks?.[0]?.targetDoc;
+                        return (
+                          <tr key={p.id} className="hover:bg-surface-container transition-colors">
+                            <td className="table-cell text-on-surface-variant/70 text-xs whitespace-nowrap">{fmtDate(p.paymentDate)}</td>
+                            <td className="table-cell font-medium text-on-surface max-w-[160px] truncate">{p.counterparty?.name || '—'}</td>
+                            <td className="table-cell text-on-surface-variant/70 text-xs max-w-[200px] truncate">{p.notes || '—'}</td>
+                            <td className="table-cell text-right font-mono text-xs text-error">
+                              {p.amount > 0 && !p.notes?.includes('credit') ? fmt(p.amount, p.currency) : '—'}
+                            </td>
+                            <td className="table-cell text-right font-mono text-xs text-primary">
+                              {p.amount > 0 ? fmt(p.amount, p.currency) : '—'}
+                            </td>
+                            <td className="table-cell text-on-surface-variant/60 text-xs">{p.currency}</td>
+                            <td className="table-cell">
+                              <span className={`font-label-caps text-[9px] px-2 py-0.5 border ${statusColors[p.status] || 'border-outline-variant/30 text-on-surface-variant'}`}>
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="table-cell text-xs text-on-surface-variant/60">
+                              {linkedDoc ? (
+                                <span className="text-primary font-mono">{linkedDoc.docNumber || linkedDoc.docType}</span>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {/* pagination */}
+                {paymentsData && paymentsData.total > paymentsData.limit && (
+                  <div className="flex items-center justify-between px-1">
+                    <span className="font-label-caps text-label-caps text-on-surface-variant/60">
+                      {(bankPage - 1) * 50 + 1}–{Math.min(bankPage * 50, paymentsData.total)} от {paymentsData.total}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setBankPage(p => Math.max(1, p - 1))} disabled={bankPage === 1}
+                        className="px-3 py-1 border border-outline-variant/30 font-label-caps text-label-caps disabled:opacity-30 hover:bg-surface-container">
+                        ‹ Назад
+                      </button>
+                      <button onClick={() => setBankPage(p => p + 1)} disabled={bankPage * 50 >= paymentsData.total}
+                        className="px-3 py-1 border border-outline-variant/30 font-label-caps text-label-caps disabled:opacity-30 hover:bg-surface-container">
+                        Напред ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
