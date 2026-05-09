@@ -53,8 +53,9 @@ router.post('/:id/analyze', auth, async (req, res) => {
 router.post('/:id/review', auth, async (req, res) => {
   try {
     const result = await reviewDocument(prisma, req.params.id, req.body, req.user.id);
-    await generateAlerts(prisma);
     res.json(result);
+    // Run alert generation in background so the response isn't delayed ~20s
+    generateAlerts(prisma).catch(err => console.error('generateAlerts error:', err));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
