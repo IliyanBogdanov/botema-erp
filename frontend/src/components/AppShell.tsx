@@ -11,6 +11,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const { lang, setLang } = useLangStore();
   const isAuthPage = pathname?.startsWith('/login');
+  const isPrintPage = pathname?.endsWith('/print');
   const [search, setSearch] = useState('');
   const t = useT();
 
@@ -22,6 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   if (isAuthPage) return <>{children}</>;
+  if (isPrintPage) return <>{children}</>;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

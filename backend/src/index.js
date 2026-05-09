@@ -51,6 +51,7 @@ app.use('/api/payments',       require('./routes/payments'));
 app.use('/api/reconciliation', require('./routes/reconciliation'));
 app.use('/api/orders',         require('./routes/orders'));
 app.use('/api/deliveries',     require('./routes/deliveries'));
+app.use('/api/issued-docs',     require('./routes/issuedDocs'));
 app.use('/api/gmail-inbox',    require('./routes/gmailInbox'));
 app.use('/api/backfill',       require('./routes/backfill'));
 app.use('/api/auth/google',    require('./routes/google'));  // callback at /api/auth/google/callback

@@ -24,11 +24,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   FURNITURE: 'Мебели', MIRROR: 'Огледало', OTHER: 'Друго'
 };
 
-function StockMovementModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function StockMovementModal({ open, onClose, preItem, preType }: {
+  open: boolean;
+  onClose: () => void;
+  preItem?: { id: string; name: string };
+  preType?: string;
+}) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    type: 'IN',
-    itemId: '',
+    type: preType || 'IN',
+    itemId: preItem?.id || '',
     qty: '1',
     date: new Date().toISOString().slice(0, 10),
     reference: '',
@@ -40,6 +45,14 @@ function StockMovementModal({ open, onClose }: { open: boolean; onClose: () => v
   });
   const [createNew, setCreateNew] = useState(false);
   const [error, setError] = useState('');
+
+  // Sync pre-populated values when they change (quick-action buttons)
+  const preKey = `${preItem?.id || ''}-${preType || ''}`;
+  const [lastPreKey, setLastPreKey] = useState(preKey);
+  if (open && preKey !== lastPreKey) {
+    setLastPreKey(preKey);
+    setForm(f => ({ ...f, type: preType || f.type, itemId: preItem?.id || f.itemId }));
+  }
 
   const { data: items = [] } = useQuery({
     queryKey: ['inventory-items'],
@@ -55,7 +68,7 @@ function StockMovementModal({ open, onClose }: { open: boolean; onClose: () => v
   });
 
   const mutation = useMutation({
-    mutationFn: (payload: any) => api.post('/inventory/movements', payload),
+    mutationFn: (payload: any) => api.post('/inventory/movement', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-items'] });
@@ -180,6 +193,14 @@ export default function InventoryPage() {
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [preItem, setPreItem] = useState<{ id: string; name: string } | undefined>();
+  const [preType, setPreType] = useState<string | undefined>();
+
+  const openQuick = (item: InventoryItem, type: string) => {
+    setPreItem({ id: item.id, name: item.name });
+    setPreType(type);
+    setModalOpen(true);
+  };
 
   const params = new URLSearchParams();
   if (category) params.set('category', category);
@@ -212,7 +233,7 @@ export default function InventoryPage() {
           <h1 className="text-2xl font-bold text-white">Склад</h1>
           <p className="text-[#71717a] text-sm mt-0.5">{filtered.length} артикула</p>
         </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => { setPreItem(undefined); setPreType(undefined); setModalOpen(true); }} className="btn-primary flex items-center gap-2">
           <Plus size={15} /> Добави движение
         </button>
       </div>
@@ -242,6 +263,7 @@ export default function InventoryPage() {
               <th className="table-header text-right">Изписано</th>
               <th className="table-header text-right">Налично</th>
               <th className="table-header">Склад</th>
+              <th className="table-header"></th>
             </tr>
           </thead>
           <tbody>
@@ -254,10 +276,10 @@ export default function InventoryPage() {
                 </tr>
               ))
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="table-cell text-center text-[#52525b] py-10">Няма артикули</td></tr>
+              <tr><td colSpan={9} className="table-cell text-center text-[#52525b] py-10">Няма артикули</td></tr>
             ) : (
               filtered.map(it => (
-                <tr key={it.id} className="hover:bg-[#1d1d1f] transition-colors">
+                <tr key={it.id} className="hover:bg-[#1d1d1f] transition-colors group">
                   <td className="table-cell font-mono text-xs text-[#a1a1aa]">{it.code}</td>
                   <td className="table-cell font-medium text-white">{it.name}</td>
                   <td className="table-cell">
@@ -272,6 +294,20 @@ export default function InventoryPage() {
                     </span>
                   </td>
                   <td className="table-cell text-xs text-[#71717a]">{it.location || '—'}</td>
+                  <td className="table-cell">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openQuick(it, 'IN')}
+                        className="px-2 py-0.5 text-[10px] font-semibold bg-[rgba(48,209,88,0.12)] text-[#30d158] border border-[rgba(48,209,88,0.25)] rounded hover:bg-[rgba(48,209,88,0.2)] transition-colors"
+                        title="Прихода (IN)"
+                      >+ Прихода</button>
+                      <button
+                        onClick={() => openQuick(it, 'OUT')}
+                        className="px-2 py-0.5 text-[10px] font-semibold bg-[rgba(255,69,58,0.1)] text-[#ff453a] border border-[rgba(255,69,58,0.25)] rounded hover:bg-[rgba(255,69,58,0.2)] transition-colors"
+                        title="Изписване (OUT)"
+                      >– Изпиши</button>
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -279,7 +315,7 @@ export default function InventoryPage() {
         </table>
       </div>
 
-      <StockMovementModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <StockMovementModal open={modalOpen} onClose={() => setModalOpen(false)} preItem={preItem} preType={preType} />
     </div>
   );
 }

@@ -39,7 +39,22 @@ router.get('/:id', auth, async (req, res) => {
       client: true,
       invoices: { include: { client: { select: { name: true } } } },
       purchases: { include: { supplier: { select: { name: true } } } },
-      inventory: { include: { supplier: { select: { name: true } } } }
+      inventory: { include: { supplier: { select: { name: true } } } },
+      orders: {
+        include: {
+          counterparty: { select: { id: true, name: true } },
+          lines: true,
+          deliveries: { select: { id: true, status: true, deliveryDate: true, deliveryType: true } },
+        },
+        orderBy: { orderDate: 'asc' },
+      },
+      bizDocuments: {
+        include: { counterparty: { select: { id: true, name: true } } },
+        orderBy: { docDate: 'asc' },
+      },
+      payments: {
+        orderBy: { paymentDate: 'asc' },
+      },
     }
   });
   res.json(project);
