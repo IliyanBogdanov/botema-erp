@@ -2,10 +2,13 @@ const express = require('express');
 const { auth } = require('../middleware/auth');
 const { reviewDocument, analyzeDocument } = require('../lib/documentReview');
 const { generateAlerts } = require('../lib/alertEngine');
-const { downloadDriveFile } = require('../lib/aiParser');
+const { downloadDriveFile, parseDocumentWithAI } = require('../lib/aiParser');
 const prisma = require('../lib/prisma');
 
 const router = express.Router();
+
+// In-memory job store for reparse jobs
+const reparseJobs = {};
 
 router.get('/', auth, async (req, res) => {
   try {
@@ -29,7 +32,85 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// GET /api/documents/:id/file  — stream the Drive PDF to browser (inline viewer)
+// GET /api/documents/reparse-job/:jobId — poll reparse job status
+router.get('/reparse-job/:jobId', auth, (req, res) => {
+  const job = reparseJobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json(job);
+});
+
+// POST /api/documents/reparse-all — batch AI re-parse all pending docs with low confidence
+router.post('/reparse-all', auth, async (req, res) => {
+  const jobId = `reparse-${Date.now()}`;
+  reparseJobs[jobId] = { jobId, status: 'running', done: 0, total: 0, errors: 0, log: [], started: new Date() };
+
+  res.json({ accepted: true, jobId, message: `Re-parse job started. Poll GET /api/documents/reparse-job/${jobId}` });
+
+  (async () => {
+    const job = reparseJobs[jobId];
+    try {
+      const docs = await prisma.document.findMany({
+        where: { status: 'PENDING', confidence: { lte: 20 }, driveFileId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      job.total = docs.length;
+      job.log.push(`Found ${docs.length} documents to re-parse`);
+
+      for (const doc of docs) {
+        try {
+          const folder = doc.extractedData?.folder || '';
+          const filename = doc.filename || doc.driveFileId;
+
+          job.log.push(`Parsing: ${filename}`);
+
+          const pdfBuffer = await downloadDriveFile(doc.driveFileId);
+          const parsed = await parseDocumentWithAI(filename, folder, pdfBuffer);
+
+          // Merge parsed data with existing extractedData (keep folder/source metadata)
+          const mergedData = {
+            ...doc.extractedData,
+            ...parsed,
+            folder: doc.extractedData?.folder,
+            source: doc.extractedData?.source,
+          };
+
+          // Run analyze to get riskFlags and suggestedAction
+          const analysis = await analyzeDocument(prisma, mergedData);
+
+          await prisma.document.update({
+            where: { id: doc.id },
+            data: {
+              extractedData: mergedData,
+              confidence: parsed.confidence || 0,
+              riskFlags: analysis.riskFlags || [],
+              suggestedAction: analysis.suggestedAction,
+            },
+          });
+
+          job.done++;
+          job.log.push(`✓ ${filename} — ${parsed.amountTotal || '?'} ${parsed.currency || ''} (confidence: ${parsed.confidence})`);
+        } catch (err) {
+          job.errors++;
+          job.log.push(`✗ ${doc.filename}: ${err.message}`);
+        }
+
+        // Keep log at reasonable size
+        if (job.log.length > 200) job.log.shift();
+      }
+
+      job.status = 'done';
+      job.finished = new Date();
+      job.log.push(`Finished: ${job.done} parsed, ${job.errors} errors`);
+    } catch (err) {
+      job.status = 'error';
+      job.error = err.message;
+      job.finished = new Date();
+    }
+  })();
+});
+
+// GET /api/documents/:id/file — stream Drive PDF inline
 router.get('/:id/file', auth, async (req, res) => {
   try {
     const doc = await prisma.document.findUnique({ where: { id: req.params.id } });
@@ -46,7 +127,7 @@ router.get('/:id/file', auth, async (req, res) => {
   }
 });
 
-// POST /api/documents/:id/link  — manually link document to invoice or purchase
+// POST /api/documents/:id/link — manually link to invoice or purchase
 router.post('/:id/link', auth, async (req, res) => {
   try {
     const { invoiceId, purchaseId } = req.body;
@@ -59,7 +140,6 @@ router.post('/:id/link', auth, async (req, res) => {
     if (invoiceId) updateData.invoiceId = invoiceId;
     if (purchaseId) updateData.purchaseId = purchaseId;
 
-    // Also copy driveFileId back to the linked record
     if (invoiceId && doc.driveFileId) {
       await prisma.invoice.updateMany({
         where: { id: invoiceId, driveFileId: null },
@@ -89,58 +169,38 @@ router.patch('/:id', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/analyze', auth, async (req, res) => {
+// POST /api/documents/:id/reparse — re-parse single document from Drive PDF
+router.post('/:id/reparse', auth, async (req, res) => {
   try {
     const doc = await prisma.document.findUnique({ where: { id: req.params.id } });
     if (!doc) return res.status(404).json({ error: 'Document not found' });
-    const analysis = await analyzeDocument(prisma, doc.extractedData || {});
-    const updated = await prisma.document.update({ where: { id: doc.id }, data: analysis });
-    await generateAlerts(prisma);
+    if (!doc.driveFileId) return res.status(400).json({ error: 'No Drive file attached' });
+
+    const folder = doc.extractedData?.folder || '';
+    const filename = doc.filename || doc.driveFileId;
+
+    const pdfBuffer = await downloadDriveFile(doc.driveFileId);
+    const parsed = await parseDocumentWithAI(filename, folder, pdfBuffer);
+
+    const mergedData = {
+      ...doc.extractedData,
+      ...parsed,
+      folder: doc.extractedData?.folder,
+      source: doc.extractedData?.source,
+    };
+
+    const analysis = await analyzeDocument(prisma, mergedData);
+
+    const updated = await prisma.document.update({
+      where: { id: doc.id },
+      data: {
+        extractedData: mergedData,
+        confidence: parsed.confidence || 0,
+        riskFlags: analysis.riskFlags || [],
+        suggestedAction: analysis.suggestedAction,
+      },
+    });
     res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/:id/review', auth, async (req, res) => {
-  try {
-    const result = await reviewDocument(prisma, req.params.id, req.body, req.user.id);
-    res.json(result);
-    generateAlerts(prisma).catch(err => console.error('generateAlerts error:', err));
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
-});
-
-module.exports = router;
-
-
-router.get('/', auth, async (req, res) => {
-  try {
-    const { status, page = 1, limit = 50 } = req.query;
-    const where = status ? { status } : {};
-    const take = parseInt(limit);
-    const skip = (parseInt(page) - 1) * take;
-    const [docs, total] = await Promise.all([
-      prisma.document.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-        include: { alerts: { where: { status: 'ACTIVE' }, orderBy: { detectedAt: 'desc' } } },
-      }),
-      prisma.document.count({ where }),
-    ]);
-    res.json({ data: docs, total, page: parseInt(page), pages: Math.ceil(total / take) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.patch('/:id', auth, async (req, res) => {
-  try {
-    const doc = await prisma.document.update({ where: { id: req.params.id }, data: req.body });
-    res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -163,7 +223,6 @@ router.post('/:id/review', auth, async (req, res) => {
   try {
     const result = await reviewDocument(prisma, req.params.id, req.body, req.user.id);
     res.json(result);
-    // Run alert generation in background so the response isn't delayed ~20s
     generateAlerts(prisma).catch(err => console.error('generateAlerts error:', err));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

@@ -267,8 +267,11 @@ export default function DocumentsPage() {
   const [activeStatus, setActiveStatus] = useState('PENDING');
   const [selected, setSelected] = useState<Document | null>(null);
   const [reviewDoc, setReviewDoc] = useState<Document | null>(null);
+  const [reparseJobId, setReparseJobId] = useState<string | null>(null);
+  const [reparseStatus, setReparseStatus] = useState<any>(null);
   const t = useT();
   const statusTabs = getStatusTabs(t);
+  const qc = useQueryClient();
 
   const { data = {}, isLoading } = useQuery({
     queryKey: ['documents', activeStatus],
@@ -278,6 +281,22 @@ export default function DocumentsPage() {
   });
 
   const docs: Document[] = Array.isArray(data) ? data : (data as any).data || [];
+
+  const startReparse = async () => {
+    const resp = await api.post('/documents/reparse-all').then(r => r.data);
+    setReparseJobId(resp.jobId);
+    setReparseStatus({ status: 'running', done: 0, total: 0 });
+    const poll = setInterval(async () => {
+      try {
+        const job = await api.get(`/documents/reparse-job/${resp.jobId}`).then(r => r.data);
+        setReparseStatus(job);
+        if (job.status === 'done' || job.status === 'error') {
+          clearInterval(poll);
+          qc.invalidateQueries({ queryKey: ['documents'] });
+        }
+      } catch { clearInterval(poll); }
+    }, 3000);
+  };
 
   return (
     <div className="p-container-padding">
@@ -292,10 +311,31 @@ export default function DocumentsPage() {
               {t('doc.subtitle')}
             </p>
           </div>
-          <button className="px-6 py-3 border border-outline-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-colors flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">upload_file</span>
-            {t('doc.uploadBatch')}
-          </button>
+          <div className="flex items-center gap-2">
+            {reparseStatus && (
+              <span className="font-label-caps text-label-caps text-on-surface-variant text-xs">
+                {reparseStatus.status === 'running'
+                  ? `AI парсинг: ${reparseStatus.done}/${reparseStatus.total}…`
+                  : reparseStatus.status === 'done'
+                  ? `✓ ${reparseStatus.done} документа обработени`
+                  : `Грешка: ${reparseStatus.error}`}
+              </span>
+            )}
+            {activeStatus === 'PENDING' && (
+              <button
+                onClick={startReparse}
+                disabled={reparseStatus?.status === 'running'}
+                className="px-4 py-2.5 border border-primary/40 text-primary font-label-caps text-label-caps hover:bg-primary/10 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${reparseStatus?.status === 'running' ? 'animate-spin' : ''}`}>auto_fix_high</span>
+                AI анализ на всички
+              </button>
+            )}
+            <button className="px-6 py-3 border border-outline-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-colors flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+              {t('doc.uploadBatch')}
+            </button>
+          </div>
         </div>
 
         {/* Status Tabs */}
