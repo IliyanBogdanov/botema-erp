@@ -183,7 +183,7 @@ export function PendingDocuments({ docs }: { docs: any[] }) {
           <div>
             <div className="text-sm font-medium text-white">{doc.filename}</div>
             <div className="text-xs text-[#71717a] mt-1">
-              {doc.extractedData?.supplierName || doc.extractedData?.clientName || '—'} · {doc.extractedData?.amount} {doc.extractedData?.currency}
+              {doc.extractedData?.supplierName || doc.extractedData?.clientName || '—'} · {doc.extractedData?.amount != null ? Number(doc.extractedData.amount).toLocaleString('bg-BG', { minimumFractionDigits: 2 }) : '—'} {doc.extractedData?.currency}
             </div>
           </div>
           <div className="flex gap-2">

@@ -123,9 +123,10 @@ export default function ExpensesPage() {
   const expenses: Expense[] = Array.isArray(data) ? data : (data as any).data || [];
 
   const totalBGN = expenses.reduce((s, e) => {
-    if (e.currency === 'BGN') return s + e.amount;
-    if (e.currency === 'EUR') return s + e.amount * 1.95583;
-    return s + e.amount;
+    const amt = Number(e.amount);
+    if (e.currency === 'BGN') return s + amt;
+    if (e.currency === 'EUR') return s + amt * 1.95583;
+    return s + amt;
   }, 0);
 
   return (

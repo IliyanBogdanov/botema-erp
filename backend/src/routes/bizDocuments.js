@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
+const { auth } = require('../middleware/auth');
 
 // GET /api/biz-documents
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const { status, docType, counterpartyId, projectId } = req.query;
     const where = {};
@@ -32,7 +33,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/biz-documents/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
     const doc = await prisma.bizDocument.findUnique({
       where: { id: req.params.id },

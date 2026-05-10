@@ -82,7 +82,7 @@ async function autoMatch({ year } = {}) {
       amountTotal: true,
       currency: true,
       counterpartyId: true,
-      issueDate: true,
+      docDate: true,
     },
   });
 
@@ -115,9 +115,9 @@ async function autoMatch({ year } = {}) {
       const candidates = docs.filter(d =>
         d.counterpartyId === payment.counterpartyId &&
         d.currency === payment.currency &&
-        d.issueDate &&
-        d.issueDate >= windowStart &&
-        d.issueDate <= windowEnd
+        d.docDate &&
+        d.docDate >= windowStart &&
+        d.docDate <= windowEnd
       );
 
       for (const candidate of candidates) {

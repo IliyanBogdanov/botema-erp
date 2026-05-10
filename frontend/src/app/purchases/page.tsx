@@ -219,7 +219,7 @@ export default function PurchasesPage() {
 
   const purchases: Purchase[] = Array.isArray(data) ? data : (data as any).data || [];
 
-  const total = purchases.reduce((s, p) => s + (p.currency === 'BGN' ? p.amount : p.amount * 1.95583), 0);
+  const total = purchases.reduce((s, p) => s + (p.currency === 'BGN' ? Number(p.amount) : Number(p.amount) * 1.95583), 0);
 
   return (
     <div className="p-container-padding">

@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
+const { auth } = require('../middleware/auth');
 
 // GET /api/counterparties
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const { type, search } = req.query;
     const where = {};
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/counterparties/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
     const cp = await prisma.counterparty.findUnique({
       where: { id: req.params.id },

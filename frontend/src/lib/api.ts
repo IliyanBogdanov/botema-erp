@@ -22,8 +22,8 @@ api.interceptors.response.use(
 );
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
-export const fmt = (n: number, currency = 'BGN') =>
-  new Intl.NumberFormat('bg-BG', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n || 0);
+export const fmt = (n: number | string | null | undefined, currency = 'BGN') =>
+  new Intl.NumberFormat('bg-BG', { style: 'currency', currency, minimumFractionDigits: 2 }).format(Number(n) || 0);
 
 export const fmtDate = (d: string | Date) =>
   new Date(d).toLocaleDateString('bg-BG', { day: '2-digit', month: '2-digit', year: 'numeric' });

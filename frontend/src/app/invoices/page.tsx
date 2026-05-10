@@ -326,8 +326,8 @@ export default function InvoicesPage() {
   const statusTabs = getStatusTabs(t);
 
   const invoices: Invoice[] = Array.isArray(data) ? data : (data as any).data || [];
-  const totalAmount = invoices.reduce((sum, invoice) => sum + invoice.amountTotal, 0);
-  const outstanding = invoices.filter(invoice => !['PAID', 'CANCELLED'].includes(invoice.status)).reduce((sum, invoice) => sum + invoice.amountTotal, 0);
+  const totalAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.amountTotal), 0);
+  const outstanding = invoices.filter(invoice => !['PAID', 'CANCELLED'].includes(invoice.status)).reduce((sum, invoice) => sum + Number(invoice.amountTotal), 0);
   const paidCount = invoices.filter(invoice => invoice.status === 'PAID').length;
 
   return (
