@@ -60,6 +60,8 @@ app.use('/api/google',         require('./routes/google'));  // auth-url + statu
 const { companyRouter } = require('./routes/misc');
 app.use('/api/company', companyRouter);
 
+app.use('/api/search',  require('./routes/search'));
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 

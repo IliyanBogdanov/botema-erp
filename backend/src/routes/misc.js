@@ -1,9 +1,9 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
+const { auth } = require('../middleware/auth');
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 const expensesRouter = express.Router();
-const { auth } = require('../middleware/auth');
 
 expensesRouter.get('/', auth, async (req, res) => {
   const { year } = req.query;
@@ -17,6 +17,11 @@ expensesRouter.post('/', auth, async (req, res) => {
     data: { ...req.body, date: new Date(req.body.date), year: new Date(req.body.date).getFullYear() }
   });
   res.status(201).json(expense);
+});
+
+expensesRouter.delete('/:id', auth, async (req, res) => {
+  await prisma.expense.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
 });
 
 // ─── Suppliers ────────────────────────────────────────────────────────────────
@@ -52,8 +57,6 @@ documentsRouter.patch('/:id', auth, async (req, res) => {
   res.json(doc);
 });
 
-module.exports = { expensesRouter, suppliersRouter, documentsRouter };
-
 // ─── Company ──────────────────────────────────────────────────────────────────
 const companyRouter = express.Router();
 
@@ -62,6 +65,51 @@ companyRouter.get('/', auth, async (req, res) => {
   const where = brand ? { brand } : {};
   const companies = await prisma.company.findMany({ where, orderBy: { name: 'asc' } });
   res.json(companies);
+});
+
+// PATCH /api/company/:id — update or upsert company record
+companyRouter.patch('/:id', auth, async (req, res) => {
+  try {
+    const company = await prisma.company.update({
+      where: { id: req.params.id },
+      data: req.body,
+    });
+    res.json(company);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/company — create or update company by brand
+companyRouter.post('/', auth, async (req, res) => {
+  try {
+    const { brand = 'STUDIO_BOTEMA', ...rest } = req.body;
+    const existing = await prisma.company.findFirst({ where: { brand } });
+    let company;
+    if (existing) {
+      company = await prisma.company.update({ where: { id: existing.id }, data: rest });
+    } else {
+      // Provide defaults for required fields to avoid DB errors on partial saves
+      company = await prisma.company.create({
+        data: {
+          brand,
+          name: rest.name || brand,
+          eik: rest.eik || `EIK-${Date.now()}`,
+          vat: rest.vat || '',
+          address: rest.address || '',
+          city: rest.city || '',
+          mol: rest.mol || '',
+          bankIban: rest.bankIban || '',
+          bankBic: rest.bankBic || '',
+          bankName: rest.bankName || '',
+          ...rest,
+        },
+      });
+    }
+    res.json(company);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 module.exports = { expensesRouter, suppliersRouter, documentsRouter, companyRouter };

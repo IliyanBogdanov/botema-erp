@@ -18,6 +18,39 @@ const PROJ_IMG_POOL = [
   'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&auto=format&q=75',
 ];
 
+function exportDashboardCsv(data: any, year: number) {
+  const kpis = data?.kpis || {};
+  const rows: string[][] = [
+    ['Studio Botema ERP — Dashboard Export', String(year)],
+    [],
+    ['KPI', 'Стойност'],
+    ['Приходи (BGN)', String(kpis.revenue || 0)],
+    ['Разходи EUR', String(kpis.totalPurchasesEur || 0)],
+    ['Брой покупки', String(kpis.totalPurchasesCount || 0)],
+    ['Брой фактури', String(kpis.invoiceCount || 0)],
+    ['Брутен марж %', String(kpis.grossMargin || 0)],
+    [],
+    ['Топ доставчици', 'EUR'],
+    ...(data?.topSuppliers || []).map((s: any) => [s.name, String(s.amount)]),
+    [],
+    ['Топ клиенти', 'BGN нето'],
+    ...(data?.topClients || []).map((c: any) => [c.name, String(c.revenue)]),
+    [],
+    ['Приходи по месец', 'BGN', 'Бранд'],
+    ...(data?.revenueByMonth || []).map((m: any) => [
+      `Месец ${m.month}`, String(Number(m.revenue || 0).toFixed(2)), m.brand || '',
+    ]),
+  ];
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `botema-dashboard-${year}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear());
 
@@ -105,7 +138,13 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
-          <button className="btn-secondary bg-surface/60 backdrop-blur-sm">{t('dash.exportReport')}</button>
+          <button
+            className="btn-secondary bg-surface/60 backdrop-blur-sm"
+            onClick={() => data && exportDashboardCsv(data, year)}
+            disabled={!data}
+          >
+            {t('dash.exportReport')}
+          </button>
         </div>
       </div>
 
@@ -169,7 +208,10 @@ export default function DashboardPage() {
               <span className="font-data-mono text-data-mono text-secondary-fixed-dim">BGN</span>
             </div>
             <div className="mt-4 h-1.5 bg-surface-variant/30 overflow-hidden">
-              <div className="h-full bg-primary-container w-[60%] transition-all duration-700" />
+              <div
+                className="h-full bg-primary-container transition-all duration-700"
+                style={{ width: `${Math.min(100, kpis.revenue > 0 ? Math.round((kpis.costs / kpis.revenue) * 100) : 0)}%` }}
+              />
             </div>
           </div>
 

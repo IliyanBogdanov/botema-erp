@@ -48,6 +48,7 @@ const bg = {
   'nav.alerts':         'Сигнали',
   'nav.ai':             'AI Асистент',
   'nav.backfill':       'Drive Backfill',
+  'nav.settings':       'Настройки',
   'nav.signOut':        'Изход',
   'nav.newProject':     'Нов проект',
 
@@ -241,6 +242,7 @@ const en: Record<keyof typeof bg, string> = {
   'nav.alerts':         'Alerts',
   'nav.ai':             'AI Assistant',
   'nav.backfill':       'Drive Backfill',
+  'nav.settings':       'Settings',
   'nav.signOut':        'Sign out',
   'nav.newProject':     'New Project',
 

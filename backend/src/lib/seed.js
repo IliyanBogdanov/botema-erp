@@ -23,7 +23,7 @@ async function main() {
     create: {
       email: 'office@luminavera.com',
       name: 'Стефи',
-      password: await bcrypt.hash('temppass123', 12),
+      password: await bcrypt.hash(process.env.STAFF_PASSWORD || 'temppass123', 12),
       role: 'STAFF',
     }
   });

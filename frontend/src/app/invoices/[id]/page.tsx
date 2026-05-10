@@ -64,6 +64,15 @@ export default function InvoiceDetailPage() {
           </p>
         </div>
         <StatusBadge status={invoice.status} />
+        <a
+          href={`/invoices/${id}/print`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-variant hover:bg-surface-variant/80 transition-colors font-label-md text-on-surface-variant"
+        >
+          <span className="material-symbols-outlined text-[18px]">print</span>
+          Принт
+        </a>
         {invoice.driveFileId && (
           <a
             href={`https://drive.google.com/file/d/${invoice.driveFileId}/view`}

@@ -24,6 +24,7 @@ const navItems = [
   { key: 'nav.alerts',         href: '/alerts',    icon: 'notifications_active' },
   { key: 'nav.ai',         href: '/ai',        icon: 'smart_toy' },
   { key: 'nav.backfill',   href: '/backfill',  icon: 'cloud_sync' },
+  { key: 'nav.settings',   href: '/settings',  icon: 'settings' },
 ];
 
 export function Sidebar() {
