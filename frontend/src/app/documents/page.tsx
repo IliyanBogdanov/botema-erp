@@ -25,6 +25,7 @@ function getStatusTabs(t: ReturnType<typeof useT>) {
     { value: '', label: t('doc.allStatuses'), color: '#0a84ff' },
     { value: 'PENDING', label: t('doc.pending'), color: '#ff9f0a' },
     { value: 'PROCESSED', label: t('doc.reviewed'), color: '#30d158' },
+    { value: 'LINKED', label: 'Свързани', color: '#bf5af2' },
   ];
 }
 

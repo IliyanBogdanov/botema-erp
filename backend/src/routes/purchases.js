@@ -23,6 +23,21 @@ router.post('/', auth, async (req, res) => {
   res.status(201).json(purchase);
 });
 
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const purchase = await prisma.purchase.findUniqueOrThrow({
+      where: { id: req.params.id },
+      include: {
+        supplier: true,
+        project: { select: { id: true, code: true, name: true } },
+      },
+    });
+    res.json(purchase);
+  } catch {
+    res.status(404).json({ error: 'Purchase not found' });
+  }
+});
+
 router.patch('/:id', auth, async (req, res) => {
   try {
     const { amount, currency, invoiceNo, description, status, projectId, date } = req.body;

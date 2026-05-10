@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 import { useT } from '@/lib/i18n';
@@ -194,6 +195,7 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
 }
 
 export default function PurchasesPage() {
+  const router = useRouter();
   const [year, setYear] = useState(new Date().getFullYear());
   const [supplierId, setSupplierId] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -322,7 +324,7 @@ export default function PurchasesPage() {
                   const isPaid = p.status === 'PAID';
                   const isZero = Number(p.amount) === 0;
                   return (
-                    <tr key={p.id} className="hover:bg-surface-variant/10 transition-colors group">
+                    <tr key={p.id} className="hover:bg-surface-variant/10 transition-colors group cursor-pointer" onClick={() => router.push(`/purchases/${p.id}`)}>
                       <td className="px-6 py-4 font-data-mono text-data-mono">{fmtDate(p.date)}</td>
                       <td className="px-6 py-4 font-body-md font-semibold text-on-surface">{p.supplier?.name || '—'}</td>
                       <td className="px-6 py-4 text-on-surface-variant">{p.invoiceNo || '—'}</td>
@@ -344,7 +346,7 @@ export default function PurchasesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <button
-                          onClick={() => setEditPurchase(p)}
+                          onClick={e => { e.stopPropagation(); setEditPurchase(p); }}
                           className="opacity-0 group-hover:opacity-100 transition-opacity material-symbols-outlined text-[20px] text-on-surface-variant hover:text-primary"
                         >
                           more_vert

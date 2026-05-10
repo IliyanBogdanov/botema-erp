@@ -14,7 +14,8 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   INVOICE: 'ФАКТУРА',
 };
 
-const COMPANIES: Record<string, { name: string; eik: string; vat: string; address: string; city: string; mol: string; iban: string; bic: string; bank: string; email: string; phone: string }> = {
+// Fallback if company not yet in DB
+const COMPANY_FALLBACK: Record<string, any> = {
   STUDIO_BOTEMA: {
     name: 'СТУДИО БОТЕМА ЕООД',
     eik: '207416148',
@@ -22,9 +23,9 @@ const COMPANIES: Record<string, { name: string; eik: string; vat: string; addres
     address: 'ул. Тракия 28',
     city: 'София 1000',
     mol: 'Ботьо Богданов',
-    iban: 'BG18UBBS80021030174631',
-    bic: 'UBBSBGSF',
-    bank: 'ОББ',
+    bankIban: 'BG18UBBS80021030174631',
+    bankBic: 'UBBSBGSF',
+    bankName: 'ОББ',
     email: 'office@studiobotema.com',
     phone: '+359 888 123 456',
   },
@@ -35,9 +36,9 @@ const COMPANIES: Record<string, { name: string; eik: string; vat: string; addres
     address: 'ул. Тракия 28',
     city: 'София 1000',
     mol: 'Ботьо Богданов',
-    iban: 'BG18UBBS80021030174632',
-    bic: 'UBBSBGSF',
-    bank: 'ОББ',
+    bankIban: 'BG18UBBS80021030174632',
+    bankBic: 'UBBSBGSF',
+    bankName: 'ОББ',
     email: 'office@luminavera.bg',
     phone: '+359 888 123 457',
   },
@@ -61,6 +62,11 @@ export default function PrintDocPage() {
     enabled: !!id,
   });
 
+  const { data: companiesData = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => api.get('/company').then(r => r.data),
+  });
+
   useEffect(() => {
     if (doc) {
       document.title = `${DOC_TYPE_LABELS[doc.type] || doc.type} ${doc.number}`;
@@ -74,7 +80,25 @@ export default function PrintDocPage() {
     return <div className="flex items-center justify-center min-h-screen text-red-500">Документът не е намерен.</div>;
   }
 
-  const company = COMPANIES[doc.brand] || COMPANIES.STUDIO_BOTEMA;
+  // Prefer DB data; fall back to hardcoded constants
+  const companies: any[] = companiesData as any[];
+  const dbCompany = companies.find((c: any) => c.brand === doc.brand);
+  const fallback = COMPANY_FALLBACK[doc.brand] || COMPANY_FALLBACK.STUDIO_BOTEMA;
+  const company = dbCompany
+    ? {
+        name: dbCompany.name,
+        eik: dbCompany.eik,
+        vat: dbCompany.vat,
+        address: dbCompany.address,
+        city: dbCompany.city,
+        mol: dbCompany.mol,
+        iban: dbCompany.bankIban,
+        bic: dbCompany.bankBic,
+        bank: dbCompany.bankName,
+        email: dbCompany.email || fallback.email,
+        phone: dbCompany.phone || fallback.phone,
+      }
+    : { ...fallback, iban: fallback.bankIban || fallback.iban, bic: fallback.bankBic || fallback.bic, bank: fallback.bankName || fallback.bank };
   const client = doc.client;
   const items = doc.items || [];
   const typeLabel = DOC_TYPE_LABELS[doc.type] || doc.type;

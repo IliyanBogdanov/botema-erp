@@ -53,3 +53,15 @@ documentsRouter.patch('/:id', auth, async (req, res) => {
 });
 
 module.exports = { expensesRouter, suppliersRouter, documentsRouter };
+
+// ─── Company ──────────────────────────────────────────────────────────────────
+const companyRouter = express.Router();
+
+companyRouter.get('/', auth, async (req, res) => {
+  const { brand } = req.query;
+  const where = brand ? { brand } : {};
+  const companies = await prisma.company.findMany({ where, orderBy: { name: 'asc' } });
+  res.json(companies);
+});
+
+module.exports = { expensesRouter, suppliersRouter, documentsRouter, companyRouter };

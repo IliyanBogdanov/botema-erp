@@ -57,6 +57,9 @@ app.use('/api/backfill',       require('./routes/backfill'));
 app.use('/api/auth/google',    require('./routes/google'));  // callback at /api/auth/google/callback
 app.use('/api/google',         require('./routes/google'));  // auth-url + status
 
+const { companyRouter } = require('./routes/misc');
+app.use('/api/company', companyRouter);
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
