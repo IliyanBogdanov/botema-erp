@@ -49,9 +49,12 @@ router.get('/overview', auth, async (req, res) => {
     ]);
 
     const outputVat = invoices.reduce((s, i) => s + asBgn(i.vatAmount, i.currency), 0);
+    const outputNet = invoices.reduce((s, i) => s + asBgn(i.amountTotal, i.currency), 0);
     const estimatedInputVat = purchases.reduce((s, p) => {
       const dataVat = toNumber(p.extractedData?.vatAmount);
-      return s + (dataVat ? asBgn(dataVat, p.currency) : asBgn(p.amount, p.currency) / 6);
+      // If explicit VAT in extractedData → use it; else estimate from gross: VAT = total * 20/120 = total/6
+      const grossBgn = asBgn(p.amount, p.currency);
+      return s + (dataVat ? asBgn(dataVat, p.currency) : grossBgn / 6);
     }, 0);
     const pendingCredit = documents.reduce((s, d) => {
       const data = d.extractedData || {};
@@ -62,11 +65,12 @@ router.get('/overview', auth, async (req, res) => {
 
     res.json({
       period: { year, month, start, end },
-      outputVat,
-      estimatedInputVat,
-      pendingCredit,
-      netVat: outputVat - estimatedInputVat,
-      afterPendingCredit: outputVat - estimatedInputVat - pendingCredit,
+      outputVat: Number(outputVat.toFixed(2)),
+      outputNet: Number(outputNet.toFixed(2)),
+      estimatedInputVat: Number(estimatedInputVat.toFixed(2)),
+      pendingCredit: Number(pendingCredit.toFixed(2)),
+      netVat: Number((outputVat - estimatedInputVat).toFixed(2)),
+      afterPendingCredit: Number((outputVat - estimatedInputVat - pendingCredit).toFixed(2)),
       counts: {
         outgoingInvoices: invoices.length,
         incomingPurchases: purchases.length,

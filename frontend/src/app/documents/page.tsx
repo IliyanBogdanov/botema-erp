@@ -117,12 +117,27 @@ function ReviewModal({ doc, onClose }: { doc: Document | null; onClose: () => vo
             <div className="text-sm font-semibold text-white">{doc.filename}</div>
             <div className="text-xs text-[#71717a] mt-1">Увереност: {Math.round(Number(doc.confidence || 0) * 100)}%</div>
           </div>
-          {doc.driveUrl && (
-            <a href={doc.driveUrl} target="_blank" className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
-              <ExternalLink size={12} /> PDF
-            </a>
-          )}
+          <div className="flex gap-2">
+            {doc.driveUrl && (
+              <a href={doc.driveUrl} target="_blank" className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
+                <ExternalLink size={12} /> Drive
+              </a>
+            )}
+          </div>
         </div>
+
+        {/* Inline PDF viewer */}
+        {doc.driveUrl && (
+          <div className="rounded-xl overflow-hidden border border-outline-variant/30">
+            <iframe
+              src={`https://drive.google.com/file/d/${doc.driveUrl.match(/\/d\/([\w-]+)/)?.[1]}/preview`}
+              className="w-full"
+              style={{ height: 340 }}
+              title={doc.filename}
+              allow="autoplay"
+            />
+          </div>
+        )}
 
         {risks.length > 0 && (
           <div className="border border-error/20 bg-error/5 p-4">

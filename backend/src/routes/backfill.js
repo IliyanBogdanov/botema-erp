@@ -249,10 +249,16 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
 
           results.push({ file: file.filename, parsed, supplierId });
 
-          if (!dryRun && supplierId && parsed.docDate) {
-            const year = new Date(parsed.docDate).getFullYear();
+          if (!dryRun) {
+            // Use receivedAt as fallback date if AI/heuristic didn't find one
+            const effectiveDate = parsed.docDate
+              ? new Date(parsed.docDate)
+              : file.receivedAt
+                ? new Date(file.receivedAt)
+                : new Date();
+            const year = effectiveDate.getFullYear();
+
             if (existing && forceUpdate) {
-              // Update existing purchase amount
               await prisma.purchase.update({
                 where: { id: existing.id },
                 data: {
@@ -269,8 +275,8 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
               await prisma.purchase.create({
                 data: {
                   invoiceNo: parsed.invoiceNo || undefined,
-                  date: new Date(parsed.docDate),
-                  supplierId,
+                  date: effectiveDate,
+                  supplierId: supplierId || undefined, // null if unknown — stored for manual review
                   currency: parsed.currency || 'EUR',
                   amount: parsed.amountTotal || 0,
                   description: parsed.description || file.filename,
@@ -280,12 +286,10 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
                 },
               });
               created++;
-              log(`  ✅ Purchase created (amount=${parsed.amountTotal || 'unknown'})`);
+              if (!supplierId) log(`  ✅ Purchase created (no supplier matched — needs manual review)`);
+              else if (!parsed.docDate) log(`  ✅ Purchase created (used receivedAt as date)`);
+              else log(`  ✅ Purchase created (amount=${parsed.amountTotal || 'unknown'})`);
             }
-          } else if (!dryRun) {
-            skipped++;
-            const reason = !supplierId ? 'no supplier' : 'no date';
-            log(`  ⚠️ Skipped (${reason})`);
           }
         } catch (fileErr) {
           failed++;

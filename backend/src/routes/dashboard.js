@@ -26,7 +26,7 @@ router.get('/', auth, async (req, res) => {
     const endDate = new Date(`${yearNum}-12-31T23:59:59.999Z`);
 
     const [
-      totalRevenue,
+      revenueInvoices,
       pendingInvoices,
       totalInventory,
       revenueByMonth,
@@ -36,9 +36,10 @@ router.get('/', auth, async (req, res) => {
       projectStats,
       invoiceCount,
     ] = await Promise.all([
-      prisma.invoice.aggregate({
+      // Fetch individually so we can do proper currency conversion
+      prisma.invoice.findMany({
         where: { date: { gte: startDate, lte: endDate }, status: { not: 'CANCELLED' } },
-        _sum: { amountNet: true }
+        select: { amountNet: true, vatAmount: true, amountTotal: true, currency: true },
       }),
       prisma.invoice.findMany({
         where: { status: 'PENDING' },
@@ -52,7 +53,7 @@ router.get('/', auth, async (req, res) => {
       prisma.$queryRaw`
         SELECT 
           EXTRACT(MONTH FROM date) as month,
-          SUM("amountNet") as revenue,
+          SUM(CASE WHEN currency = 'EUR' THEN "amountNet" * 1.95583 ELSE "amountNet" END) as revenue,
           brand
         FROM invoices
         WHERE EXTRACT(YEAR FROM date) = ${yearNum}
@@ -127,14 +128,16 @@ router.get('/', auth, async (req, res) => {
       .reduce((sum, [currency, amount]) => sum + toBgn(amount, currency), 0);
     const totalPurchasesCount = purchaseRows.reduce((sum, row) => sum + Number(row._count.id || 0), 0);
 
-    const revenueNum = Number(totalRevenue._sum.amountNet || 0);
+    const revenueNum = revenueInvoices.reduce((s, inv) => s + toBgn(inv.amountNet, inv.currency), 0);
+    const vatCollected = revenueInvoices.reduce((s, inv) => s + toBgn(inv.vatAmount, inv.currency), 0);
     const costsNum = Number(totalPurchasesBgn || 0);
     const available = Number(totalInventory._sum.qtyIn || 0) - Number(totalInventory._sum.qtyOut || 0);
 
     res.json({
       kpis: {
-        revenue: revenueNum,
-        costs: costsNum,
+        revenue: Number(revenueNum.toFixed(2)),
+        vatCollected: Number(vatCollected.toFixed(2)),
+        costs: Number(costsNum.toFixed(2)),
         totalPurchasesEur: Number(totalPurchasesEur.toFixed(2)),
         totalPurchasesBgn: Number(totalPurchasesBgn.toFixed(2)),
         totalPurchasesCount,
@@ -143,7 +146,7 @@ router.get('/', auth, async (req, res) => {
         grossMargin: revenueNum > 0 ? ((revenueNum - costsNum) / revenueNum * 100).toFixed(1) : 0,
         inventoryCount: available,
         pendingCount: pendingInvoices.length,
-        pendingAmount: pendingInvoices.reduce((sum, invoice) => sum + Number(invoice.amountTotal || 0), 0),
+        pendingAmount: pendingInvoices.reduce((sum, invoice) => sum + toBgn(invoice.amountTotal, invoice.currency), 0),
       },
       revenueByMonth,
       topClients: topClients.map(c => ({

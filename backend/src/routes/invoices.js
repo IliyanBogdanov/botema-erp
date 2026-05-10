@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
+const { downloadDriveFile } = require('../lib/aiParser');
 
 // GET /api/invoices
 router.get('/', auth, async (req, res) => {
@@ -98,6 +99,26 @@ router.patch('/:id', auth, async (req, res) => {
       include: { client: true, project: true }
     });
     res.json(invoice);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/invoices/:id/file  — stream Drive PDF inline
+router.get('/:id/file', auth, async (req, res) => {
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      select: { driveFileId: true, number: true },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Not found' });
+    if (!invoice.driveFileId) return res.status(404).json({ error: 'No Drive file attached' });
+
+    const buffer = await downloadDriveFile(invoice.driveFileId);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `inline; filename="invoice-${invoice.number}.pdf"`);
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

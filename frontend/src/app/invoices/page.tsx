@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate, statusConfig } from '@/lib/api';
 import { useT } from '@/lib/i18n';
@@ -425,7 +426,11 @@ export default function InvoicesPage() {
                 ) : (
                   invoices.map(inv => (
                     <tr key={inv.id} className="transition-colors hover:bg-surface-container-high">
-                      <td className="table-cell font-data-mono text-data-mono text-primary">{inv.number}</td>
+                      <td className="table-cell font-data-mono text-data-mono">
+                        <Link href={`/invoices/${inv.id}`} className="text-primary hover:underline">
+                          {inv.number}
+                        </Link>
+                      </td>
                       <td className="table-cell">
                         <div>
                           <p className="font-medium text-on-surface">{inv.client?.name || '—'}</p>
