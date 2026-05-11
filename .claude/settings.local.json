@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(curl -s -X POST http://localhost:3001/api/auth/login -H \"Content-Type: application/json\" -d \"{\\\\\"email\\\\\":\\\\\"admin@studiobotema.com\\\\\",\\\\\"password\\\\\":\\\\\"Botema@2024!\\\\\"}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('TOKEN:', d.get\\('token',''\\)[:60]\\)\")",
+      "PowerShell($resp = Invoke-RestMethod -Uri \"http://localhost:3001/api/auth/login\" -Method Post -ContentType \"application/json\" -Body '{\"email\":\"admin@studiobotema.com\",\"password\":\"Botema@2024!\"}'; $global:TOKEN = $resp.token; \"Token: \" + $TOKEN.Substring\\(0,40\\) + \"...\")"
+    ]
+  }
+}
