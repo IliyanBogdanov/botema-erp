@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useT } from '@/lib/i18n';
@@ -250,10 +251,10 @@ export default function ClientsPage() {
                   filtered.map(c => (
                     <tr key={c.id} className="transition-colors hover:bg-surface-container-high">
                       <td className="table-cell">
-                        <div>
-                          <p className="font-medium text-on-surface">{c.name}</p>
+                        <Link href={`/clients/${c.id}`} className="group/link block">
+                          <p className="font-medium text-on-surface group-hover/link:text-primary transition-colors">{c.name}</p>
                           <p className="mt-1 font-data-mono text-data-mono text-on-surface-variant">{c.phone || '—'}</p>
-                        </div>
+                        </Link>
                       </td>
                       <td className="table-cell text-on-surface-variant">{typeLabels[c.type] || c.type}</td>
                       <td className="table-cell text-on-surface-variant">{c.city || '—'}</td>
