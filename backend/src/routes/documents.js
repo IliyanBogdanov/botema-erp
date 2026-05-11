@@ -39,7 +39,7 @@ router.get('/reparse-job/:jobId', auth, (req, res) => {
   res.json(job);
 });
 
-// POST /api/documents/reparse-all — batch AI re-parse all pending docs with low confidence
+// POST /api/documents/reparse-all — batch AI re-parse all pending low-confidence docs
 router.post('/reparse-all', auth, async (req, res) => {
   const jobId = `reparse-${Date.now()}`;
   reparseJobs[jobId] = { jobId, status: 'running', done: 0, total: 0, errors: 0, log: [], started: new Date() };
@@ -49,17 +49,18 @@ router.post('/reparse-all', auth, async (req, res) => {
   (async () => {
     const job = reparseJobs[jobId];
     try {
-      const docs = await prisma.document.findMany({
-        where: { status: 'PENDING', confidence: { lte: 20 }, driveFileId: { not: null } },
+      const allDocs = await prisma.document.findMany({
+        where: { status: 'PENDING', confidence: { lte: 20 } },
         orderBy: { createdAt: 'desc' },
       });
+      const docs = allDocs.filter(d => d.driveFileId);
 
       job.total = docs.length;
       job.log.push(`Found ${docs.length} documents to re-parse`);
 
       for (const doc of docs) {
         try {
-          const folder = doc.extractedData?.folder || '';
+          const folder = (doc.extractedData && doc.extractedData.folder) || '';
           const filename = doc.filename || doc.driveFileId;
 
           job.log.push(`Parsing: ${filename}`);
@@ -67,15 +68,11 @@ router.post('/reparse-all', auth, async (req, res) => {
           const pdfBuffer = await downloadDriveFile(doc.driveFileId);
           const parsed = await parseDocumentWithAI(filename, folder, pdfBuffer);
 
-          // Merge parsed data with existing extractedData (keep folder/source metadata)
-          const mergedData = {
-            ...doc.extractedData,
-            ...parsed,
-            folder: doc.extractedData?.folder,
-            source: doc.extractedData?.source,
-          };
+          const mergedData = Object.assign({}, doc.extractedData || {}, parsed, {
+            folder: doc.extractedData && doc.extractedData.folder,
+            source: doc.extractedData && doc.extractedData.source,
+          });
 
-          // Run analyze to get riskFlags and suggestedAction
           const analysis = await analyzeDocument(prisma, mergedData);
 
           await prisma.document.update({
@@ -89,14 +86,12 @@ router.post('/reparse-all', auth, async (req, res) => {
           });
 
           job.done++;
-          job.log.push(`✓ ${filename} — ${parsed.amountTotal || '?'} ${parsed.currency || ''} (confidence: ${parsed.confidence})`);
+          job.log.push(`✓ ${filename} — ${parsed.amountTotal || '?'} ${parsed.currency || ''} (conf: ${parsed.confidence})`);
         } catch (err) {
           job.errors++;
           job.log.push(`✗ ${doc.filename}: ${err.message}`);
         }
-
-        // Keep log at reasonable size
-        if (job.log.length > 200) job.log.shift();
+        if (job.log.length > 300) job.log.shift();
       }
 
       job.status = 'done';
@@ -141,16 +136,10 @@ router.post('/:id/link', auth, async (req, res) => {
     if (purchaseId) updateData.purchaseId = purchaseId;
 
     if (invoiceId && doc.driveFileId) {
-      await prisma.invoice.updateMany({
-        where: { id: invoiceId, driveFileId: null },
-        data: { driveFileId: doc.driveFileId },
-      });
+      await prisma.invoice.updateMany({ where: { id: invoiceId, driveFileId: null }, data: { driveFileId: doc.driveFileId } });
     }
     if (purchaseId && doc.driveFileId) {
-      await prisma.purchase.updateMany({
-        where: { id: purchaseId, driveFileId: null },
-        data: { driveFileId: doc.driveFileId },
-      });
+      await prisma.purchase.updateMany({ where: { id: purchaseId, driveFileId: null }, data: { driveFileId: doc.driveFileId } });
     }
 
     const updated = await prisma.document.update({ where: { id: doc.id }, data: updateData });
@@ -176,18 +165,16 @@ router.post('/:id/reparse', auth, async (req, res) => {
     if (!doc) return res.status(404).json({ error: 'Document not found' });
     if (!doc.driveFileId) return res.status(400).json({ error: 'No Drive file attached' });
 
-    const folder = doc.extractedData?.folder || '';
+    const folder = (doc.extractedData && doc.extractedData.folder) || '';
     const filename = doc.filename || doc.driveFileId;
 
     const pdfBuffer = await downloadDriveFile(doc.driveFileId);
     const parsed = await parseDocumentWithAI(filename, folder, pdfBuffer);
 
-    const mergedData = {
-      ...doc.extractedData,
-      ...parsed,
-      folder: doc.extractedData?.folder,
-      source: doc.extractedData?.source,
-    };
+    const mergedData = Object.assign({}, doc.extractedData || {}, parsed, {
+      folder: doc.extractedData && doc.extractedData.folder,
+      source: doc.extractedData && doc.extractedData.source,
+    });
 
     const analysis = await analyzeDocument(prisma, mergedData);
 
