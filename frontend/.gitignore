@@ -1,1 +1,5 @@
 .vercel
+
+test-results/
+
+tsconfig.tsbuildinfo
