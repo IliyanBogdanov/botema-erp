@@ -131,7 +131,7 @@ export default function AIPage() {
         <AIAvatar size={36} />
         <div>
           <h1 className="text-base font-bold text-white">Botema AI</h1>
-          <p className="text-xs text-[#52525b]">Studio Botema ERP · Claude Sonnet</p>
+          <p className="text-xs text-[#52525b]">Studio Botema ERP · Gemini 2.5 Flash</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse" />
