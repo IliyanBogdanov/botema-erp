@@ -236,7 +236,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number
+  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
 }`;
 
   const chat = await groq.chat.completions.create({
@@ -281,7 +281,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number
+  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
 }`;
 
   const chat = await openrouter.chat.completions.create({
@@ -327,7 +327,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number
+  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
 }`;
 
   const chat = await openai.chat.completions.create({
@@ -366,25 +366,33 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number
+  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
 }`;
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  try {
-    const result = await model.generateContent([
-      { text: prompt },
-      {
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: pdfBuffer.toString('base64'),
-        },
-      },
-    ]);
 
-    const text = result.response.text().trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
-    return JSON.parse(jsonMatch[0]);
+  const tryGemini = async (retries = 2) => {
+    try {
+      const result = await model.generateContent([
+        { text: prompt },
+        { inlineData: { mimeType: 'application/pdf', data: pdfBuffer.toString('base64') } },
+      ]);
+      const text = result.response.text().trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
+      return JSON.parse(jsonMatch[0]);
+    } catch (err) {
+      const is429 = err.status === 429 || (err.message && err.message.includes('429'));
+      if (is429 && retries > 0) {
+        await new Promise(r => setTimeout(r, 65000));
+        return tryGemini(retries - 1);
+      }
+      throw err;
+    }
+  };
+
+  try {
+    return await tryGemini();
   } catch (err) {
     const fallbackParsers = [
       parseDocumentWithGroq,
