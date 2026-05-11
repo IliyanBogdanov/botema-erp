@@ -3,23 +3,112 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
 
+const EUR_RATE = 1.95583;
+
+function toBGN(amount, currency) {
+  return currency === 'EUR' ? Number(amount) * EUR_RATE : Number(amount);
+}
+
 router.get('/', auth, async (req, res) => {
   const { status, year } = req.query;
   const where = {};
   if (status) where.status = status;
   if (year) where.year = parseInt(year);
+
   const projects = await prisma.project.findMany({
-    where, include: { client: { select: { id: true, name: true } },
-      invoices: { select: { amountNet: true, status: true } },
-      purchases: { select: { amount: true } }
-    }, orderBy: { year: 'desc' }
+    where,
+    include: {
+      client: { select: { id: true, name: true } },
+      invoices: { select: { amountNet: true, amountTotal: true, currency: true, status: true } },
+      purchases: { select: { amount: true, currency: true } },
+    },
+    orderBy: { year: 'desc' },
   });
-  const enriched = projects.map(p => ({
-    ...p,
-    totalRevenue: p.invoices.filter(i => i.status !== 'CANCELLED').reduce((s, i) => s + Number(i.amountNet), 0),
-    totalCosts: p.purchases.reduce((s, i) => s + Number(i.amount), 0),
-  }));
+
+  const enriched = projects.map(p => {
+    const revenueBGN = p.invoices
+      .filter(i => i.status !== 'CANCELLED')
+      .reduce((s, i) => s + toBGN(i.amountNet, i.currency || 'BGN'), 0);
+
+    const costsBGN = p.purchases
+      .reduce((s, i) => s + toBGN(i.amount, i.currency || 'EUR'), 0);
+
+    const profitBGN = revenueBGN - costsBGN;
+    const marginPct = revenueBGN > 0 ? Math.round((profitBGN / revenueBGN) * 100) : null;
+
+    return {
+      ...p,
+      revenueBGN: Math.round(revenueBGN),
+      costsBGN: Math.round(costsBGN),
+      profitBGN: Math.round(profitBGN),
+      marginPct,
+      invoiceCount: p.invoices.filter(i => i.status !== 'CANCELLED').length,
+      purchaseCount: p.purchases.length,
+      // Legacy aliases (keep for compatibility)
+      totalRevenue: Math.round(revenueBGN),
+      totalCosts: Math.round(costsBGN),
+    };
+  });
+
   res.json(enriched);
+});
+
+// GET /api/projects/pnl — aggregate P&L across all projects
+router.get('/pnl', auth, async (req, res) => {
+  const { year } = req.query;
+  const where = {};
+  if (year) where.year = parseInt(year);
+
+  const projects = await prisma.project.findMany({
+    where,
+    include: {
+      client: { select: { id: true, name: true } },
+      invoices: { select: { amountNet: true, currency: true, status: true, date: true } },
+      purchases: { select: { amount: true, currency: true, date: true } },
+    },
+    orderBy: [{ status: 'asc' }, { year: 'desc' }],
+  });
+
+  const result = projects.map(p => {
+    const revenueBGN = p.invoices
+      .filter(i => i.status !== 'CANCELLED')
+      .reduce((s, i) => s + toBGN(i.amountNet, i.currency || 'BGN'), 0);
+
+    const costsBGN = p.purchases
+      .reduce((s, i) => s + toBGN(i.amount, i.currency || 'EUR'), 0);
+
+    const profitBGN = revenueBGN - costsBGN;
+
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      status: p.status,
+      year: p.year,
+      clientName: p.client?.name || null,
+      revenueBGN: Math.round(revenueBGN),
+      costsBGN: Math.round(costsBGN),
+      profitBGN: Math.round(profitBGN),
+      marginPct: revenueBGN > 0 ? Math.round((profitBGN / revenueBGN) * 100) : null,
+      invoiceCount: p.invoices.filter(i => i.status !== 'CANCELLED').length,
+      purchaseCount: p.purchases.length,
+    };
+  });
+
+  // Summary totals
+  const totalRevenue = result.reduce((s, p) => s + p.revenueBGN, 0);
+  const totalCosts = result.reduce((s, p) => s + p.costsBGN, 0);
+  const totalProfit = totalRevenue - totalCosts;
+
+  res.json({
+    projects: result,
+    totals: {
+      revenueBGN: totalRevenue,
+      costsBGN: totalCosts,
+      profitBGN: totalProfit,
+      marginPct: totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : null,
+    },
+  });
 });
 
 router.post('/', auth, async (req, res) => {
@@ -55,8 +144,9 @@ router.get('/:id', auth, async (req, res) => {
       payments: {
         orderBy: { paymentDate: 'asc' },
       },
-    }
+    },
   });
+  if (!project) return res.status(404).json({ error: 'Not found' });
   res.json(project);
 });
 

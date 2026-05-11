@@ -13,9 +13,12 @@ interface Project {
   name: string;
   status: string;
   year: number;
-  revenue?: number;
-  costs?: number;
-  invoiceCount?: number;
+  revenueBGN: number;
+  costsBGN: number;
+  profitBGN: number;
+  marginPct: number | null;
+  invoiceCount: number;
+  purchaseCount: number;
   client?: { id: string; name: string };
 }
 
@@ -145,12 +148,23 @@ function ProjectStatusBadge({ status, activeLabel }: { status: string; activeLab
   );
 }
 
+function fmtBGN(n: number) {
+  return n.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' лв.';
+}
+
+function MarginBadge({ pct }: { pct: number | null }) {
+  if (pct === null) return <span className="text-on-surface-variant/40">—</span>;
+  const color = pct >= 30 ? 'text-primary' : pct >= 10 ? 'text-warning' : 'text-error';
+  return <span className={`font-data-mono text-data-mono ${color}`}>{pct}%</span>;
+}
+
 export default function ProjectsPage() {
   const router = useRouter();
   const [year, setYear] = useState(new Date().getFullYear());
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [view, setView] = useState<'grid' | 'pnl'>('grid');
 
   const params = new URLSearchParams();
   if (year) params.set('year', String(year));
@@ -182,10 +196,21 @@ export default function ProjectsPage() {
             <p className="font-label-caps text-label-caps text-primary mb-2">{t('proj.label')}</p>
             <h2 className="font-headline text-headline-lg text-on-surface">{t('proj.title')}</h2>
           </div>
-          <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            {t('proj.new')}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex border border-outline-variant/20 bg-surface-container p-1">
+              {(['grid', 'pnl'] as const).map(v => (
+                <button key={v} onClick={() => setView(v)}
+                  className={`px-3 py-1.5 font-label-caps text-label-caps transition-colors flex items-center gap-1.5 ${view === v ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'}`}>
+                  <span className="material-symbols-outlined text-[14px]">{v === 'grid' ? 'grid_view' : 'bar_chart'}</span>
+                  {v === 'grid' ? 'Карти' : 'P&L'}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px]">add</span>
+              {t('proj.new')}
+            </button>
+          </div>
         </section>
 
         <div className="space-y-6">
@@ -242,7 +267,7 @@ export default function ProjectsPage() {
             <div className="bg-surface-container-low border border-outline-variant/10 p-12 text-center text-on-surface-variant">
               {t('proj.none')}
             </div>
-          ) : (
+          ) : view === 'grid' ? (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {filtered.map((project, index) => (
                 <button
@@ -272,22 +297,104 @@ export default function ProjectsPage() {
                         <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant">Година {project.year}</p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+                      <div className="grid grid-cols-3 gap-2 border-t border-white/10 pt-4">
                         <div>
-                          <p className="font-label-caps text-label-caps text-on-surface-variant">{t('proj.revenue')}</p>
-                          <p className="mt-2 font-data-mono text-data-mono text-on-surface">
-                            {(project.revenue || 0).toLocaleString('bg-BG', { minimumFractionDigits: 0 })} BGN
+                          <p className="font-label-caps text-[8px] text-on-surface-variant">ПРИХОДИ</p>
+                          <p className="mt-1 font-data-mono text-[11px] text-on-surface">
+                            {(project.revenueBGN || 0).toLocaleString('bg-BG')} лв.
                           </p>
                         </div>
                         <div>
-                          <p className="font-label-caps text-label-caps text-on-surface-variant">{t('proj.invoices')}</p>
-                          <p className="mt-2 font-data-mono text-data-mono text-on-surface">{project.invoiceCount ?? 0}</p>
+                          <p className="font-label-caps text-[8px] text-on-surface-variant">РАЗХОДИ</p>
+                          <p className="mt-1 font-data-mono text-[11px] text-on-surface">
+                            {(project.costsBGN || 0).toLocaleString('bg-BG')} лв.
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-label-caps text-[8px] text-on-surface-variant">МАРЖ</p>
+                          <p className={`mt-1 font-data-mono text-[13px] font-bold ${
+                            project.marginPct === null ? 'text-on-surface-variant/40'
+                            : project.marginPct >= 30 ? 'text-primary'
+                            : project.marginPct >= 10 ? 'text-warning'
+                            : 'text-error'
+                          }`}>
+                            {project.marginPct !== null ? `${project.marginPct}%` : '—'}
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
                 </button>
               ))}
+            </div>
+          ) : (
+            // ── P&L TABLE VIEW ──────────────────────────────────────────────────
+            <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+              {/* totals header */}
+              {(() => {
+                const totalRev = filtered.reduce((s, p) => s + (p.revenueBGN || 0), 0);
+                const totalCost = filtered.reduce((s, p) => s + (p.costsBGN || 0), 0);
+                const totalProfit = totalRev - totalCost;
+                const totalMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 100) : null;
+                return (
+                  <div className="grid grid-cols-4 gap-px bg-outline-variant/5 border-b border-outline-variant/10">
+                    {[
+                      { label: 'ОБЩО ПРИХОДИ', value: fmtBGN(totalRev), color: 'text-primary' },
+                      { label: 'ОБЩО РАЗХОДИ', value: fmtBGN(totalCost), color: 'text-on-surface' },
+                      { label: 'БРУТНА ПЕЧАЛБА', value: fmtBGN(totalProfit), color: totalProfit >= 0 ? 'text-primary' : 'text-error' },
+                      { label: 'СРЕДЕН МАРЖ', value: totalMargin !== null ? `${totalMargin}%` : '—', color: (totalMargin ?? 0) >= 20 ? 'text-primary' : 'text-warning' },
+                    ].map(s => (
+                      <div key={s.label} className="p-5">
+                        <p className="font-label-caps text-[9px] text-on-surface-variant/60">{s.label}</p>
+                        <p className={`font-headline text-headline-sm mt-1 ${s.color}`}>{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="table-header">КОД</th>
+                    <th className="table-header">ПРОЕКТ</th>
+                    <th className="table-header">КЛИЕНТ</th>
+                    <th className="table-header">СТАТУС</th>
+                    <th className="table-header text-right">ПРИХОДИ (лв.)</th>
+                    <th className="table-header text-right">РАЗХОДИ (лв.)</th>
+                    <th className="table-header text-right">ПЕЧАЛБА (лв.)</th>
+                    <th className="table-header text-right">МАРЖ</th>
+                    <th className="table-header text-center">ФАКТУРИ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...filtered]
+                    .sort((a, b) => (b.revenueBGN || 0) - (a.revenueBGN || 0))
+                    .map(p => (
+                    <tr key={p.id} onClick={() => router.push(`/projects/${p.id}`)}
+                      className="hover:bg-surface-container transition-colors cursor-pointer">
+                      <td className="table-cell font-mono text-xs text-primary">{p.code}</td>
+                      <td className="table-cell font-medium text-on-surface max-w-[200px] truncate">{p.name}</td>
+                      <td className="table-cell text-on-surface-variant text-sm">{p.client?.name || '—'}</td>
+                      <td className="table-cell">
+                        <ProjectStatusBadge status={p.status} activeLabel="АКТИВЕН" />
+                      </td>
+                      <td className="table-cell text-right font-mono text-sm text-primary">
+                        {(p.revenueBGN || 0).toLocaleString('bg-BG')}
+                      </td>
+                      <td className="table-cell text-right font-mono text-sm text-on-surface">
+                        {(p.costsBGN || 0).toLocaleString('bg-BG')}
+                      </td>
+                      <td className={`table-cell text-right font-mono text-sm font-semibold ${(p.profitBGN || 0) >= 0 ? 'text-primary' : 'text-error'}`}>
+                        {(p.profitBGN || 0).toLocaleString('bg-BG')}
+                      </td>
+                      <td className="table-cell text-right">
+                        <MarginBadge pct={p.marginPct} />
+                      </td>
+                      <td className="table-cell text-center text-on-surface-variant text-sm">{p.invoiceCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

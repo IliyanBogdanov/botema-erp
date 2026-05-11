@@ -643,4 +643,143 @@ router.post('/purchases-to-bizdocs', auth, adminOnly, async (req, res) => {
   })();
 });
 
+// POST /api/backfill/link-counterparties
+// Fuzzy-matches bank-imported counterparties (type: OTHER) to known suppliers (type: SUPPLIER)
+// and re-links Payment records so reconciliation Step 2 (counterparty+amount) can work.
+router.post('/link-counterparties', auth, adminOnly, async (req, res) => {
+  const { dryRun = false } = req.body || {};
+
+  // Keyword map: patterns in bank name → supplier canonical name (lowercase)
+  const BANK_TO_SUPPLIER = [
+    { patterns: ['лодес', 'lodes'],                                       name: 'Lodes' },
+    { patterns: ['алфалуче', 'alphaluce', 'алфа луче'],                   name: 'Alphaluce' },
+    { patterns: ['поларис', 'polaris'],                                    name: 'Polaris' },
+    { patterns: ['новалуче', 'novaluce'],                                  name: 'Novaluce' },
+    { patterns: ['ака лайтинг', 'aca lighting', 'ака'],                   name: 'ACA Lighting' },
+    { patterns: ['амбиентек', 'ambientec'],                                name: 'Ambientec' },
+    { patterns: ['антракс', 'antrax'],                                     name: 'Antrax' },
+    { patterns: ['седап', 'atelier sedap', 'ателие седап'],                name: 'Atelier Sedap' },
+    { patterns: ['братя брага', 'fratelli braga', 'braga'],               name: 'Fratelli Braga' },
+    { patterns: ['формани', 'formani'],                                    name: 'Formani' },
+    { patterns: ['каримоку', 'karimoku'],                                  name: 'Karimoku' },
+    { patterns: ['kraab', 'краб'],                                         name: 'Kraab' },
+    { patterns: ['совет итали', 'sovet'],                                  name: 'Sovet Italia' },
+    { patterns: ['дхл', 'dhl express'],                                    name: 'DHL' },
+    { patterns: ['омега лайт', 'omega light', 'omega'],                   name: 'Omega Light' },
+    { patterns: ['спиди', 'speedy'],                                       name: 'Speedy' },
+    { patterns: ['зиета', 'zieta'],                                        name: 'Zieta' },
+    { patterns: ['макро', 'macro'],                                        name: 'Macro' },
+    { patterns: ['микроинвест', 'microinvest'],                           name: 'Microinvest' },
+    { patterns: ['еконт', 'econt'],                                        name: 'Econt' },
+    { patterns: ['дхл', 'dhl'],                                            name: 'DHL' },
+    { patterns: ['боналдо', 'bonaldo'],                                    name: 'Bonaldo' },
+    { patterns: ['топ диджитал', 'top digital'],                          name: 'Top Digital' },
+    { patterns: ['фейсбук', 'facebook', 'meta'],                          name: 'Facebook/Meta Ads' },
+    { patterns: ['гугъл', 'google ads', 'google'],                        name: 'Google Ads' },
+    { patterns: ['супърхостинг', 'superhosting'],                         name: 'Superhosting' },
+    { patterns: ['нест студио', 'nest studio'],                           name: 'Nest Studio' },
+    { patterns: ['ултралайт', 'ultralight', 'рашев', 'rashev'],           name: 'Rashev Ultralight' },
+    { patterns: ['зира дизайн', 'zira design'],                          name: 'Zira Design' },
+    { patterns: ['наем', 'rent', 'шоурум', 'showroom', 'наемател'],      name: 'Наем/Шоурум' },
+    { patterns: ['счетоводн', 'accountan', 'одитор'],                    name: 'Счетоводство' },
+    { patterns: ['ват ', 'watt', 'ватт'],                                  name: 'Watt' },
+  ];
+
+  function normalizeBankName(name) {
+    return (name || '')
+      .toLowerCase()
+      .replace(/["“”]/g, '')
+      .replace(/\bеоод\b|\bоод\b|\bад\b|\bет\b|\bдззд\b|\bgmbh\b|\bltd\b|\bllc\b|\bs\.a\b|\binc\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function matchSupplier(bankName) {
+    const norm = normalizeBankName(bankName);
+    for (const { patterns, name } of BANK_TO_SUPPLIER) {
+      if (patterns.some(p => norm.includes(p))) return name;
+    }
+    return null;
+  }
+
+  const jobId = `link-cp-${Date.now()}`;
+  const job = { jobId, type: 'link-counterparties', status: 'running', started: new Date(), log: [], result: null };
+  jobs[jobId] = job;
+
+  res.json({ accepted: true, jobId, message: `CP linking started. Poll GET /api/backfill/job/${jobId}` });
+
+  (async () => {
+    const log = msg => {
+      console.log('[link-cp]', msg);
+      job.log.push(msg);
+      if (job.log.length > 300) job.log.shift();
+    };
+
+    try {
+      // Get all bank-imported counterparties (type OTHER)
+      const bankCPs = await prisma.counterparty.findMany({
+        where: { type: 'OTHER' },
+        select: { id: true, name: true },
+      });
+      log(`Found ${bankCPs.length} bank counterparties to process`);
+
+      // Cache of supplier counterparties we find/create
+      const supplierCpCache = {};
+      const findOrCreateSupplierCp = async (supplierName) => {
+        if (supplierCpCache[supplierName]) return supplierCpCache[supplierName];
+        let cp = await prisma.counterparty.findFirst({
+          where: { name: { equals: supplierName, mode: 'insensitive' }, type: 'SUPPLIER' },
+          select: { id: true },
+        });
+        if (!cp) {
+          cp = await prisma.counterparty.create({
+            data: { name: supplierName, type: 'SUPPLIER', country: 'BG', currency: 'EUR' },
+            select: { id: true },
+          });
+          log(`  [NEW SUPPLIER CP] ${supplierName}`);
+        }
+        supplierCpCache[supplierName] = cp;
+        return cp;
+      };
+
+      let linked = 0, noMatch = 0, paymentsUpdated = 0;
+
+      for (const bankCp of bankCPs) {
+        const supplierName = matchSupplier(bankCp.name);
+        if (!supplierName) {
+          noMatch++;
+          continue;
+        }
+
+        const supplierCp = await findOrCreateSupplierCp(supplierName);
+        log(`  MATCH: "${bankCp.name}" → "${supplierName}" (${supplierCp.id})`);
+        linked++;
+
+        if (!dryRun) {
+          // Re-point all Payments from this bank CP to the supplier CP
+          const updateResult = await prisma.payment.updateMany({
+            where: { counterpartyId: bankCp.id },
+            data: { counterpartyId: supplierCp.id },
+          });
+          paymentsUpdated += updateResult.count;
+
+          // Also update the bank CP type to avoid re-processing
+          await prisma.counterparty.update({
+            where: { id: bankCp.id },
+            data: { type: 'OTHER', notes: `Linked to ${supplierName} (${supplierCp.id})` },
+          });
+        }
+      }
+
+      job.status = 'done';
+      job.result = { bankCPsProcessed: bankCPs.length, linked, noMatch, paymentsUpdated, dryRun };
+      log(`Done: ${linked} matched, ${noMatch} unmatched, ${paymentsUpdated} payments re-linked`);
+    } catch (err) {
+      job.status = 'error';
+      job.error = err.message;
+      log(`FATAL: ${err.message}`);
+    }
+  })();
+});
+
 module.exports = router;

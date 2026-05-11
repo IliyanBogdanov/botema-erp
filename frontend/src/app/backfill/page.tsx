@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Database, Mail, FolderOpen, RefreshCw, CheckCircle, Clock, AlertCircle, Upload } from 'lucide-react';
+import { Database, Mail, FolderOpen, RefreshCw, CheckCircle, Clock, AlertCircle, Upload, Link2, ArrowRightLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -72,6 +72,47 @@ export default function BackfillPage() {
       addLog('❌ Невалиден JSON');
     }
   };
+
+  // Reconciliation tools state
+  const [reconJobId, setReconJobId] = useState<string | null>(null);
+  const [reconJob, setReconJob] = useState<any>(null);
+
+  useEffect(() => {
+    if (!reconJobId || reconJob?.status === 'done' || reconJob?.status === 'error') return;
+    const iv = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/backfill/job/${reconJobId}`);
+        setReconJob(data);
+        if (data.status === 'done' || data.status === 'error') {
+          clearInterval(iv);
+          addLog(data.status === 'done'
+            ? `✅ ${data.type}: ${JSON.stringify(data.result)}`
+            : `❌ ${data.type}: ${data.error}`);
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [reconJobId, reconJob?.status]);
+
+  const migratePurchases = useMutation({
+    mutationFn: () => api.post('/backfill/purchases-to-bizdocs', { includePurchases: true, includeInvoices: true }).then(r => r.data),
+    onSuccess: (data: any) => {
+      addLog(`⏳ Migration started (job: ${data.jobId})`);
+      setReconJobId(data.jobId);
+      setReconJob({ status: 'running', log: [] });
+    },
+    onError: (e: any) => addLog(`❌ Migration грешка: ${e.message}`),
+  });
+
+  const linkCounterparties = useMutation({
+    mutationFn: () => api.post('/backfill/link-counterparties', { dryRun: false }).then(r => r.data),
+    onSuccess: (data: any) => {
+      addLog(`⏳ CP linking started (job: ${data.jobId})`);
+      setReconJobId(data.jobId);
+      setReconJob({ status: 'running', log: [] });
+    },
+    onError: (e: any) => addLog(`❌ CP linking грешка: ${e.message}`),
+  });
 
   const summary = coverage?.summary;
 
@@ -198,6 +239,64 @@ export default function BackfillPage() {
             style={{ width: '100%', padding: '10px 0', background: '#30d158', border: 'none', borderRadius: 8, color: '#000', fontWeight: 600, cursor: (!driveFolder.id || driveBackfillMut.isPending) ? 'not-allowed' : 'pointer', opacity: (!driveFolder.id || driveBackfillMut.isPending) ? 0.6 : 1 }}>
             {driveBackfillMut.isPending ? 'Сканира...' : 'Сканирай папка'}
           </button>
+        </div>
+      </div>
+
+      {/* ── Reconciliation Tools ──────────────────────────────────────────── */}
+      <div style={{ background: '#1c1c1e', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ArrowRightLeft size={16} /> Reconciliation Tools
+        </h2>
+        <p style={{ fontSize: 12, color: '#8e8e93', marginBottom: 14 }}>
+          Стъпки за настройка на bank reconciliation: (1) мигрирай → (2) свържи CP → (3) пусни Auto-Match в Reconciliation страницата
+        </p>
+
+        {/* Job progress */}
+        {reconJob && reconJob.status === 'running' && (
+          <div style={{ background: '#2c2c2e', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0a84ff', fontSize: 13, marginBottom: 6 }}>
+              <RefreshCw size={13} className="animate-spin" /> В процес...
+            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#ebebf5cc', maxHeight: 80, overflow: 'auto' }}>
+              {reconJob.log?.slice(-8).map((l: string, i: number) => <div key={i}>{l}</div>)}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {/* Step 1: Migrate purchases */}
+          <div style={{ background: '#2c2c2e', borderRadius: 8, padding: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ background: '#0a84ff', color: '#fff', width: 20, height: 20, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>1</span>
+              Покупки → BizDocuments
+            </div>
+            <p style={{ fontSize: 11, color: '#8e8e93', marginBottom: 10 }}>
+              Конвертира 259 Purchase + 69 Invoice записа в BizDocument модела. Нужно еднократно.
+            </p>
+            <button
+              onClick={() => migratePurchases.mutate()}
+              disabled={migratePurchases.isPending || reconJob?.status === 'running'}
+              style={{ width: '100%', padding: '9px 0', background: '#0a84ff', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: (migratePurchases.isPending || reconJob?.status === 'running') ? 0.5 : 1 }}>
+              {reconJob?.status === 'running' ? 'В процес...' : 'Мигрирай'}
+            </button>
+          </div>
+
+          {/* Step 2: Link counterparties */}
+          <div style={{ background: '#2c2c2e', borderRadius: 8, padding: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ background: '#30d158', color: '#000', width: 20, height: 20, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>2</span>
+              Свържи банкови контрагенти
+            </div>
+            <p style={{ fontSize: 11, color: '#8e8e93', marginBottom: 10 }}>
+              Fuzzy match 120 банкови контрагенти (ЛОДЕС ЕООД) → наши доставчици (Lodes). Подобрява Step 2 matching.
+            </p>
+            <button
+              onClick={() => linkCounterparties.mutate()}
+              disabled={linkCounterparties.isPending || reconJob?.status === 'running'}
+              style={{ width: '100%', padding: '9px 0', background: '#30d158', border: 'none', borderRadius: 8, color: '#000', fontWeight: 600, cursor: 'pointer', opacity: (linkCounterparties.isPending || reconJob?.status === 'running') ? 0.5 : 1 }}>
+              {reconJob?.status === 'running' ? 'В процес...' : 'Свържи контрагенти'}
+            </button>
+          </div>
         </div>
       </div>
 
