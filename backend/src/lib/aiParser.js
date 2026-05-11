@@ -369,7 +369,7 @@ Return ONLY valid JSON, no explanation.
   "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
 }`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
   const tryGemini = async (retries = 2) => {
     try {
@@ -382,8 +382,9 @@ Return ONLY valid JSON, no explanation.
       if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
       return JSON.parse(jsonMatch[0]);
     } catch (err) {
-      const is429 = err.status === 429 || (err.message && err.message.includes('429'));
-      if (is429 && retries > 0) {
+      const msg = (err.message || '').toLowerCase();
+      const isRateLimit = err.status === 429 || msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('rate limit') || msg.includes('quota');
+      if (isRateLimit && retries > 0) {
         await new Promise(r => setTimeout(r, 65000));
         return tryGemini(retries - 1);
       }
