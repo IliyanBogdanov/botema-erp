@@ -14,7 +14,10 @@ interface Supplier {
   email?: string;
   phone?: string;
   notes?: string;
-  _count?: { purchases: number };
+  purchaseCount: number;
+  totalSpentEur: number;
+  totalSpentBgn: number;
+  filteredPurchaseCount: number;
 }
 
 const modalLabelClass = 'block font-label-caps text-label-caps text-on-surface-variant mb-1.5';
@@ -132,7 +135,8 @@ export default function SuppliersPage() {
   const openEdit = (s: Supplier) => { setEditing(s); setModalOpen(true); };
   const closeModal = () => { setModalOpen(false); setEditing(null); };
 
-  const totalPurchases = suppliers.reduce((sum, supplier) => sum + (supplier._count?.purchases || 0), 0);
+  const totalPurchases = suppliers.reduce((sum, supplier) => sum + (supplier.purchaseCount || 0), 0);
+  const totalSpentEur = suppliers.reduce((sum, s) => sum + (s.totalSpentEur || 0), 0);
   const currencies = new Set(suppliers.map(supplier => supplier.currency).filter(Boolean)).size;
   const countryCounts = suppliers.reduce<Record<string, number>>((acc, supplier) => {
     const country = supplier.country?.trim();
@@ -157,8 +161,8 @@ export default function SuppliersPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label={t('sup.totalSuppliers')} value={String(suppliers.length)} sub={`${filtered.length} видими`} />
-          <MetricCard label={t('sup.totalOrders')} value={String(totalPurchases)} sub="свързани покупки" />
-          <MetricCard label="Валути" value={String(currencies)} sub="активни валути" />
+          <MetricCard label={t('sup.totalOrders')} value={String(totalPurchases)} sub="общо покупки" />
+          <MetricCard label="Общо разходи" value={`€${totalSpentEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}`} sub="EUR всички години" />
           <MetricCard label="Водеща държава" value={topCountry} sub="по брой доставчици" />
         </div>
 
@@ -182,7 +186,8 @@ export default function SuppliersPage() {
                   <th className="table-header">{t('sup.colCurrency')}</th>
                   <th className="table-header">{t('sup.colDiscount')}</th>
                   <th className="table-header">{t('sup.colEmail')}</th>
-                  <th className="table-header text-right">{t('sup.colOrders')}</th>
+                  <th className="table-header text-right">ПОКУПКИ</th>
+                  <th className="table-header text-right">ИЗРАЗХОДВАНО EUR</th>
                   <th className="table-header w-16"></th>
                 </tr>
               </thead>
@@ -219,7 +224,14 @@ export default function SuppliersPage() {
                       </td>
                       <td className="table-cell text-on-surface-variant">{s.discount || '—'}</td>
                       <td className="table-cell text-on-surface-variant">{s.email || '—'}</td>
-                      <td className="table-cell text-right font-data-mono text-data-mono">{s._count?.purchases || 0}</td>
+                      <td className="table-cell text-right font-data-mono text-data-mono text-on-surface-variant">{s.purchaseCount || 0}</td>
+                      <td className="table-cell text-right">
+                        {s.totalSpentEur > 0 ? (
+                          <span className="font-mono text-sm font-semibold text-primary">
+                            €{s.totalSpentEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                          </span>
+                        ) : <span className="text-on-surface-variant/30">—</span>}
+                      </td>
                       <td className="table-cell">
                         <button onClick={() => openEdit(s)} className="ml-auto flex h-9 w-9 items-center justify-center text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface">
                           <span className="material-symbols-outlined text-[20px]">edit</span>

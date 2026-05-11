@@ -134,4 +134,62 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /api/invoices/mark-overdue — auto-mark PENDING invoices past dueDate as OVERDUE
+router.post('/mark-overdue', auth, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const result = await prisma.invoice.updateMany({
+      where: { status: 'PENDING', dueDate: { lt: today } },
+      data: { status: 'OVERDUE' },
+    });
+    res.json({ marked: result.count, asOf: today.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/invoices/aging — aging report (days overdue) for non-paid invoices
+router.get('/aging', auth, async (req, res) => {
+  try {
+    const today = new Date();
+    const invoices = await prisma.invoice.findMany({
+      where: { status: { in: ['PENDING', 'OVERDUE'] } },
+      include: { client: { select: { id: true, name: true } } },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const result = invoices.map(inv => {
+      const due = inv.dueDate ? new Date(inv.dueDate) : null;
+      const daysOverdue = due ? Math.floor((today.getTime() - due.getTime()) / 86400000) : null;
+      return {
+        id: inv.id,
+        number: inv.number,
+        date: inv.date,
+        dueDate: inv.dueDate,
+        status: inv.status,
+        amountTotal: Number(inv.amountTotal),
+        currency: inv.currency,
+        clientName: inv.client?.name || null,
+        daysOverdue,
+        bucket: daysOverdue === null ? 'NO_DUE_DATE'
+          : daysOverdue <= 0 ? 'CURRENT'
+          : daysOverdue <= 30 ? '1-30_DAYS'
+          : daysOverdue <= 60 ? '31-60_DAYS'
+          : daysOverdue <= 90 ? '61-90_DAYS'
+          : 'OVER_90_DAYS',
+      };
+    });
+
+    const summary = result.reduce((acc, inv) => {
+      acc[inv.bucket] = (acc[inv.bucket] || 0) + inv.amountTotal;
+      return acc;
+    }, {});
+
+    res.json({ invoices: result, summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

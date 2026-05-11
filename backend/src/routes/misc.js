@@ -26,10 +26,50 @@ expensesRouter.delete('/:id', auth, async (req, res) => {
 
 // ─── Suppliers ────────────────────────────────────────────────────────────────
 const suppliersRouter = express.Router();
+const EUR_RATE = 1.95583;
 
 suppliersRouter.get('/', auth, async (req, res) => {
-  const suppliers = await prisma.supplier.findMany({ orderBy: { name: 'asc' } });
-  res.json(suppliers);
+  const { year } = req.query;
+  const dateFilter = year
+    ? { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) } }
+    : {};
+
+  const [suppliers, purchaseTotals] = await Promise.all([
+    prisma.supplier.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { purchases: true } } },
+    }),
+    prisma.purchase.groupBy({
+      by: ['supplierId', 'currency'],
+      where: dateFilter,
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+  ]);
+
+  // Aggregate totals per supplier in EUR
+  const spendMap = {};
+  const countMap = {};
+  for (const row of purchaseTotals) {
+    const eur = row.currency === 'BGN'
+      ? Number(row._sum.amount) / EUR_RATE
+      : Number(row._sum.amount);
+    spendMap[row.supplierId] = (spendMap[row.supplierId] || 0) + eur;
+    countMap[row.supplierId] = (countMap[row.supplierId] || 0) + (row._count.id || 0);
+  }
+
+  const enriched = suppliers.map(s => ({
+    ...s,
+    purchaseCount: s._count.purchases,
+    totalSpentEur: Math.round((spendMap[s.id] || 0) * 100) / 100,
+    totalSpentBgn: Math.round((spendMap[s.id] || 0) * EUR_RATE * 100) / 100,
+    filteredPurchaseCount: countMap[s.id] || 0,
+  }));
+
+  // Sort by spend descending
+  enriched.sort((a, b) => b.totalSpentEur - a.totalSpentEur);
+
+  res.json(enriched);
 });
 
 suppliersRouter.post('/', auth, async (req, res) => {

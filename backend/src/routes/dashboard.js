@@ -35,6 +35,8 @@ router.get('/', auth, async (req, res) => {
       recentInvoices,
       projectStats,
       invoiceCount,
+      paymentStats,
+      overdueResult,
     ] = await Promise.all([
       // Fetch individually so we can do proper currency conversion
       prisma.invoice.findMany({
@@ -85,6 +87,12 @@ router.get('/', auth, async (req, res) => {
       }),
       prisma.invoice.count({
         where: { date: { gte: startDate, lte: endDate }, status: { not: 'CANCELLED' } },
+      }),
+      prisma.payment.groupBy({ by: ['status'], _count: true }),
+      // Auto-mark overdue invoices as side-effect
+      prisma.invoice.updateMany({
+        where: { status: 'PENDING', dueDate: { lt: new Date() } },
+        data: { status: 'OVERDUE' },
       }),
     ]);
 
@@ -163,6 +171,12 @@ router.get('/', auth, async (req, res) => {
         currency: invoice.currency,
       })),
       projectStats: Object.fromEntries(projectStats.map(p => [p.status, p._count.id])),
+      bankReconciliation: {
+        total: paymentStats.reduce((s, p) => s + (p._count || 0), 0),
+        matched: paymentStats.find(p => p.status === 'MATCHED')?._count || 0,
+        partial: paymentStats.find(p => p.status === 'PARTIAL')?._count || 0,
+        unmatched: paymentStats.find(p => p.status === 'UNMATCHED')?._count || 0,
+      },
     });
   } catch (err) {
     console.error(err);
