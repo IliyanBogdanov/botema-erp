@@ -3,6 +3,154 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
+function GoogleOAuthSection() {
+  const { data: status, isLoading, refetch } = useQuery({
+    queryKey: ['google-status'],
+    queryFn: () => api.get('/google/status').then(r => r.data),
+    refetchInterval: 10000,
+  });
+
+  const testDigest = useMutation({
+    mutationFn: () => api.post('/alerts/digest').then(r => r.data),
+  });
+
+  if (isLoading) return null;
+
+  const connected = status?.gmailOk && status?.driveOk;
+
+  return (
+    <div className="bg-surface-container-low border border-outline-variant/10 p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-label-caps text-label-caps text-on-surface">Google интеграция</h3>
+          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Gmail за email дайджест · Drive за документи
+          </p>
+        </div>
+        <div className={`flex items-center gap-2 px-3 py-1.5 border font-label-caps text-[10px] ${
+          connected
+            ? 'border-[#30d158]/30 bg-[#30d158]/10 text-[#30d158]'
+            : 'border-outline-variant/20 text-on-surface-variant'
+        }`}>
+          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-[#30d158] animate-pulse' : 'bg-on-surface-variant/30'}`} />
+          {connected ? 'СВЪРЗАН' : 'НЕ Е СВЪРЗАН'}
+        </div>
+      </div>
+
+      {connected ? (
+        <div className="space-y-3">
+          <div className="flex gap-2 text-[10px] font-label-caps text-on-surface-variant">
+            <span className={`flex items-center gap-1 ${status.gmailOk ? 'text-[#30d158]' : 'text-error'}`}>
+              <span className="material-symbols-outlined text-[14px]">{status.gmailOk ? 'check_circle' : 'cancel'}</span>
+              Gmail
+            </span>
+            <span className={`flex items-center gap-1 ${status.driveOk ? 'text-[#30d158]' : 'text-error'}`}>
+              <span className="material-symbols-outlined text-[14px]">{status.driveOk ? 'check_circle' : 'cancel'}</span>
+              Drive
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => testDigest.mutate()}
+              disabled={testDigest.isPending}
+              className="btn-secondary text-xs py-1.5 px-4 flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[14px]">forward_to_inbox</span>
+              {testDigest.isPending ? 'Изпращане…' : 'Тест дайджест'}
+            </button>
+            {testDigest.isSuccess && (
+              <span className="font-label-caps text-[10px] text-[#30d158] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                {(testDigest.data as any)?.skipped ? 'Няма активни сигнали' : `Изпратен до ${(testDigest.data as any)?.recipient}`}
+              </span>
+            )}
+            {testDigest.isError && (
+              <span className="font-label-caps text-[10px] text-error flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">error</span>
+                Грешка при изпращане
+              </span>
+            )}
+          </div>
+          <p className="font-label-caps text-[10px] text-on-surface-variant/50">
+            Автоматичен дайджест: всеки ден в 08:30 ч. на {process.env.NEXT_PUBLIC_ALERT_EMAIL || 'ALERT_EMAIL_TO'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {!status?.hasClientId || !status?.hasSecret ? (
+            <div className="bg-error/10 border border-error/20 px-3 py-2 font-body-sm text-body-sm text-on-surface">
+              Липсват <code className="text-error">GOOGLE_CLIENT_ID</code> и <code className="text-error">GOOGLE_CLIENT_SECRET</code> в .env файла на backend-а.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Влез в Google акаунта на студиото, за да разрешиш достъп до Gmail и Drive.
+              </p>
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL}/api/google/login`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary inline-flex items-center gap-2 text-sm py-2 px-4"
+                onClick={() => setTimeout(() => refetch(), 5000)}
+              >
+                <span className="material-symbols-outlined text-[16px]">login</span>
+                Свържи с Google
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RatesSection() {
+  const { data: rates, isLoading } = useQuery({
+    queryKey: ['rates'],
+    queryFn: () => api.get('/rates').then(r => r.data),
+    staleTime: 60 * 60 * 1000,
+  });
+
+  return (
+    <div className="bg-surface-container-low border border-outline-variant/10 p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-label-caps text-label-caps text-on-surface">Валутни курсове</h3>
+          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            EUR/BGN е фиксиран с валутен борд · Останалите от ECB
+          </p>
+        </div>
+        {rates?.fetchedAt && (
+          <span className="font-label-caps text-[10px] text-on-surface-variant/50">
+            Актуализирани: {new Date(rates.fetchedAt).toLocaleTimeString('bg-BG', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="h-8 w-48 bg-surface-container-high animate-pulse" />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'EUR/BGN', value: rates?.eurBgn?.toFixed(5), note: 'фиксиран' },
+            { label: 'USD/EUR', value: rates?.usdEur ? (1 / rates.usdEur).toFixed(4) : '—', note: 'референтен' },
+            { label: 'GBP/EUR', value: rates?.gbpEur ? (1 / rates.gbpEur).toFixed(4) : '—', note: 'референтен' },
+            { label: 'CHF/EUR', value: rates?.chfEur ? (1 / rates.chfEur).toFixed(4) : '—', note: 'референтен' },
+          ].map(r => (
+            <div key={r.label} className="bg-surface-container p-3 border border-outline-variant/10">
+              <p className="font-label-caps text-[10px] text-on-surface-variant mb-1">{r.label}</p>
+              <p className="font-data-mono text-[16px] text-on-surface">{r.value ?? '—'}</p>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/50 mt-0.5">{r.note}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {rates?.error && (
+        <p className="font-label-caps text-[10px] text-error/70">{rates.note}</p>
+      )}
+    </div>
+  );
+}
+
 const BRANDS = [
   { value: 'STUDIO_BOTEMA', label: 'Studio Botema ЕООД' },
   { value: 'LUMINAVERA',    label: 'LuminaVera ЕООД' },
@@ -167,6 +315,9 @@ export default function SettingsPage() {
           За промяна на парола — свържете се с администратора.
         </p>
       </div>
+
+      <GoogleOAuthSection />
+      <RatesSection />
     </div>
   );
 }

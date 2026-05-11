@@ -178,8 +178,8 @@ export default function SuppliersPage() {
             />
           </div>
 
-          <div className="overflow-hidden bg-surface-container-low border border-outline-variant/10">
-            <table className="w-full">
+          <div className="overflow-x-auto bg-surface-container-low border border-outline-variant/10">
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr>
                   <th className="table-header">{t('sup.colSupplier')}</th>

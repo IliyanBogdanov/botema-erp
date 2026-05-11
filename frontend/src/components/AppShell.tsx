@@ -41,6 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isPrintPage = pathname?.endsWith('/print');
   const t = useT();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
@@ -113,11 +114,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar />
+      {/* Desktop sidebar — always visible md+ */}
+      <div className="hidden md:block">
+        <Sidebar />
+      </div>
+      {/* Mobile sidebar — overlay drawer */}
+      <div className="md:hidden">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
         <header className="h-16 px-gutter flex items-center justify-between bg-surface-dim border-b border-outline-variant/10 flex-shrink-0">
+          {/* Hamburger — mobile only */}
+          <button
+            className="md:hidden mr-3 p-2 text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <span className="material-symbols-outlined text-[24px]">menu</span>
+          </button>
+
           {/* Search */}
           <div className="flex items-center flex-1 max-w-xl" ref={searchRef}>
             <div className="relative w-full group">

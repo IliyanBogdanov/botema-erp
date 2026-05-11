@@ -154,8 +154,8 @@ export default function ExpensesPage() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="w-full">
+      <div className="card overflow-x-auto">
+        <table className="w-full min-w-[560px]">
           <thead>
             <tr>
               <th className="table-header">Дата</th>

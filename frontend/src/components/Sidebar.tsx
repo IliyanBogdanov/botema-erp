@@ -27,7 +27,12 @@ const navItems = [
   { key: 'nav.settings',   href: '/settings',  icon: 'settings' },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router   = useRouter();
   const { user, clearUser } = useAuthStore();
@@ -49,68 +54,104 @@ export function Sidebar() {
     router.replace('/login');
   };
 
+  const handleNavClick = () => {
+    onClose?.();
+  };
+
   return (
-    <aside className="h-screen w-72 flex-shrink-0 bg-surface-container-lowest flex flex-col py-gutter px-4 z-50">
-      {/* Brand */}
-      <div className="mb-10 px-2">
-        <h1 className="font-headline text-headline-md font-bold text-primary tracking-tight">
-          Studio Botema
-        </h1>
-        <p className="font-label-caps text-label-caps text-on-surface-variant/60 mt-1">
-          Interior Design ERP
-        </p>
-      </div>
+    <>
+      {/* Mobile backdrop */}
+      {open !== undefined && (
+        <div
+          className={`fixed inset-0 bg-black/60 z-40 md:hidden transition-opacity duration-300 ${
+            open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={onClose}
+        />
+      )}
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ key, href, icon, exact }) => {
-          const active = isActive(href, exact);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-4 py-3 font-label-caps text-label-caps transition-colors ${
-                active
-                  ? 'text-primary border-r-2 border-primary'
-                  : 'text-on-surface-variant hover:bg-surface-container-high'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[20px] flex-shrink-0">{icon}</span>
-              <span className="min-w-0 flex-1 truncate">{t(key)}</span>
-              {href === '/alerts' && alertCount > 0 && (
-                <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
-                  {alertCount > 9 ? '9+' : alertCount}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* New Project CTA + Logout */}
-      <div className="mt-auto space-y-2 px-0">
-        <Link
-          href="/projects"
-          className="block w-full bg-primary-container text-on-primary-container py-3 font-label-caps text-label-caps text-center hover:opacity-90 transition-opacity"
-        >
-          {t('nav.newProject')}
-        </Link>
-
-        {user && (
-          <div className="px-2 pt-3 border-t border-outline-variant/10">
-            <div className="text-on-surface font-body-sm text-body-sm truncate">{user.name}</div>
-            <div className="text-on-surface-variant/60 font-label-caps text-[10px] truncate">{user.email}</div>
-            <button
-              onClick={handleLogout}
-              className="mt-2 flex items-center gap-2 px-0 py-2 font-label-caps text-label-caps text-error hover:text-error/80 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-              <span>{t('nav.signOut')}</span>
-            </button>
+      <aside
+        className={`
+          h-screen w-72 flex-shrink-0 bg-surface-container-lowest flex flex-col py-gutter px-4 z-50
+          ${open !== undefined
+            ? `fixed top-0 left-0 transition-transform duration-300 md:static md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`
+            : 'relative'
+          }
+        `}
+      >
+        {/* Brand */}
+        <div className="mb-10 px-2 flex items-center justify-between">
+          <div>
+            <h1 className="font-headline text-headline-md font-bold text-primary tracking-tight">
+              Studio Botema
+            </h1>
+            <p className="font-label-caps text-label-caps text-on-surface-variant/60 mt-1">
+              Interior Design ERP
+            </p>
           </div>
-        )}
-      </div>
-    </aside>
+          {/* Close button — mobile only */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden p-2 text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              <span className="material-symbols-outlined text-[22px]">close</span>
+            </button>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 space-y-0.5 overflow-y-auto">
+          {navItems.map(({ key, href, icon, exact }) => {
+            const active = isActive(href, exact);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-4 py-3 font-label-caps text-label-caps transition-colors ${
+                  active
+                    ? 'text-primary border-r-2 border-primary'
+                    : 'text-on-surface-variant hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[20px] flex-shrink-0">{icon}</span>
+                <span className="min-w-0 flex-1 truncate">{t(key)}</span>
+                {href === '/alerts' && alertCount > 0 && (
+                  <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
+                    {alertCount > 9 ? '9+' : alertCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* New Project CTA + Logout */}
+        <div className="mt-auto space-y-2 px-0">
+          <Link
+            href="/projects"
+            onClick={handleNavClick}
+            className="block w-full bg-primary-container text-on-primary-container py-3 font-label-caps text-label-caps text-center hover:opacity-90 transition-opacity"
+          >
+            {t('nav.newProject')}
+          </Link>
+
+          {user && (
+            <div className="px-2 pt-3 border-t border-outline-variant/10">
+              <div className="text-on-surface font-body-sm text-body-sm truncate">{user.name}</div>
+              <div className="text-on-surface-variant/60 font-label-caps text-[10px] truncate">{user.email}</div>
+              <button
+                onClick={handleLogout}
+                className="mt-2 flex items-center gap-2 px-0 py-2 font-label-caps text-label-caps text-error hover:text-error/80 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+                <span>{t('nav.signOut')}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
-

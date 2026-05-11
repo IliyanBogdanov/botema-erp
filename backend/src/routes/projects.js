@@ -147,7 +147,24 @@ router.get('/:id', auth, async (req, res) => {
     },
   });
   if (!project) return res.status(404).json({ error: 'Not found' });
-  res.json(project);
+
+  const EUR_RATE = 1.95583;
+  const totalRevenueBGN = project.invoices.reduce((s, inv) => {
+    const total = Number(inv.amountTotal);
+    return s + (inv.currency === 'EUR' ? total * EUR_RATE : total);
+  }, 0);
+  const totalCostsBGN = project.purchases.reduce((s, p) => {
+    const amt = Number(p.amount);
+    return s + (p.currency === 'EUR' ? amt * EUR_RATE : amt);
+  }, 0);
+
+  res.json({
+    ...project,
+    totalRevenue: totalRevenueBGN,
+    totalCosts: totalCostsBGN,
+    margin: totalRevenueBGN - totalCostsBGN,
+    marginPct: totalRevenueBGN > 0 ? Math.round(((totalRevenueBGN - totalCostsBGN) / totalRevenueBGN) * 100) : null,
+  });
 });
 
 module.exports = router;

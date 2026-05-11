@@ -143,8 +143,8 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
               Добави ред
             </button>
           </div>
-          <div className="overflow-hidden rounded-xl border border-[#27272a]">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-xl border border-[#27272a]">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr>
                   <th className="table-header">Описание</th>
@@ -355,8 +355,8 @@ function AgingView() {
       </div>
 
       {/* Aging table */}
-      <div className="overflow-hidden bg-surface-container-low border border-outline-variant/10">
-        <table className="w-full">
+      <div className="overflow-x-auto bg-surface-container-low border border-outline-variant/10">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr>
               <th className="table-header">ФАКТУРА</th>
@@ -503,8 +503,8 @@ export default function InvoicesPage() {
             />
           </div>
 
-          <div className="overflow-hidden bg-surface-container-low border border-outline-variant/10">
-            <table className="w-full">
+          <div className="overflow-x-auto bg-surface-container-low border border-outline-variant/10">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr>
                   <th className="table-header">{t('inv.colNumber')}</th>

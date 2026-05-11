@@ -291,8 +291,8 @@ export default function PurchasesPage() {
         </div>
 
         {/* Data Table */}
-        <div className="bg-surface-container-low border border-outline-variant/10 overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="bg-surface-container-low border border-outline-variant/10 overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-surface-container-high">
                 {[t('pur.colDate'), t('pur.colSupplier'), t('pur.colInvoice'), t('pur.colAmount'), t('pur.colCurrency'), t('pur.colStatus'), ''].map(h => (

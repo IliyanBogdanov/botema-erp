@@ -61,6 +61,7 @@ const { companyRouter } = require('./routes/misc');
 app.use('/api/company', companyRouter);
 
 app.use('/api/search',  require('./routes/search'));
+app.use('/api/rates',   require('./routes/rates'));
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

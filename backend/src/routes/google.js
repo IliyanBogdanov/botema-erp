@@ -18,6 +18,7 @@ router.get('/login', (req, res) => {
     prompt: 'consent',
     scope: [
       'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/drive.readonly',
     ],
   });
@@ -32,6 +33,7 @@ router.get('/auth-url', async (req, res) => {
     prompt: 'consent',
     scope: [
       'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/drive.readonly',
     ],
   });
