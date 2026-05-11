@@ -1,198 +1,202 @@
 /**
- * Import offers (оферти) from Google Drive into BizDocuments.
+ * Import Botema outgoing offers from Google Drive.
  *
- * Searches Drive for files with "оферта"/"offer" in the name or in offer folders,
- * parses offer number from filename, creates OFFER_OUT BizDocument records.
+ * Finds files matching naming conventions:
+ *   ClientName_1717.NNN.pdf       (project-based offers)
+ *   Оферта_ClientName_YYMMDD.NN.pdf (date-based offers)
  *
- * Usage: node scripts/importOffersFromDrive.js [--dry-run] [--limit=200]
+ * Excludes orders, CI/PI docs, supplier files, internal sheets.
+ * Idempotent: checks by driveFileId (internalRef) and docNumber.
+ *
+ * Usage: node scripts/importOffersFromDrive.js [--dry-run]
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
-const { google } = require('googleapis');
-const { PrismaClient } = require('@prisma/client');
-
+require("dotenv").config();
+const { google } = require("googleapis");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const DRY_RUN = process.argv.includes('--dry-run');
-const LIMIT_ARG = process.argv.find(a => a.startsWith('--limit='));
-const LIMIT = LIMIT_ARG ? parseInt(LIMIT_ARG.split('=')[1]) : 500;
+const DRY_RUN = process.argv.includes("--dry-run");
 
-const MIN_OFFER_NUM = 1717;
-
-function getGoogleAuth() {
-  const oauth2 = new google.auth.OAuth2(
+function getAuth() {
+  const o = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     process.env.GOOGLE_REDIRECT_URI
   );
-  oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-  return oauth2;
+  o.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+  return o;
 }
 
-// Extract offer number from filename
-function extractOfferNumber(filename) {
-  const name = filename.replace(/\.[^.]+$/, '');
-
-  // Pattern: "Оферта 1717.1" or "offer 1718.2" or "1719.3 оферта"
-  const m1 = name.match(/(?:оферт[аи]|offer)[_\s\-#]*(\d{3,}(?:[._]\d+)?)/i);
-  if (m1) return m1[1].replace('_', '.');
-
-  const m2 = name.match(/(\d{4,}(?:[._]\d+)?)[_\s\-]*(?:оферт[аи]|offer)/i);
-  if (m2) return m2[1].replace('_', '.');
-
-  // Just 4+ digit number
-  const m3 = name.match(/\b(\d{4,}(?:[._]\d+)?)\b/);
-  if (m3) return m3[1].replace('_', '.');
-
-  return null;
+// Is this a Botema outgoing offer (not an order/CI/PI/internal file)?
+function isBotemaOffer(filename) {
+  const name = filename.toLowerCase();
+  // Exclude orders to suppliers, customs invoices, transport, inquiry forms, internal Lumina sheets
+  const excluded = ['order_', 'order ', 'ci ', 'ci_', 'pi ', 'pi_', 'invoice', 
+    'изписване', '_кодове', 'запитване', 'луминавера', 'speedy', 'dhl',
+    'pricelist', 'sale offer', 'specification_', 'transaction'];
+  return !excluded.some(e => name.includes(e));
 }
 
-function offerNumValue(str) {
-  return parseFloat(String(str || '0').replace(',', '.')) || 0;
-}
-
-// Extract date from filename (DD.MM.YYYY or YYYY-MM-DD patterns)
-function extractDateFromFilename(name) {
-  const m1 = name.match(/(\d{1,2})[._](\d{1,2})[._](\d{4})/);
-  if (m1) return new Date(`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}T00:00:00.000Z`);
-  const m2 = name.match(/(20\d{2})[._\-](\d{1,2})[._\-](\d{1,2})/);
-  if (m2) return new Date(`${m2[1]}-${m2[2].padStart(2,'0')}-${m2[3].padStart(2,'0')}T00:00:00.000Z`);
-  return null;
-}
-
-async function findCounterpartyFromPath(folderName, filename) {
-  const text = (folderName + ' ' + filename).replace(/оферт[аи]|offer|\d/gi, ' ').trim();
-  const words = text.split(/[\s_\-\.]+/).filter(w => w.length > 3);
-  for (const word of words) {
-    const c = await prisma.counterparty.findFirst({
-      where: { name: { contains: word, mode: 'insensitive' } },
-      select: { id: true, name: true },
-    });
-    if (c) return c;
+// Parse offer info from filename
+// Formats:
+//   ClientName_1717.NNN.pdf        → offerNum=1717.NNN, clientHint=ClientName
+//   Оферта_ClientName_YYMMDD.NN.pdf → offerNum=YYMMDD.NN, clientHint=ClientName
+//   ClientName_оферта_1717.NNN.pdf  → offerNum=1717.NNN, clientHint=ClientName
+function parseOfferFilename(filename) {
+  const base = filename.replace(/\.(pdf|xls|xlsx)$/i, '');
+  
+  // Pattern: something_1717.NNN (project-based offers)
+  const m1 = base.match(/^(.+?)_(?:оферта_)?(1717\.\d+)(?:[-_].*)?$/i);
+  if (m1) {
+    const clientHint = m1[1].replace(/_/g, ' ').trim();
+    return { offerNum: m1[2], clientHint };
   }
+  
+  // Pattern: Оферта_ClientName_YYMMDD.NN
+  const m2 = base.match(/^(?:оферта)_(.+?)_(\d{6}\.\d+)$/i);
+  if (m2) {
+    const clientHint = m2[1].replace(/_/g, ' ').trim();
+    return { offerNum: m2[2], clientHint };
+  }
+  
+  // Pattern: Оферта_ClientName_YYMMDD (no sub-number)
+  const m3 = base.match(/^(?:оферта)[_ ](.+?)_(\d{6})$/i);
+  if (m3) {
+    return { offerNum: m3[2], clientHint: m3[1].replace(/_/g, ' ') };
+  }
+  
+  return null;
+}
+
+// Parse date from YYMMDD string
+function parseYYMMDD(str) {
+  const yy = str.substring(0, 2);
+  const mm = str.substring(2, 4);
+  const dd = str.substring(4, 6);
+  const year = parseInt(yy) < 50 ? 2000 + parseInt(yy) : 1900 + parseInt(yy);
+  const d = new Date(`${year}-${mm}-${dd}T00:00:00.000Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+async function buildCounterpartyIndex() {
+  const all = await prisma.counterparty.findMany({ select: { id: true, name: true } });
+  const index = new Map();
+  for (const cp of all) {
+    const words = cp.name.toLowerCase().replace(/['"]/g, '').split(/[\s,\-\.\/\\]+/).filter(w => w.length >= 4);
+    for (const word of words) { if (!index.has(word)) index.set(word, cp); }
+    index.set(cp.name.toLowerCase().replace(/\s+/g, ' ').trim(), cp);
+  }
+  return index;
+}
+
+function findCounterparty(hint, index) {
+  if (!hint) return null;
+  const normalized = hint.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (index.has(normalized)) return index.get(normalized);
+  const words = hint.toLowerCase().split(/[\s_\-\.]+/).filter(w => w.length >= 4);
+  for (const w of words) { if (index.has(w)) return index.get(w); }
   return null;
 }
 
 async function getParentFolderName(drive, parentId) {
-  if (!parentId) return '';
-  try {
-    const res = await drive.files.get({ fileId: parentId, fields: 'name' });
-    return res.data.name || '';
-  } catch {
-    return '';
-  }
+  if (!parentId) return "";
+  try { return (await drive.files.get({ fileId: parentId, fields: "name" })).data.name || ""; }
+  catch { return ""; }
 }
 
 async function main() {
-  if (!process.env.GOOGLE_REFRESH_TOKEN) {
-    console.error('❌ GOOGLE_REFRESH_TOKEN not set in .env');
-    process.exit(1);
-  }
+  const drive = google.drive({ version: "v3", auth: getAuth() });
+  const cpIndex = await buildCounterpartyIndex();
 
-  const auth = getGoogleAuth();
-  const drive = google.drive({ version: 'v3', auth });
-
-  console.log('🔍 Searching Google Drive for offer files...');
-
-  // Search queries for Drive
-  const driveQueries = [
-    "name contains 'оферт' and trashed = false",
-    "name contains 'offer' and trashed = false",
-    "name contains 'Offer' and trashed = false",
-  ];
-
-  const allFiles = new Map(); // fileId → file metadata
-
-  for (const q of driveQueries) {
-    let pageToken;
-    do {
-      const res = await drive.files.list({
-        q,
-        fields: 'nextPageToken, files(id, name, createdTime, modifiedTime, parents, mimeType, webViewLink)',
-        pageSize: 100,
-        pageToken,
-      });
-      for (const f of (res.data.files || [])) {
-        allFiles.set(f.id, f);
-      }
-      pageToken = res.data.nextPageToken;
-    } while (pageToken && allFiles.size < LIMIT * 2);
-  }
-
-  console.log(`📁 Found ${allFiles.size} candidate files in Drive`);
-
-  // Get already-imported offers
-  const existingOffers = await prisma.bizDocument.findMany({
-    where: { docType: 'OFFER_OUT' },
-    select: { docNumber: true, notes: true },
+  // Get existing offer driveFileIds to avoid duplicates
+  const existing = await prisma.bizDocument.findMany({
+    where: { docType: "OFFER_OUT" },
+    select: { docNumber: true, internalRef: true }
   });
-  const existingNums = new Set(existingOffers.map(o => o.docNumber).filter(Boolean));
-  const existingDriveIds = new Set(
-    existingOffers
-      .map(o => { const m = (o.notes || '').match(/drive:([a-zA-Z0-9_\-]+)/); return m?.[1]; })
-      .filter(Boolean)
-  );
+  const existingNums = new Set(existing.map(e => e.docNumber).filter(Boolean));
+  const existingDriveIds = new Set(existing.map(e => e.internalRef).filter(Boolean));
 
-  let imported = 0;
-  let skipped = 0;
+  console.log("🔍 Scanning Drive for Botema offer files...");
+  
+  // Fetch all files matching our known patterns
+  const allFiles = [];
+  let pageToken;
+  do {
+    const res = await drive.files.list({
+      q: "(name contains 'Оферта_' or name contains 'оферта_' or name contains '1717') and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
+      fields: "nextPageToken, files(id, name, createdTime, parents)",
+      pageSize: 200,
+      pageToken
+    });
+    allFiles.push(...(res.data.files || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
 
-  for (const [fileId, file] of allFiles) {
-    if (existingDriveIds.has(fileId)) { skipped++; continue; }
+  console.log(`📁 Total candidate files: ${allFiles.length}`);
 
-    const filename = file.name || '';
-    const offerNum = extractOfferNumber(filename);
-    const numVal = offerNumValue(offerNum);
+  // Deduplicate by name (keep first occurrence)
+  const seenNames = new Set();
+  const uniqueFiles = [];
+  for (const f of allFiles) {
+    if (!seenNames.has(f.name)) { seenNames.add(f.name); uniqueFiles.push(f); }
+  }
+  console.log(`📁 Unique files: ${uniqueFiles.length}`);
 
-    // Skip files with number below minimum
-    if (offerNum && numVal > 0 && numVal < MIN_OFFER_NUM) {
-      skipped++;
-      continue;
+  let imported = 0, skipped = 0, excluded = 0;
+
+  for (const file of uniqueFiles) {
+    if (existingDriveIds.has(file.id)) { skipped++; continue; }
+    if (!isBotemaOffer(file.name)) { excluded++; continue; }
+    
+    const parsed = parseOfferFilename(file.name);
+    if (!parsed) { excluded++; continue; }
+    
+    const { offerNum, clientHint } = parsed;
+    if (existingNums.has(offerNum)) { skipped++; continue; }
+    
+    // Determine date
+    let docDate = null;
+    if (/^\d{6}/.test(offerNum)) {
+      docDate = parseYYMMDD(offerNum.substring(0, 6));
     }
+    if (!docDate && file.createdTime) {
+      docDate = new Date(file.createdTime);
+    }
+    if (docDate && isNaN(docDate.getTime())) docDate = null;
 
-    // Skip duplicate by number
-    if (offerNum && existingNums.has(offerNum)) { skipped++; continue; }
+    const cp = findCounterparty(clientHint, cpIndex);
+    const folderName = file.parents?.[0] ? await getParentFolderName(drive, file.parents[0]) : "";
 
-    // Skip folders
-    if (file.mimeType === 'application/vnd.google-apps.folder') continue;
-
-    // Get parent folder name for context
-    const parentId = file.parents?.[0];
-    const folderName = parentId ? await getParentFolderName(drive, parentId) : '';
-
-    const rawDate = extractDateFromFilename(filename)
-      || (file.createdTime ? new Date(file.createdTime) : null);
-    const docDate = rawDate instanceof Date && !isNaN(rawDate.getTime()) ? rawDate : null;
-
-    const client = await findCounterpartyFromPath(folderName, filename);
-
-    console.log(`  📄 ${filename.substring(0, 60)} | offer#: ${offerNum || '?'} | folder: ${folderName.substring(0, 30)}`);
+    console.log(`  ✅ ${file.name.substring(0, 55)} → #${offerNum} | ${cp?.name?.substring(0,25) || clientHint}`);
 
     if (!DRY_RUN) {
       await prisma.bizDocument.create({
         data: {
-          docType: 'OFFER_OUT',
-          docNumber: offerNum || null,
+          docType: "OFFER_OUT",
+          docNumber: offerNum,
           docDate,
-          status: 'REVIEWED',
-          counterpartyId: client?.id || null,
-          internalRef: fileId,
-          notes: `Drive: ${filename} | folder: ${folderName} | drive:${fileId}`,
-          confidence: offerNum ? 75 : 45,
-        },
+          status: "REVIEWED",
+          counterpartyId: cp?.id || null,
+          internalRef: file.id,
+          notes: `Drive: ${file.name} | folder: ${folderName} | drive:${file.id}`,
+          confidence: 85,
+        }
       });
-      if (offerNum) existingNums.add(offerNum);
+      existingNums.add(offerNum);
+      existingDriveIds.add(file.id);
     }
-
     imported++;
   }
 
   console.log(`\n✅ Done:`);
   console.log(`   Imported: ${imported}`);
-  console.log(`   Skipped: ${skipped}`);
-
+  console.log(`   Skipped (duplicate): ${skipped}`);
+  console.log(`   Excluded (not an offer): ${excluded}`);
+  
   if (!DRY_RUN) {
-    const total = await prisma.bizDocument.count({ where: { docType: 'OFFER_OUT' } });
+    const total = await prisma.bizDocument.count({ where: { docType: "OFFER_OUT" } });
     console.log(`📊 Total OFFER_OUT in DB: ${total}`);
   }
 }
-
 main().catch(console.error).finally(() => prisma.$disconnect());
+
