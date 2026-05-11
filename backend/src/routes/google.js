@@ -1,8 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { google } = require('googleapis');
-const fs = require('fs');
-const path = require('path');
 
 const getOAuth2Client = () => new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -52,23 +50,15 @@ router.get('/callback', async (req, res) => {
 
     if (!tokens.refresh_token) {
       return res.status(400).send(`
-        <h2>⚠️ No refresh_token returned</h2>
-        <p>Go to <a href="https://myaccount.google.com/permissions">Google Account Permissions</a>,
-        revoke access for this app, then try again.</p>
+        <html><body style="font-family:sans-serif;padding:40px;background:#111;color:#eee">
+        <h2 style="color:#ff9f0a">⚠️ Няма refresh_token</h2>
+        <p>Отвори <a href="https://myaccount.google.com/permissions" style="color:#0a84ff">Google Account Permissions</a>,
+        премахни достъпа за това приложение и опитай отново.</p>
+        </body></html>
       `);
     }
 
-    // Write to .env
-    const envPath = path.join(__dirname, '../../.env');
-    let envContent = fs.readFileSync(envPath, 'utf8');
-
-    if (envContent.includes('GOOGLE_REFRESH_TOKEN=')) {
-      envContent = envContent.replace(/GOOGLE_REFRESH_TOKEN=.*/,
-        `GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
-    } else {
-      envContent += `\nGOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`;
-    }
-    fs.writeFileSync(envPath, envContent);
+    // Set in memory for this process lifetime
     process.env.GOOGLE_REFRESH_TOKEN = tokens.refresh_token;
 
     console.log('[Google OAuth] ✅ refresh_token saved');
