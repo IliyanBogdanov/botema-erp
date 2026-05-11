@@ -72,6 +72,47 @@ suppliersRouter.get('/', auth, async (req, res) => {
   res.json(enriched);
 });
 
+suppliersRouter.get('/:id', auth, async (req, res) => {
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: req.params.id },
+    include: { _count: { select: { purchases: true } } },
+  });
+  if (!supplier) return res.status(404).json({ error: 'Not found' });
+
+  const purchases = await prisma.purchase.findMany({
+    where: { supplierId: req.params.id },
+    include: { project: { select: { id: true, code: true, name: true } } },
+    orderBy: { date: 'desc' },
+  });
+
+  const totalsByYear = purchases.reduce((acc, p) => {
+    const eur = p.currency === 'BGN' ? Number(p.amount) / EUR_RATE : Number(p.amount);
+    acc[p.year] = (acc[p.year] || 0) + eur;
+    return acc;
+  }, {});
+
+  const totalEur = Object.values(totalsByYear).reduce((s, v) => s + v, 0);
+
+  res.json({
+    ...supplier,
+    purchaseCount: supplier._count.purchases,
+    totalSpentEur: Math.round(totalEur * 100) / 100,
+    totalsByYear,
+    purchases: purchases.map(p => ({
+      id: p.id,
+      invoiceNo: p.invoiceNo,
+      date: p.date,
+      year: p.year,
+      amount: Number(p.amount),
+      currency: p.currency,
+      amountEur: p.currency === 'BGN' ? Number(p.amount) / EUR_RATE : Number(p.amount),
+      description: p.description,
+      status: p.status,
+      project: p.project,
+    })),
+  });
+});
+
 suppliersRouter.post('/', auth, async (req, res) => {
   const supplier = await prisma.supplier.create({ data: req.body });
   res.status(201).json(supplier);
