@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('./auth');
+const { auth } = require('../middleware/auth');
 
 // In-memory cache: { rates: {...}, fetchedAt: Date }
 let ratesCache = null;
