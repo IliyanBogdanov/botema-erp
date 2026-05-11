@@ -369,7 +369,7 @@ Return ONLY valid JSON, no explanation.
   "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
 }`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const tryGemini = async (retries = 2) => {
     try {

@@ -269,6 +269,7 @@ export default function DocumentsPage() {
   const [reviewDoc, setReviewDoc] = useState<Document | null>(null);
   const [reparseJobId, setReparseJobId] = useState<string | null>(null);
   const [reparseStatus, setReparseStatus] = useState<any>(null);
+  const [gmailScanStatus, setGmailScanStatus] = useState<any>(null);
   const t = useT();
   const statusTabs = getStatusTabs(t);
   const qc = useQueryClient();
@@ -298,6 +299,25 @@ export default function DocumentsPage() {
     }, 3000);
   };
 
+  const startGmailScan = async () => {
+    setGmailScanStatus({ status: 'running', done: 0, total: 0, documents: 0, bankTx: 0 });
+    try {
+      const resp = await api.post('/documents/gmail-scan').then(r => r.data);
+      const poll = setInterval(async () => {
+        try {
+          const job = await api.get(`/documents/gmail-scan-job/${resp.jobId}`).then(r => r.data);
+          setGmailScanStatus(job);
+          if (job.status === 'done' || job.status === 'error') {
+            clearInterval(poll);
+            qc.invalidateQueries({ queryKey: ['documents'] });
+          }
+        } catch { clearInterval(poll); }
+      }, 4000);
+    } catch (e: any) {
+      setGmailScanStatus({ status: 'error', error: e.message });
+    }
+  };
+
   return (
     <div className="p-container-padding">
       <div className="max-w-7xl mx-auto">
@@ -312,13 +332,17 @@ export default function DocumentsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {reparseStatus && (
-              <span className="font-label-caps text-label-caps text-on-surface-variant text-xs">
-                {reparseStatus.status === 'running'
+            {(reparseStatus || gmailScanStatus) && (
+              <span className="font-label-caps text-label-caps text-on-surface-variant text-xs max-w-[220px]">
+                {gmailScanStatus?.status === 'running'
+                  ? `Gmail: ${gmailScanStatus.done}/${gmailScanStatus.total} имейла…`
+                  : gmailScanStatus?.status === 'done'
+                  ? `✓ Gmail: ${gmailScanStatus.documents} документа, ${gmailScanStatus.bankTx} транзакции`
+                  : reparseStatus?.status === 'running'
                   ? `AI парсинг: ${reparseStatus.done}/${reparseStatus.total}…`
-                  : reparseStatus.status === 'done'
+                  : reparseStatus?.status === 'done'
                   ? `✓ ${reparseStatus.done} документа обработени`
-                  : `Грешка: ${reparseStatus.error}`}
+                  : null}
               </span>
             )}
             {activeStatus === 'PENDING' && (
@@ -328,9 +352,17 @@ export default function DocumentsPage() {
                 className="px-4 py-2.5 border border-primary/40 text-primary font-label-caps text-label-caps hover:bg-primary/10 transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 <span className={`material-symbols-outlined text-[18px] ${reparseStatus?.status === 'running' ? 'animate-spin' : ''}`}>auto_fix_high</span>
-                AI анализ на всички
+                AI анализ Drive
               </button>
             )}
+            <button
+              onClick={startGmailScan}
+              disabled={gmailScanStatus?.status === 'running'}
+              className="px-4 py-2.5 border border-secondary/40 text-secondary font-label-caps text-label-caps hover:bg-secondary/10 transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <span className={`material-symbols-outlined text-[18px] ${gmailScanStatus?.status === 'running' ? 'animate-spin' : ''}`}>mark_email_unread</span>
+              Сканирай Gmail
+            </button>
             <button className="px-6 py-3 border border-outline-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-colors flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]">upload_file</span>
               {t('doc.uploadBatch')}

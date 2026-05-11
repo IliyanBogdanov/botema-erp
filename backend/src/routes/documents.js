@@ -3,11 +3,12 @@ const { auth } = require('../middleware/auth');
 const { reviewDocument, analyzeDocument } = require('../lib/documentReview');
 const { generateAlerts } = require('../lib/alertEngine');
 const { downloadDriveFile, parseDocumentWithAI } = require('../lib/aiParser');
+const { scanGmail } = require('../lib/gmailScanner');
 const prisma = require('../lib/prisma');
 
 const router = express.Router();
 
-// In-memory job store for reparse jobs
+// In-memory job store for reparse/scan jobs
 const reparseJobs = {};
 
 router.get('/', auth, async (req, res) => {
@@ -215,6 +216,41 @@ router.post('/:id/review', auth, async (req, res) => {
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
+});
+
+// GET /api/documents/gmail-scan-job/:jobId — poll Gmail scan job
+router.get('/gmail-scan-job/:jobId', auth, (req, res) => {
+  const job = reparseJobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json(job);
+});
+
+// POST /api/documents/gmail-scan — scan Gmail for new documents and bank statements
+router.post('/gmail-scan', auth, async (req, res) => {
+  const jobId = `gmail-scan-${Date.now()}`;
+  const job = {
+    jobId, status: 'running',
+    done: 0, total: 0, errors: 0, skipped: 0,
+    documents: 0, bankTx: 0,
+    log: [], started: new Date(),
+  };
+  reparseJobs[jobId] = job;
+
+  res.json({ accepted: true, jobId, message: `Gmail scan started. Poll GET /api/documents/gmail-scan-job/${jobId}` });
+
+  (async () => {
+    try {
+      await scanGmail(prisma, job);
+      job.status = 'done';
+      job.finished = new Date();
+      job.log.push(`Done: ${job.documents} documents, ${job.bankTx} bank transactions, ${job.errors} errors`);
+    } catch (err) {
+      job.status = 'error';
+      job.error = err.message;
+      job.finished = new Date();
+      job.log.push(`Fatal: ${err.message}`);
+    }
+  })();
 });
 
 module.exports = router;

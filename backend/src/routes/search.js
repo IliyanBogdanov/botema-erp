@@ -11,7 +11,7 @@ router.get('/', auth, async (req, res) => {
 
     const term = q.trim();
 
-    const [clients, invoices, projects, suppliers, purchases] = await Promise.all([
+    const [clients, invoices, projects, suppliers, purchases, documents, counterparties] = await Promise.all([
       prisma.client.findMany({
         where: {
           OR: [
@@ -63,6 +63,33 @@ router.get('/', auth, async (req, res) => {
           supplier: { select: { name: true } },
         },
       }),
+      prisma.$queryRaw`
+        SELECT id, filename, type, status,
+               (extracted_data->>'invoiceNo') AS "invoiceNo",
+               (extracted_data->>'supplierName') AS "supplierName",
+               (extracted_data->>'amountTotal') AS "amountTotal",
+               (extracted_data->>'currency') AS currency,
+               (extracted_data->>'docDate') AS "docDate"
+        FROM documents
+        WHERE status != 'REJECTED'
+          AND (
+            LOWER(filename) LIKE LOWER(${`%${term}%`})
+            OR LOWER(extracted_data->>'invoiceNo') LIKE LOWER(${`%${term}%`})
+            OR LOWER(extracted_data->>'supplierName') LIKE LOWER(${`%${term}%`})
+            OR LOWER(extracted_data->>'description') LIKE LOWER(${`%${term}%`})
+          )
+        LIMIT 5
+      `,
+      prisma.counterparty.findMany({
+        where: {
+          OR: [
+            { name: { contains: term, mode: 'insensitive' } },
+            { eik: { contains: term } },
+          ],
+        },
+        take: 3,
+        select: { id: true, name: true, type: true, country: true },
+      }),
     ]);
 
     const results = [
@@ -105,6 +132,23 @@ router.get('/', auth, async (req, res) => {
         currency: p.currency,
         url: `/purchases/${p.id}`,
         icon: 'shopping_cart',
+      })),
+      ...(documents || []).map(d => ({
+        type: 'document', id: d.id,
+        title: d.invoiceNo || d.filename || d.id.slice(0, 8),
+        subtitle: d.supplierName || d.filename || 'Документ',
+        amount: d.amountTotal ? Number(d.amountTotal) : undefined,
+        currency: d.currency,
+        status: d.status,
+        url: `/documents`,
+        icon: 'description',
+      })),
+      ...(counterparties || []).map(c => ({
+        type: 'counterparty', id: c.id,
+        title: c.name,
+        subtitle: `${c.type} · ${c.country || 'BG'}`,
+        url: `/counterparties`,
+        icon: 'business',
       })),
     ];
 
