@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 import { useT } from '@/lib/i18n';
@@ -79,7 +79,26 @@ export default function ReconciliationPage() {
   const [bankPage, setBankPage] = useState(1);
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: number; currency?: string } | null>(null);
   const [matchResult, setMatchResult] = useState<{ matched: number; partial: number; unmatched: number; totalProcessed: number } | null>(null);
+  const [migJobId, setMigJobId] = useState<string | null>(null);
+  const [migJob, setMigJob] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Poll migration job status
+  useEffect(() => {
+    if (!migJobId || migJob?.status === 'done' || migJob?.status === 'error') return;
+    const iv = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/backfill/job/${migJobId}`);
+        setMigJob(data);
+        if (data.status === 'done' || data.status === 'error') {
+          clearInterval(iv);
+          qc.invalidateQueries({ queryKey: ['reconciliation-links'] });
+          qc.invalidateQueries({ queryKey: ['recon-stats'] });
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [migJobId, migJob?.status, qc]);
 
   const { data: links = [], isLoading: linksLoading } = useQuery({
     queryKey: ['reconciliation-links', linkTypeFilter],
@@ -119,7 +138,23 @@ export default function ReconciliationPage() {
     onSuccess: (data) => {
       setMatchResult(data);
       qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['recon-stats'] });
     },
+  });
+
+  const migratePurchases = useMutation({
+    mutationFn: () => api.post('/backfill/purchases-to-bizdocs', { includePurchases: true, includeInvoices: true }).then(r => r.data),
+    onSuccess: (data) => {
+      setMigJobId(data.jobId);
+      setMigJob({ status: 'running', log: [] });
+    },
+  });
+
+  const { data: reconStats } = useQuery({
+    queryKey: ['recon-stats', bankYear],
+    queryFn: () => api.get(`/reconciliation/stats?year=${bankYear}`).then(r => r.data),
+    enabled: tab === 'bank',
+    refetchInterval: migJob?.status === 'running' ? 5000 : false,
   });
 
   // Group links by type for tabs
@@ -388,6 +423,24 @@ export default function ReconciliationPage() {
         {/* ── TAB: BANK ──────────────────────────────────────────────────────── */}
         {tab === 'bank' && (
           <div className="space-y-4">
+
+            {/* reconciliation stats */}
+            {reconStats && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'ОБЩО', value: reconStats.totalPayments, color: 'text-on-surface' },
+                  { label: 'MATCHED', value: reconStats.matchedPayments, color: 'text-primary' },
+                  { label: 'PARTIAL', value: reconStats.partialPayments, color: 'text-warning' },
+                  { label: 'MATCH RATE', value: `${reconStats.matchRate}%`, color: reconStats.matchRate >= 50 ? 'text-primary' : reconStats.matchRate >= 20 ? 'text-warning' : 'text-error' },
+                ].map(s => (
+                  <div key={s.label} className="border border-outline-variant/10 bg-surface-container-low p-4">
+                    <p className="font-label-caps text-[9px] text-on-surface-variant/60">{s.label}</p>
+                    <p className={`font-headline text-headline-sm mt-1 ${s.color}`}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* toolbar */}
             <div className="flex items-center gap-3 flex-wrap">
               <select
@@ -418,6 +471,15 @@ export default function ReconciliationPage() {
               >
                 <span className="material-symbols-outlined text-[16px]">upload_file</span>
                 {importCsv.isPending ? 'Зарежда...' : 'Импорт CSV'}
+              </button>
+              <button
+                onClick={() => migratePurchases.mutate()}
+                disabled={migratePurchases.isPending || migJob?.status === 'running'}
+                title="Мигрира Purchase и Invoice записи в BizDocument модела за reconciliation"
+                className="flex items-center gap-2 px-4 py-2 border border-outline-variant/30 bg-surface-container-low font-label-caps text-label-caps text-on-surface hover:bg-surface-container disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">sync_alt</span>
+                {migJob?.status === 'running' ? 'Мигрира...' : 'Покупки → BizDocs'}
               </button>
               <button
                 onClick={() => autoMatch.mutate()}
@@ -452,6 +514,32 @@ export default function ReconciliationPage() {
                 <button onClick={() => setMatchResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
                   <span className="material-symbols-outlined text-[16px]">close</span>
                 </button>
+              </div>
+            )}
+
+            {/* migration job status */}
+            {migJob && (
+              <div className={`border px-4 py-3 ${migJob.status === 'done' ? 'border-primary/20 bg-primary/5' : migJob.status === 'error' ? 'border-error/20 bg-error/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className={`material-symbols-outlined text-[18px] ${migJob.status === 'running' ? 'animate-spin text-primary' : migJob.status === 'done' ? 'text-primary' : 'text-error'}`}>
+                    {migJob.status === 'running' ? 'sync' : migJob.status === 'done' ? 'check_circle' : 'error'}
+                  </span>
+                  <span className="font-label-caps text-label-caps text-on-surface">
+                    {migJob.status === 'running' ? 'Миграция в процес...' :
+                     migJob.status === 'done' ? `Готово! Покупки: ${migJob.result?.purchasesMigrated ?? 0}, Фактури: ${migJob.result?.invoicesMigrated ?? 0}, Нови CP: ${migJob.result?.counterpartiesCreated ?? 0}` :
+                     `Грешка: ${migJob.error}`}
+                  </span>
+                  {migJob.status !== 'running' && (
+                    <button onClick={() => { setMigJob(null); setMigJobId(null); }} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
+                      <span className="material-symbols-outlined text-[16px]">close</span>
+                    </button>
+                  )}
+                </div>
+                {migJob.log && migJob.log.length > 0 && (
+                  <div className="bg-surface-container border border-outline-variant/10 p-2 max-h-32 overflow-y-auto font-mono text-[10px] text-on-surface-variant/70">
+                    {migJob.log.slice(-15).map((l: string, i: number) => <div key={i}>{l}</div>)}
+                  </div>
+                )}
               </div>
             )}
 

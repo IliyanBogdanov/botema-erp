@@ -135,6 +135,30 @@ async function autoMatch({ year } = {}) {
       }
     }
 
+    // ── Step 3: exact amount + currency + narrow date window (no counterparty)
+    // Only for IMPORTED docs (migrated from Purchase/Invoice) — lower confidence
+    if (!bestMatch) {
+      const windowStart = new Date(payment.paymentDate);
+      windowStart.setDate(windowStart.getDate() - 30);
+      const windowEnd = new Date(payment.paymentDate);
+      windowEnd.setDate(windowEnd.getDate() + 30);
+
+      const exactCandidates = docs.filter(d =>
+        d.status === 'IMPORTED' &&
+        d.currency === payment.currency &&
+        d.docDate &&
+        d.docDate >= windowStart &&
+        d.docDate <= windowEnd &&
+        amountsMatch(Number(payment.amount), Number(d.amountTotal), 0.002) // 0.2% tolerance
+      );
+
+      // Only match if exactly ONE candidate to avoid false positives
+      if (exactCandidates.length === 1) {
+        bestMatch = exactCandidates[0];
+        confidence = 0.6;
+      }
+    }
+
     if (!bestMatch) {
       unmatched++;
       continue;

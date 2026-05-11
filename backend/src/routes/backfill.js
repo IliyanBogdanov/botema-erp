@@ -238,8 +238,7 @@ router.post('/parse-purchases', auth, adminOnly, async (req, res) => {
           try {
             const pdfBuffer = await downloadDriveFile(file.driveFileId);
             parsed = await parseDocumentWithAI(file.filename, file.folder, pdfBuffer);
-            // Small delay to respect Gemini rate limits (15 RPM free tier)
-            await new Promise(r => setTimeout(r, 4500));
+            await new Promise(r => setTimeout(r, 2000));
           } catch (dlErr) {
             log(`  AI failed [${dlErr.status || dlErr.statusCode || 'ERR'}]: ${dlErr.message.substring(0, 150)} — using heuristic fallback`);
             parsed = parseFromFilename(file.filename, file.folder);
@@ -479,6 +478,167 @@ router.post('/parse-documents', auth, adminOnly, async (req, res) => {
     } catch (err) {
       jobs[jobId].status = 'error';
       jobs[jobId].error = err.message;
+    }
+  })();
+});
+
+// POST /api/backfill/purchases-to-bizdocs
+// Migrates existing Purchase (INVOICE_IN) and Invoice (INVOICE_OUT) records
+// into the BizDocument model so they can be reconciled with bank payments.
+router.post('/purchases-to-bizdocs', auth, adminOnly, async (req, res) => {
+  const { dryRun = false, includePurchases = true, includeInvoices = true } = req.body || {};
+
+  const jobId = `p2b-${Date.now()}`;
+  jobs[jobId] = { jobId, type: 'purchases-to-bizdocs', status: 'running', started: new Date(), log: [], result: null };
+  res.json({ accepted: true, jobId, message: `Migration started. Poll GET /api/backfill/job/${jobId}` });
+
+  (async () => {
+    const log = msg => {
+      console.log('[p2bd]', msg);
+      jobs[jobId].log.push(msg);
+      if (jobs[jobId].log.length > 500) jobs[jobId].log.shift();
+    };
+
+    try {
+      let cpCreated = 0, purchasesDone = 0, invoicesDone = 0, skipped = 0;
+
+      // Cache to avoid repeated DB lookups for same counterparty name
+      const cpCache = {};
+      const findOrCreateCp = async (name, type, currency = 'EUR', country = 'BG') => {
+        const key = `${type}:${(name || '').toLowerCase().trim()}`;
+        if (cpCache[key]) return cpCache[key];
+
+        let cp = await prisma.counterparty.findFirst({
+          where: { name: { equals: name.trim(), mode: 'insensitive' }, type },
+          select: { id: true },
+        });
+        if (!cp) {
+          cp = await prisma.counterparty.create({
+            data: { name: name.trim(), type, country: country || 'BG', currency: currency || 'EUR' },
+            select: { id: true },
+          });
+          cpCreated++;
+          log(`  [NEW CP] ${type}: ${name}`);
+        }
+        cpCache[key] = cp;
+        return cp;
+      };
+
+      // ── 1. Purchases → BizDocument INVOICE_IN ──────────────────────────────
+      if (includePurchases) {
+        const purchases = await prisma.purchase.findMany({
+          include: { supplier: { select: { name: true, currency: true, country: true } } },
+          orderBy: { date: 'asc' },
+        });
+        log(`Found ${purchases.length} purchases to migrate`);
+
+        for (const p of purchases) {
+          const alreadyDone = await prisma.bizDocument.findFirst({
+            where: { internalRef: p.id },
+            select: { id: true },
+          });
+          if (alreadyDone) { skipped++; continue; }
+
+          const supplierName = p.supplier?.name || 'Неизвестен доставчик';
+          let counterpartyId = null;
+          try {
+            const cp = await findOrCreateCp(
+              supplierName, 'SUPPLIER',
+              p.supplier?.currency || 'EUR',
+              p.supplier?.country || 'BG',
+            );
+            counterpartyId = cp.id;
+          } catch (e) {
+            log(`  WARN: CP lookup failed for ${supplierName}: ${e.message}`);
+          }
+
+          if (!dryRun) {
+            await prisma.bizDocument.create({
+              data: {
+                docType: 'INVOICE_IN',
+                docNumber: p.invoiceNo || null,
+                docDate: p.date,
+                amountTotal: p.amount,
+                currency: p.currency || 'EUR',
+                vatType: 'STANDARD_BG',
+                status: 'IMPORTED',
+                counterpartyId,
+                internalRef: p.id,
+                externalRef: p.driveFileId || null,
+                confidence: 90,
+                notes: `Мигрирано от Purchase ${p.id}`,
+              },
+            });
+          }
+          purchasesDone++;
+          if (purchasesDone % 25 === 0) log(`  ... ${purchasesDone} purchases migrated`);
+        }
+        log(`Purchases: ${purchasesDone} created, ${skipped} already migrated`);
+      }
+
+      // ── 2. Invoices → BizDocument INVOICE_OUT ──────────────────────────────
+      if (includeInvoices) {
+        const invoices = await prisma.invoice.findMany({
+          include: { client: { select: { name: true, eik: true } } },
+          orderBy: { date: 'asc' },
+        });
+        log(`Found ${invoices.length} invoices to migrate`);
+        let invSkipped = 0;
+
+        for (const inv of invoices) {
+          const alreadyDone = await prisma.bizDocument.findFirst({
+            where: { internalRef: inv.id },
+            select: { id: true },
+          });
+          if (alreadyDone) { invSkipped++; continue; }
+
+          const clientName = inv.client?.name || 'Неизвестен клиент';
+          let counterpartyId = null;
+          try {
+            const cp = await findOrCreateCp(clientName, 'CLIENT', inv.currency || 'BGN', 'BG');
+            counterpartyId = cp.id;
+          } catch (e) {
+            log(`  WARN: CP lookup failed for client ${clientName}: ${e.message}`);
+          }
+
+          if (!dryRun) {
+            await prisma.bizDocument.create({
+              data: {
+                docType: 'INVOICE_OUT',
+                docNumber: inv.number,
+                docDate: inv.date,
+                dueDate: inv.dueDate || null,
+                amountNet: inv.amountNet,
+                vatAmount: inv.vatAmount,
+                amountTotal: inv.amountTotal,
+                currency: inv.currency || 'BGN',
+                vatType: 'STANDARD_BG',
+                status: 'IMPORTED',
+                counterpartyId,
+                internalRef: inv.id,
+                confidence: 95,
+                notes: `Мигрирано от Invoice ${inv.id}`,
+              },
+            });
+          }
+          invoicesDone++;
+        }
+        log(`Invoices: ${invoicesDone} created, ${invSkipped} already migrated`);
+      }
+
+      jobs[jobId].status = 'done';
+      jobs[jobId].result = {
+        purchasesMigrated: purchasesDone,
+        invoicesMigrated: invoicesDone,
+        counterpartiesCreated: cpCreated,
+        skipped,
+        dryRun,
+      };
+      log(`Migration complete! Purchases: ${purchasesDone}, Invoices: ${invoicesDone}, New CPs: ${cpCreated}`);
+    } catch (err) {
+      jobs[jobId].status = 'error';
+      jobs[jobId].error = err.message;
+      log(`FATAL: ${err.message}`);
     }
   })();
 });

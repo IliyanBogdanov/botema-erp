@@ -2,7 +2,7 @@ import { Page } from '@playwright/test';
 
 export const CREDENTIALS = {
   email: 'office@studiobotema.com',
-  password: 'TestBotema2024!',
+  password: 'Botema@2024!',
 };
 
 export async function login(page: Page) {

@@ -93,7 +93,7 @@ router.post('/reparse-all', auth, async (req, res) => {
           job.log.push(`✗ ${doc.filename}: ${err.message}`);
         }
         if (job.log.length > 300) job.log.shift();
-        await new Promise(r => setTimeout(r, 7000));
+        await new Promise(r => setTimeout(r, 2000));
       }
 
       job.status = 'done';
