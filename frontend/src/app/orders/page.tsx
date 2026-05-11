@@ -203,6 +203,7 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -217,6 +218,14 @@ export default function OrdersPage() {
 
   const orders: any[] = data?.data ?? [];
   const total: number = data?.total ?? 0;
+
+  const filtered = search
+    ? orders.filter(o =>
+        (o.counterparty?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.project?.code || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.notes || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : orders;
 
   return (
     <div className="min-h-screen">
@@ -254,7 +263,7 @@ export default function OrdersPage() {
       </div>
 
       <div className="px-8 py-6 space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select value={year} onChange={e => { setYear(e.target.value); setPage(1); }}
             className="border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary">
             {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
@@ -269,11 +278,20 @@ export default function OrdersPage() {
             <option value="COMPLETED">Завършена</option>
             <option value="CANCELLED">Отказана</option>
           </select>
+          <div className="relative flex-1 min-w-[180px]">
+            <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
+            <input
+              className="border border-outline-variant/30 bg-surface-container-low pl-9 pr-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary w-full"
+              placeholder="Търси по клиент, проект..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {isLoading ? (
           <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-surface-container-low border border-outline-variant/10 animate-pulse" />)}</div>
-        ) : orders.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="py-20 text-center border border-outline-variant/10 bg-surface-container-low">
             <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-3">inventory_2</span>
             <p className="font-body-sm text-body-sm text-on-surface-variant/60">Няма поръчки</p>
@@ -283,7 +301,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {orders.map(order => {
+            {filtered.map(order => {
               const typeCfg = ORDER_TYPE_LABELS[order.orderType] || { label: order.orderType, icon: 'receipt', color: 'text-on-surface-variant' };
               const linesTotal = (order.lines || []).reduce((s: number, l: any) => s + (l.qty || 0) * (l.unitPrice || 0), 0);
               const isExpanded = expanded === order.id;

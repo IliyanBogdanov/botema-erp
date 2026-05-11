@@ -270,6 +270,7 @@ export default function DocumentsPage() {
   const [reparseJobId, setReparseJobId] = useState<string | null>(null);
   const [reparseStatus, setReparseStatus] = useState<any>(null);
   const [gmailScanStatus, setGmailScanStatus] = useState<any>(null);
+  const [docSearch, setDocSearch] = useState('');
   const t = useT();
   const statusTabs = getStatusTabs(t);
   const qc = useQueryClient();
@@ -282,6 +283,15 @@ export default function DocumentsPage() {
   });
 
   const docs: Document[] = Array.isArray(data) ? data : (data as any).data || [];
+
+  const filteredDocs = docSearch
+    ? docs.filter(d =>
+        (d.extractedData?.supplierName || '').toLowerCase().includes(docSearch.toLowerCase()) ||
+        (d.extractedData?.clientName || '').toLowerCase().includes(docSearch.toLowerCase()) ||
+        (d.extractedData?.invoiceNo || '').toLowerCase().includes(docSearch.toLowerCase()) ||
+        (d.filename || '').toLowerCase().includes(docSearch.toLowerCase())
+      )
+    : docs;
 
   const startReparse = async () => {
     const resp = await api.post('/documents/reparse-all').then(r => r.data);
@@ -395,8 +405,19 @@ export default function DocumentsPage() {
             <div className="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container flex-shrink-0">
               <span className="font-label-caps text-label-caps">{t('doc.recentUploads')}</span>
               <span className="font-data-mono text-data-mono text-primary">
-                {isLoading ? '...' : `${docs.length} ${activeStatus === 'PENDING' ? t('doc.pending') : t('doc.records')}`}
+                {isLoading ? '...' : `${filteredDocs.length} ${activeStatus === 'PENDING' ? t('doc.pending') : t('doc.records')}`}
               </span>
+            </div>
+            <div className="px-3 py-2 border-b border-outline-variant/5 bg-surface-container flex-shrink-0">
+              <div className="relative">
+                <span className="material-symbols-outlined text-[14px] text-on-surface-variant/50 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
+                <input
+                  className="w-full bg-surface-container-high border border-outline-variant/20 pl-8 pr-3 py-1.5 font-body-sm text-body-sm text-on-surface focus:ring-1 focus:ring-primary-container focus:outline-none"
+                  placeholder="Търси по доставчик, фактура..."
+                  value={docSearch}
+                  onChange={e => setDocSearch(e.target.value)}
+                />
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto">
               {isLoading ? (
@@ -407,13 +428,13 @@ export default function DocumentsPage() {
                     <div className="h-3 bg-surface-container rounded w-1/2" />
                   </div>
                 ))
-              ) : docs.length === 0 ? (
+              ) : filteredDocs.length === 0 ? (
                 <div className="p-10 text-center text-on-surface-variant">
                   <span className="material-symbols-outlined text-[48px] block mb-3 text-outline">description</span>
                   <p className="font-body-sm">{t('doc.noDocuments')}</p>
                 </div>
               ) : (
-                docs.map(doc => {
+                filteredDocs.map(doc => {
                   const confidence = Math.round(Number(doc.confidence || 0) * 100);
                   const isActive = selected?.id === doc.id;
                   return (

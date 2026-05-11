@@ -200,6 +200,7 @@ export default function PurchasesPage() {
   const [supplierId, setSupplierId] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editPurchase, setEditPurchase] = useState<Purchase | null>(null);
+  const [search, setSearch] = useState('');
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-list'],
@@ -219,7 +220,15 @@ export default function PurchasesPage() {
 
   const purchases: Purchase[] = Array.isArray(data) ? data : (data as any).data || [];
 
-  const total = purchases.reduce((s, p) => s + (p.currency === 'BGN' ? Number(p.amount) : Number(p.amount) * 1.95583), 0);
+  const filtered = search
+    ? purchases.filter(p =>
+        (p.supplier?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.invoiceNo || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.description || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : purchases;
+
+  const total = filtered.reduce((s, p) => s + (p.currency === 'BGN' ? Number(p.amount) : Number(p.amount) * 1.95583), 0);
 
   return (
     <div className="p-container-padding">
@@ -280,6 +289,16 @@ export default function PurchasesPage() {
               {(suppliers as any[]).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+          <div className="h-6 w-px bg-outline-variant/20" />
+          <div className="relative">
+            <span className="material-symbols-outlined text-[16px] text-on-surface-variant absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
+            <input
+              className="bg-surface-container-high border-none text-body-sm font-body-sm py-1.5 pl-9 pr-4 text-on-surface focus:ring-1 focus:ring-primary-container w-56"
+              placeholder="Търси по доставчик, фактура..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
           <div className="ml-auto flex items-center gap-2">
             <button className="p-2 text-on-surface-variant hover:text-primary transition-colors">
               <span className="material-symbols-outlined">filter_list</span>
@@ -313,14 +332,14 @@ export default function PurchasesPage() {
                     ))}
                   </tr>
                 ))
-              ) : purchases.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-16 text-center text-on-surface-variant font-body-sm">
                     {t('pur.noData')}
                   </td>
                 </tr>
               ) : (
-                purchases.map(p => {
+                filtered.map(p => {
                   const isPaid = p.status === 'PAID';
                   const isZero = Number(p.amount) === 0;
                   return (

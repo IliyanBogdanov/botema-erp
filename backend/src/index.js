@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { startAlertJobs } = require('./lib/alertEngine');
+const { startGmailScanJob } = require('./jobs/gmailScanJob');
 const prisma = require('./lib/prisma');
 
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/deliveries',     require('./routes/deliveries'));
 app.use('/api/issued-docs',     require('./routes/issuedDocs'));
 app.use('/api/gmail-inbox',    require('./routes/gmailInbox'));
 app.use('/api/backfill',       require('./routes/backfill'));
+app.use('/api/gmail-scan',    require('./routes/gmailScan'));
 app.use('/api/auth/google',    require('./routes/google'));  // callback at /api/auth/google/callback
 app.use('/api/google',         require('./routes/google'));  // auth-url + status
 
@@ -78,5 +80,6 @@ app.listen(PORT, () => {
 });
 
 startAlertJobs(prisma);
+startGmailScanJob(prisma);
 
 module.exports = app;

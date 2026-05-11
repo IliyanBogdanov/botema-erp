@@ -112,6 +112,7 @@ function ExpenseModal({ open, onClose }: { open: boolean; onClose: () => void })
 
 export default function ExpensesPage() {
   const [year, setYear] = useState(new Date().getFullYear());
+  const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
 
   const { data = [], isLoading } = useQuery({
@@ -122,7 +123,15 @@ export default function ExpensesPage() {
 
   const expenses: Expense[] = Array.isArray(data) ? data : (data as any).data || [];
 
-  const totalBGN = expenses.reduce((s, e) => {
+  const filtered = search
+    ? expenses.filter(e =>
+        (e.supplier?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.category || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.description || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : expenses;
+
+  const totalBGN = filtered.reduce((s, e) => {
     const amt = Number(e.amount);
     if (e.currency === 'BGN') return s + amt;
     if (e.currency === 'EUR') return s + amt * 1.95583;
@@ -134,7 +143,7 @@ export default function ExpensesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Разходи</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">{expenses.length} записа</p>
+          <p className="text-[#71717a] text-sm mt-0.5">{filtered.length} записа</p>
         </div>
         <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
           <Plus size={15} /> Нов разход
@@ -142,7 +151,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Year filter */}
-      <div className="flex gap-3 mb-5">
+      <div className="flex flex-wrap gap-3 mb-5 items-center">
         <div className="flex gap-1 bg-[#1d1d1f] p-1 rounded-xl">
           {[2024, 2025, 2026].map(y => (
             <button key={y} onClick={() => setYear(y)}
@@ -150,6 +159,15 @@ export default function ExpensesPage() {
                 year === y ? 'bg-[#0a84ff] text-white' : 'text-[#71717a] hover:text-white'
               }`}>{y}</button>
           ))}
+        </div>
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <span className="material-symbols-outlined text-[16px] text-[#52525b] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
+          <input
+            className="input pl-9 w-full"
+            placeholder="Търси по доставчик, категория..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
@@ -175,10 +193,10 @@ export default function ExpensesPage() {
                   ))}
                 </tr>
               ))
-            ) : expenses.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <tr><td colSpan={6} className="table-cell text-center text-[#52525b] py-10">Няма разходи</td></tr>
             ) : (
-              expenses.map(e => (
+              filtered.map(e => (
                 <tr key={e.id} className="hover:bg-[#1d1d1f] transition-colors">
                   <td className="table-cell text-[#a1a1aa]">{fmtDate(e.date)}</td>
                   <td className="table-cell">
@@ -194,7 +212,7 @@ export default function ExpensesPage() {
               ))
             )}
           </tbody>
-          {!isLoading && expenses.length > 0 && (
+          {!isLoading && filtered.length > 0 && (
             <tfoot>
               <tr className="bg-[#1d1d1f]">
                 <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (в BGN)</td>
