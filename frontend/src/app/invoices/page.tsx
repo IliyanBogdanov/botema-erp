@@ -306,11 +306,108 @@ function getStatusTabs(t: ReturnType<typeof useT>) {
   ];
 }
 
+const AGING_BUCKETS = [
+  { key: 'CURRENT',      label: 'Текущи',       color: 'text-primary',           bar: 'bg-primary-container' },
+  { key: '1-30_DAYS',    label: '1-30 дни',     color: 'text-warning',            bar: 'bg-warning' },
+  { key: '31-60_DAYS',   label: '31-60 дни',    color: 'text-orange-400',         bar: 'bg-orange-400' },
+  { key: '61-90_DAYS',   label: '61-90 дни',    color: 'text-error',              bar: 'bg-error' },
+  { key: 'OVER_90_DAYS', label: '90+ дни',      color: 'text-error font-bold',    bar: 'bg-error' },
+  { key: 'NO_DUE_DATE',  label: 'Без дата',     color: 'text-on-surface-variant', bar: 'bg-outline-variant' },
+];
+
+function AgingView() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['invoices-aging'],
+    queryFn: () => api.get('/invoices/aging').then(r => r.data),
+    staleTime: 60000,
+  });
+
+  if (isLoading) return (
+    <div className="space-y-3">
+      {[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse bg-surface-container-low border border-outline-variant/10" />)}
+    </div>
+  );
+
+  const summary: Record<string, number> = data?.summary || {};
+  const invoices: any[] = data?.invoices || [];
+  const total = Object.values(summary).reduce((s, v) => s + v, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Bucket summary */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        {AGING_BUCKETS.map(b => {
+          const amt = summary[b.key] || 0;
+          const pct = total > 0 ? Math.round((amt / total) * 100) : 0;
+          return (
+            <div key={b.key} className="bg-surface-container-low border border-outline-variant/10 p-4">
+              <p className="font-label-caps text-[9px] text-on-surface-variant mb-2">{b.label}</p>
+              <p className={`font-headline text-headline-sm ${b.color}`}>
+                {amt.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+              </p>
+              <div className="mt-2 h-1 bg-surface-container-high overflow-hidden">
+                <div className={`h-full ${b.bar} transition-all duration-700`} style={{ width: `${pct}%` }} />
+              </div>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-1">{pct}%</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Aging table */}
+      <div className="overflow-hidden bg-surface-container-low border border-outline-variant/10">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className="table-header">ФАКТУРА</th>
+              <th className="table-header">КЛИЕНТ</th>
+              <th className="table-header">ПАДЕЖ</th>
+              <th className="table-header text-right">ДНИ ПРОСРОЧИЕ</th>
+              <th className="table-header text-right">СУМА</th>
+              <th className="table-header">СТАТУС</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.length === 0 ? (
+              <tr><td colSpan={6} className="table-cell py-12 text-center text-on-surface-variant">Няма просрочени фактури</td></tr>
+            ) : (
+              invoices.map((inv: any) => {
+                const bucket = AGING_BUCKETS.find(b => b.key === inv.bucket);
+                return (
+                  <tr key={inv.id} className="hover:bg-surface-container transition-colors">
+                    <td className="table-cell font-data-mono text-data-mono">
+                      <Link href={`/invoices/${inv.id}`} className="text-primary hover:underline">{inv.number}</Link>
+                    </td>
+                    <td className="table-cell font-medium text-on-surface">{inv.clientName || '—'}</td>
+                    <td className="table-cell text-on-surface-variant">{inv.dueDate ? fmtDate(inv.dueDate) : '—'}</td>
+                    <td className="table-cell text-right">
+                      {inv.daysOverdue !== null ? (
+                        <span className={`font-data-mono text-data-mono ${bucket?.color || ''}`}>
+                          {inv.daysOverdue > 0 ? `+${inv.daysOverdue}` : inv.daysOverdue}
+                        </span>
+                      ) : <span className="text-on-surface-variant/30">—</span>}
+                    </td>
+                    <td className="table-cell text-right font-data-mono text-data-mono text-on-surface">
+                      {fmt(inv.amountTotal, inv.currency)}
+                    </td>
+                    <td className="table-cell"><StitchStatusBadge status={inv.status} /></td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function InvoicesPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [showAging, setShowAging] = useState(false);
 
   const params = new URLSearchParams();
   if (year) params.set('year', String(year));
@@ -338,10 +435,19 @@ export default function InvoicesPage() {
             <p className="font-label-caps text-label-caps text-primary mb-2">{t('inv.label')}</p>
             <h2 className="font-headline text-headline-lg text-on-surface">{t('inv.title')}</h2>
           </div>
-          <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            {t('inv.new')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAging(v => !v)}
+              className={`flex items-center gap-2 border px-4 py-2 font-label-caps text-label-caps transition-colors ${showAging ? 'border-primary bg-primary-container/10 text-primary' : 'border-outline-variant/30 text-on-surface-variant hover:text-on-surface'}`}
+            >
+              <span className="material-symbols-outlined text-[18px]">schedule</span>
+              AGING
+            </button>
+            <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px]">add</span>
+              {t('inv.new')}
+            </button>
+          </div>
         </section>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -351,6 +457,7 @@ export default function InvoicesPage() {
           <MetricCard label={t('inv.paid')} value={String(paidCount)} sub="приключени плащания" />
         </div>
 
+        {showAging ? <AgingView /> : (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
@@ -451,6 +558,7 @@ export default function InvoicesPage() {
           </div>
         </div>
 
+        )}
         <InvoiceModal open={modalOpen} onClose={() => setModalOpen(false)} />
       </div>
     </div>
