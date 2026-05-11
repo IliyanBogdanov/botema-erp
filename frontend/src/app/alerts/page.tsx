@@ -25,6 +25,7 @@ const STATUS_TABS = [
 
 export default function AlertsPage() {
   const [status, setStatus] = useState('ACTIVE');
+  const [typeFilter, setTypeFilter] = useState('');
   const qc = useQueryClient();
   const t = useT();
   const severityConfig = getSeverityConfig(t);
@@ -40,6 +41,15 @@ export default function AlertsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['alerts'] });
       qc.invalidateQueries({ queryKey: ['alerts-sidebar'] });
+    },
+  });
+
+  const bulkResolve = useMutation({
+    mutationFn: (type?: string) => api.post('/alerts/bulk-resolve', { status: 'ACTIVE', ...(type ? { type } : {}) }).then(r => r.data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['alerts'] });
+      qc.invalidateQueries({ queryKey: ['alerts-sidebar'] });
+      setTypeFilter('');
     },
   });
 
@@ -60,7 +70,13 @@ export default function AlertsPage() {
     updateAlert.mutate({ id, payload: { snoozedUntil: d.toISOString() } });
   };
 
-  const activeCount  = (alerts as any[]).filter((a: any) => a.severity === 'CRITICAL').length;
+  const allAlerts = alerts as any[];
+  const typeCounts = allAlerts.reduce<Record<string, number>>((acc, a) => {
+    acc[a.type] = (acc[a.type] || 0) + 1;
+    return acc;
+  }, {});
+  const displayed = typeFilter ? allAlerts.filter((a: any) => a.type === typeFilter) : allAlerts;
+  const activeCount = allAlerts.filter((a: any) => a.severity === 'CRITICAL').length;
 
   return (
     <div className="p-container-padding space-y-8">
@@ -110,20 +126,56 @@ export default function AlertsPage() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
-        {STATUS_TABS.map(({ key, labelKey }) => (
-          <button
-            key={key}
-            onClick={() => setStatus(key)}
-            className={`px-5 py-1.5 font-label-caps text-label-caps transition-colors ${
-              status === key
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            {t(labelKey)}
-          </button>
-        ))}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
+          {STATUS_TABS.map(({ key, labelKey }) => (
+            <button
+              key={key}
+              onClick={() => { setStatus(key); setTypeFilter(''); }}
+              className={`px-5 py-1.5 font-label-caps text-label-caps transition-colors ${
+                status === key
+                  ? 'bg-primary-container text-on-primary-container'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              {t(labelKey)}
+            </button>
+          ))}
+        </div>
+
+        {/* Type filter chips */}
+        {status === 'ACTIVE' && Object.entries(typeCounts).length > 1 && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <button
+              onClick={() => setTypeFilter('')}
+              className={`px-3 py-1 font-label-caps text-label-caps text-[10px] border transition-colors ${
+                !typeFilter ? 'border-primary bg-primary/10 text-primary' : 'border-outline-variant/30 text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              ВСЕ ({allAlerts.length})
+            </button>
+            {Object.entries(typeCounts).map(([type, count]) => (
+              <button key={type}
+                onClick={() => setTypeFilter(t => t === type ? '' : type)}
+                className={`px-3 py-1 font-label-caps text-label-caps text-[10px] border transition-colors ${
+                  typeFilter === type ? 'border-primary bg-primary/10 text-primary' : 'border-outline-variant/30 text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                {typeLabels[type] || type} ({count})
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                const label = typeFilter ? `${typeLabels[typeFilter] || typeFilter} (${typeCounts[typeFilter]})` : `всичките ${allAlerts.length}`;
+                if (confirm(`Resolve ${label} alerts?`)) bulkResolve.mutate(typeFilter || undefined);
+              }}
+              disabled={bulkResolve.isPending}
+              className="px-3 py-1 font-label-caps text-label-caps text-[10px] border border-error/30 text-error hover:bg-error/10 transition-colors disabled:opacity-50"
+            >
+              {bulkResolve.isPending ? 'Resolve...' : `Resolve ${typeFilter ? typeFilter : 'ALL'}`}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Alert list */}
@@ -133,7 +185,7 @@ export default function AlertsPage() {
             <div key={i} className="h-24 bg-surface-container-low border border-outline-variant/10 animate-pulse" />
           ))}
         </div>
-      ) : !(alerts as any[]).length ? (
+      ) : !displayed.length ? (
         <div className="bg-surface-container-low border border-outline-variant/10 p-16 flex flex-col items-center text-center">
           <span className="material-symbols-outlined text-primary text-5xl mb-4">check_circle</span>
           <p className="font-label-caps text-label-caps text-on-surface mb-1">{t('alerts.allClear')}</p>
@@ -141,7 +193,7 @@ export default function AlertsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {(alerts as any[]).map((alert: any) => {
+          {displayed.map((alert: any) => {
             const sev = severityConfig[alert.severity] || severityConfig.INFO;
             return (
               <div
