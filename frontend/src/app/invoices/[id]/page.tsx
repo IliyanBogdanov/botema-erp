@@ -65,6 +65,15 @@ export default function InvoiceDetailPage() {
         </div>
         <StatusBadge status={invoice.status} />
         <a
+          href={`/invoices/${id}/print?print=1`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors font-label-md text-primary"
+        >
+          <span className="material-symbols-outlined text-[18px]">download</span>
+          PDF
+        </a>
+        <a
           href={`/invoices/${id}/print`}
           target="_blank"
           rel="noopener noreferrer"

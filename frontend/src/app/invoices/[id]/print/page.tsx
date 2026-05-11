@@ -1,7 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
 const COMPANY_FALLBACK: Record<string, any> = {
@@ -28,6 +28,8 @@ function fmtMoney(n: number, currency = 'BGN') {
 
 export default function InvoicePrintPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const autoPrint = searchParams.get('print') === '1';
 
   const { data: invoice, isLoading } = useQuery({
     queryKey: ['invoice', id],
@@ -45,6 +47,13 @@ export default function InvoicePrintPage() {
       document.title = `Фактура ${invoice.number}`;
     }
   }, [invoice]);
+
+  useEffect(() => {
+    if (autoPrint && invoice && !isLoading) {
+      const t = setTimeout(() => window.print(), 600);
+      return () => clearTimeout(t);
+    }
+  }, [autoPrint, invoice, isLoading]);
 
   if (isLoading) return <div className="flex items-center justify-center min-h-screen text-gray-400">Зареждане...</div>;
   if (!invoice) return <div className="flex items-center justify-center min-h-screen text-red-500">Фактурата не е намерена.</div>;
