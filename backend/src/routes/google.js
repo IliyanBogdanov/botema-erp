@@ -71,13 +71,16 @@ router.get('/callback', async (req, res) => {
     fs.writeFileSync(envPath, envContent);
     process.env.GOOGLE_REFRESH_TOKEN = tokens.refresh_token;
 
-    console.log('[Google OAuth] ✅ refresh_token saved to .env');
+    console.log('[Google OAuth] ✅ refresh_token saved');
     res.send(`
-      <html><body style="font-family:sans-serif;padding:40px;background:#111;color:#eee">
+      <html><body style="font-family:sans-serif;padding:40px;background:#111;color:#eee;max-width:700px;margin:0 auto">
         <h2 style="color:#30d158">✅ Google OAuth успешен!</h2>
-        <p>Refresh token е записан в <code>.env</code>.</p>
-        <p>Затвори тази страница и се върни в ERP.</p>
-        <p style="color:#888;font-size:12px">Token: ${tokens.refresh_token.substring(0, 20)}...</p>
+        <p style="color:#aaa">Копирай token-а по-долу и го добави в <strong>Railway → Variables → GOOGLE_REFRESH_TOKEN</strong>, после рестартирай service-а.</p>
+        <div style="background:#1c1c1e;border:1px solid #333;border-radius:8px;padding:16px;margin:20px 0">
+          <p style="margin:0 0 8px;font-size:11px;color:#666;letter-spacing:.08em">GOOGLE_REFRESH_TOKEN</p>
+          <code style="word-break:break-all;font-size:13px;color:#30d158;user-select:all">${tokens.refresh_token}</code>
+        </div>
+        <p style="font-size:12px;color:#555">Прозорецът може да се затвори след копиране.</p>
       </body></html>
     `);
   } catch (e) {
