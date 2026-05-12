@@ -11,7 +11,9 @@ router.get('/', auth, async (req, res) => {
     if (type) where.orderType = type;
     if (status) where.status = status;
     if (projectId) where.projectId = projectId;
-    if (counterpartyId) where.counterpartyId = counterpartyId;
+    if (counterpartyId) {
+      where.OR = [{ clientId: counterpartyId }, { supplierId: counterpartyId }];
+    }
     if (year) {
       const y = parseInt(year);
       where.orderDate = { gte: new Date(`${y}-01-01`), lt: new Date(`${y + 1}-01-01`) };
@@ -25,7 +27,8 @@ router.get('/', auth, async (req, res) => {
       prisma.order.findMany({
         where,
         include: {
-          counterparty: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true } },
+          supplier: { select: { id: true, name: true } },
           project: { select: { id: true, code: true, name: true } },
           lines: { include: { inventoryItem: { select: { id: true, sku: true, name: true, unit: true } } } },
           deliveries: { select: { id: true, deliveryType: true, status: true, deliveryDate: true } },
@@ -36,7 +39,9 @@ router.get('/', auth, async (req, res) => {
       }),
     ]);
 
-    res.json({ total, page: pageNum, limit: limitNum, data: orders });
+    // Add convenience `counterparty` field for frontend compatibility
+    const data = orders.map(o => ({ ...o, counterparty: o.client || o.supplier }));
+    res.json({ total, page: pageNum, limit: limitNum, data });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -48,7 +53,8 @@ router.get('/:id', auth, async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       include: {
-        counterparty: true,
+        client: true,
+        supplier: true,
         project: { select: { id: true, code: true, name: true } },
         lines: { include: { inventoryItem: true } },
         deliveries: {
@@ -59,7 +65,7 @@ router.get('/:id', auth, async (req, res) => {
       },
     });
     if (!order) return res.status(404).json({ error: 'Not found' });
-    res.json(order);
+    res.json({ ...order, counterparty: order.client || order.supplier });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -68,19 +74,28 @@ router.get('/:id', auth, async (req, res) => {
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
 router.post('/', auth, async (req, res) => {
   try {
-    const { lines, ...orderData } = req.body;
+    const { lines, counterpartyId, ...orderData } = req.body;
+    // Map counterpartyId → clientId or supplierId based on order type
+    if (counterpartyId) {
+      if (orderData.orderType === 'SUPPLIER_ORDER') {
+        orderData.supplierId = counterpartyId;
+      } else {
+        orderData.clientId = counterpartyId;
+      }
+    }
     const order = await prisma.order.create({
       data: {
         ...orderData,
         lines: lines ? { create: lines } : undefined,
       },
       include: {
-        counterparty: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true } },
+        supplier: { select: { id: true, name: true } },
         project: { select: { id: true, code: true, name: true } },
         lines: true,
       },
     });
-    res.status(201).json(order);
+    res.status(201).json({ ...order, counterparty: order.client || order.supplier });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -89,18 +104,26 @@ router.post('/', auth, async (req, res) => {
 // ─── PATCH /api/orders/:id ────────────────────────────────────────────────────
 router.patch('/:id', auth, async (req, res) => {
   try {
-    const { lines, ...orderData } = req.body;
+    const { lines, counterpartyId, ...orderData } = req.body;
+    if (counterpartyId) {
+      if (orderData.orderType === 'SUPPLIER_ORDER') {
+        orderData.supplierId = counterpartyId;
+      } else {
+        orderData.clientId = counterpartyId;
+      }
+    }
     const order = await prisma.order.update({
       where: { id: req.params.id },
       data: orderData,
       include: {
-        counterparty: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true } },
+        supplier: { select: { id: true, name: true } },
         project: { select: { id: true, code: true, name: true } },
         lines: true,
         deliveries: { select: { id: true, status: true } },
       },
     });
-    res.json(order);
+    res.json({ ...order, counterparty: order.client || order.supplier });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Not found' });
     res.status(500).json({ error: e.message });
