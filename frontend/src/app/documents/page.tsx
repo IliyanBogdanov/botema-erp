@@ -49,6 +49,184 @@ const RISK_LABELS: Record<string, string> = {
   TOTAL_MISMATCH: 'Разминаване в сумите',
 };
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  INVOICE_IN: 'Входяща Фактура',
+  INVOICE_OUT: 'Изходяща Фактура',
+  OFFER_OUT: 'Оферта',
+  DELIVERY_NOTE: 'Доставка',
+  BANK_STATEMENT: 'Банково Извлечение',
+  PROTOCOL: 'Протокол',
+  CONTRACT: 'Договор',
+  OTHER: 'Друго',
+};
+
+const DOC_TYPE_ICONS: Record<string, string> = {
+  INVOICE_IN: 'receipt_long',
+  INVOICE_OUT: 'edit_document',
+  OFFER_OUT: 'description',
+  DELIVERY_NOTE: 'local_shipping',
+  BANK_STATEMENT: 'account_balance',
+  PROTOCOL: 'assignment',
+  CONTRACT: 'gavel',
+  OTHER: 'article',
+};
+
+const LINK_TYPE_COLORS: Record<string, string> = {
+  INVOICE_TO_PURCHASE: '#0a84ff',
+  OFFER_TO_PROJECT: '#30d158',
+  DELIVERY_TO_PURCHASE: '#ff9f0a',
+  EMAIL_TO_DOCUMENT: '#bf5af2',
+  DOCUMENT_TO_SOURCE: '#636366',
+  PARTIAL_MATCH: '#ff6b35',
+};
+
+function LinkedDocsView() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['biz-docs-graph'],
+    queryFn: () => api.get('/biz-documents/graph').then(r => r.data),
+    staleTime: 60000,
+  });
+  const [search, setSearch] = useState('');
+
+  if (isLoading) return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-6">
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className="bg-surface-container-low rounded-xl border border-outline-variant/8 p-5 animate-pulse h-40" />
+      ))}
+    </div>
+  );
+
+  const chains: any[] = data?.chains || [];
+  const stats: any = data?.stats || {};
+
+  const filtered = search
+    ? chains.filter(c =>
+        (c.root?.counterparty?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.root?.docNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.root?.docType || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : chains;
+
+  return (
+    <div className="mt-6">
+      {/* Stats bar */}
+      <div className="flex items-center gap-6 mb-6 flex-wrap">
+        <div className="flex items-center gap-2 bg-surface-container-low rounded-lg px-4 py-2.5 border border-outline-variant/8">
+          <span className="material-symbols-outlined text-primary text-[18px]">account_tree</span>
+          <span className="font-data-mono text-lg text-on-surface">{data?.total || 0}</span>
+          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ВЕРИГИ</span>
+        </div>
+        <div className="flex items-center gap-2 bg-surface-container-low rounded-lg px-4 py-2.5 border border-outline-variant/8">
+          <span className="material-symbols-outlined text-[18px]" style={{ color: LINK_TYPE_COLORS.INVOICE_TO_PURCHASE }}>receipt_long</span>
+          <span className="font-data-mono text-lg text-on-surface">{stats.byType?.INVOICE_TO_PURCHASE || 0}</span>
+          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ФАКТУРИ</span>
+        </div>
+        <div className="flex items-center gap-2 bg-surface-container-low rounded-lg px-4 py-2.5 border border-outline-variant/8">
+          <span className="material-symbols-outlined text-[18px]" style={{ color: LINK_TYPE_COLORS.OFFER_TO_PROJECT }}>description</span>
+          <span className="font-data-mono text-lg text-on-surface">{stats.byType?.OFFER_TO_PROJECT || 0}</span>
+          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ОФЕРТИ</span>
+        </div>
+        <div className="ml-auto">
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-on-surface-variant/50">search</span>
+            <input
+              className="bg-surface-container-low rounded-lg border border-outline-variant/15 pl-9 pr-4 py-2 text-body-sm text-on-surface outline-none focus:ring-1 focus:ring-primary-container/40 w-60"
+              placeholder="Търси контрагент / номер..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Chain cards grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {filtered.slice(0, 120).map((chain: any, i: number) => {
+          const root = chain.root;
+          if (!root) return null;
+          const icon = DOC_TYPE_ICONS[root.docType] || 'article';
+          const typeLabel = DOC_TYPE_LABELS[root.docType] || root.docType;
+          return (
+            <div key={root.id || i} className="bg-surface-container-low rounded-xl border border-outline-variant/8 p-5 hover:border-outline-variant/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition-all duration-200">
+              {/* Root doc */}
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary-container/10 border border-primary-container/15 flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-primary text-[16px]">{icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-label-caps text-[9px] text-primary/70 tracking-[0.14em] uppercase">{typeLabel}</span>
+                    {root.docNumber && (
+                      <span className="font-data-mono text-[10px] text-on-surface-variant/50">#{root.docNumber}</span>
+                    )}
+                  </div>
+                  <p className="font-label-caps text-[12px] text-on-surface truncate mt-0.5">
+                    {root.counterparty?.name || 'Unknown'}
+                  </p>
+                  {root.amountTotal && (
+                    <p className="font-data-mono text-[11px] text-primary/80 mt-0.5">
+                      {Number(root.amountTotal).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {root.currency || 'BGN'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="space-y-2 border-t border-outline-variant/8 pt-3">
+                {chain.links.slice(0, 3).map((link: any, j: number) => {
+                  const linkColor = LINK_TYPE_COLORS[link.linkType] || '#636366';
+                  const target = link.target;
+                  if (!target) return null;
+                  return (
+                    <div key={j} className="flex items-center gap-2">
+                      <div className="w-px h-4 ml-3.5 flex-shrink-0" style={{ background: `${linkColor}60` }} />
+                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                        <span className="material-symbols-outlined text-[13px] flex-shrink-0" style={{ color: linkColor }}>
+                          {DOC_TYPE_ICONS[target.docType] || 'article'}
+                        </span>
+                        <span className="font-label-caps text-[10px] text-on-surface-variant/70 truncate">
+                          {DOC_TYPE_LABELS[target.docType] || target.docType}
+                          {target.docNumber ? ` #${target.docNumber}` : ''}
+                          {target.counterparty?.name ? ` · ${target.counterparty.name}` : ''}
+                        </span>
+                        {target.amountTotal && (
+                          <span className="font-data-mono text-[10px] ml-auto flex-shrink-0" style={{ color: linkColor }}>
+                            {Number(target.amountTotal).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {chain.links.length > 3 && (
+                  <div className="font-label-caps text-[9px] text-on-surface-variant/40 pl-4">
+                    +{chain.links.length - 3} more links
+                  </div>
+                )}
+              </div>
+
+              {/* Project tag */}
+              {root.project && (
+                <div className="mt-3 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[12px] text-on-surface-variant/40">folder_open</span>
+                  <span className="font-label-caps text-[9px] text-on-surface-variant/40 truncate">
+                    {root.project.code} — {root.project.name}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="col-span-3 text-center py-16 text-on-surface-variant">
+            <span className="material-symbols-outlined text-[56px] block mb-4 opacity-30">account_tree</span>
+            <p className="font-label-caps text-label-caps">Няма свързани документи</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 function ReviewModal({ doc, onClose }: { doc: Document | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [action, setAction] = useState('ARCHIVE_ONLY');
@@ -397,7 +575,10 @@ export default function DocumentsPage() {
           ))}
         </div>
 
-        {/* Split Panel */}
+        {/* Split Panel — hidden when LINKED tab is active */}
+        {activeStatus === 'LINKED' ? (
+          <LinkedDocsView />
+        ) : (
         <div className="grid grid-cols-12 gap-8" style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
 
           {/* Left: Document List */}
@@ -590,6 +771,7 @@ export default function DocumentsPage() {
             )}
           </div>
         </div>
+        )} {/* end LINKED conditional */}
       </div>
 
       <ReviewModal doc={reviewDoc} onClose={() => { setReviewDoc(null); setSelected(null); }} />

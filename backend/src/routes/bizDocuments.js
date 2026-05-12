@@ -32,6 +32,61 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /api/biz-documents/graph — all linked doc chains for network view
+router.get('/graph', auth, async (req, res) => {
+  try {
+    const links = await prisma.reconciliationLink.findMany({
+      include: {
+        sourceDoc: {
+          select: {
+            id: true, docType: true, docNumber: true, status: true,
+            amountTotal: true, currency: true, docDate: true,
+            counterparty: { select: { id: true, name: true } },
+            project: { select: { id: true, code: true, name: true } },
+          },
+        },
+        targetDoc: {
+          select: {
+            id: true, docType: true, docNumber: true, status: true,
+            amountTotal: true, currency: true, docDate: true,
+            counterparty: { select: { id: true, name: true } },
+            project: { select: { id: true, code: true, name: true } },
+          },
+        },
+        payment: {
+          select: { id: true, amount: true, currency: true, paymentDate: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    // Build chains: group by source doc
+    const chains = new Map();
+    for (const link of links) {
+      const key = link.sourceDocId;
+      if (!chains.has(key)) {
+        chains.set(key, { root: link.sourceDoc, links: [] });
+      }
+      chains.get(key).links.push({
+        linkType: link.linkType,
+        confidence: link.confidence,
+        target: link.targetDoc,
+        payment: link.payment,
+      });
+    }
+
+    const stats = { totalLinks: links.length, byType: {} };
+    for (const link of links) {
+      stats.byType[link.linkType] = (stats.byType[link.linkType] || 0) + 1;
+    }
+
+    res.json({ chains: [...chains.values()], stats, total: chains.size });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/biz-documents/:id
 router.get('/:id', auth, async (req, res) => {
   try {
