@@ -13,45 +13,68 @@ const openRouter = process.env.OPENROUTER_API_KEY ? new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
 }) : null;
 
-// Try Gemini first (1.5-flash = stable + high quota), fallback to Groq, then OpenRouter
+// Build messages array for non-Gemini providers
+function buildMessages(systemPrompt, geminiHistory, message) {
+  const msgs = [{ role: 'system', content: systemPrompt }];
+  for (const h of (geminiHistory || [])) {
+    const text = h?.parts?.[0]?.text || '';
+    if (text) msgs.push({ role: h.role === 'model' ? 'assistant' : 'user', content: text });
+  }
+  msgs.push({ role: 'user', content: message });
+  return msgs;
+}
+
+// Try Gemini first, fallback to Groq, then OpenRouter
 async function callAI(systemPrompt, message, geminiHistory) {
-  // 1. Try Gemini 2.5 Flash (paid model configured on this account)
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt });
-    const chat = model.startChat({ history: geminiHistory });
-    const result = await chat.sendMessage(message);
-    return result.response.text();
-  } catch (err) {
-    console.warn('[AI] gemini-2.5-flash failed:', err.message?.slice(0, 80));
+  // 1. Try Gemini 2.5 Flash (with one retry on 503)
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt });
+      const chat = model.startChat({ history: geminiHistory || [] });
+      const result = await chat.sendMessage(message);
+      const text = result.response.text();
+      console.log(`[AI] Gemini 2.5-flash OK (attempt ${attempt})`);
+      return text;
+    } catch (err) {
+      const is503 = err.message?.includes('503') || err.message?.includes('high demand');
+      console.warn(`[AI] gemini-2.5-flash attempt ${attempt} failed: ${err.message?.slice(0, 100)}`);
+      if (attempt === 1 && is503) {
+        await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+        continue;
+      }
+      break;
+    }
   }
 
   // 2. Fallback: Groq llama-3.3-70b
   if (groq) {
     try {
-      const msgs = [{ role: 'system', content: systemPrompt }];
-      for (const h of geminiHistory) {
-        msgs.push({ role: h.role === 'model' ? 'assistant' : 'user', content: h.parts[0].text });
-      }
-      msgs.push({ role: 'user', content: message });
+      const msgs = buildMessages(systemPrompt, geminiHistory, message);
       const resp = await groq.chat.completions.create({ model: 'llama-3.3-70b-versatile', messages: msgs, max_tokens: 2048 });
+      console.log('[AI] Groq llama-3.3-70b OK');
       return resp.choices[0].message.content;
     } catch (err) {
-      console.warn('[AI] Groq failed, trying OpenRouter...');
+      console.warn('[AI] Groq failed:', err.message?.slice(0, 100));
     }
+  } else {
+    console.warn('[AI] Groq not configured (missing GROQ_API_KEY)');
   }
 
-  // 3. Fallback: OpenRouter free model
+  // 3. Fallback: OpenRouter
   if (openRouter) {
-    const msgs = [{ role: 'system', content: systemPrompt }];
-    for (const h of geminiHistory) {
-      msgs.push({ role: h.role === 'model' ? 'assistant' : 'user', content: h.parts[0].text });
+    try {
+      const msgs = buildMessages(systemPrompt, geminiHistory, message);
+      const resp = await openRouter.chat.completions.create({ model: 'openai/gpt-4.1-mini', messages: msgs, max_tokens: 2048 });
+      console.log('[AI] OpenRouter gpt-4.1-mini OK');
+      return resp.choices[0].message.content;
+    } catch (err) {
+      console.warn('[AI] OpenRouter failed:', err.message?.slice(0, 100));
     }
-    msgs.push({ role: 'user', content: message });
-    const resp = await openRouter.chat.completions.create({ model: 'openai/gpt-4.1-mini', messages: msgs, max_tokens: 2048 });
-    return resp.choices[0].message.content;
+  } else {
+    console.warn('[AI] OpenRouter not configured (missing OPENROUTER_API_KEY)');
   }
 
-  throw new Error('All AI providers failed or unavailable');
+  throw new Error('Всички AI доставчици са недостъпни. Моля, опитайте след минута.');
 }
 
 // POST /api/ai/chat
