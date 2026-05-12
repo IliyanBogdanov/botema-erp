@@ -30,7 +30,7 @@ router.get('/', auth, async (req, res) => {
           client: { select: { id: true, name: true } },
           supplier: { select: { id: true, name: true } },
           project: { select: { id: true, code: true, name: true } },
-          lines: { include: { inventoryItem: { select: { id: true, sku: true, name: true, unit: true } } } },
+          lines: { orderBy: { lineNo: 'asc' } },
           deliveries: { select: { id: true, deliveryType: true, status: true, deliveryDate: true } },
         },
         orderBy: { orderDate: 'desc' },
@@ -56,11 +56,9 @@ router.get('/:id', auth, async (req, res) => {
         client: true,
         supplier: true,
         project: { select: { id: true, code: true, name: true } },
-        lines: { include: { inventoryItem: true } },
+        lines: true,
         deliveries: {
-          include: {
-            movements: { include: { inventoryItem: { select: { id: true, sku: true, name: true } } } },
-          },
+          select: { id: true, deliveryType: true, status: true, deliveryDate: true },
         },
       },
     });
