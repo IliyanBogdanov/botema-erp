@@ -13,16 +13,16 @@ const openRouter = process.env.OPENROUTER_API_KEY ? new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
 }) : null;
 
-// Try Gemini first, fallback to Groq, then OpenRouter
+// Try Gemini first (1.5-flash = stable + high quota), fallback to Groq, then OpenRouter
 async function callAI(systemPrompt, message, geminiHistory) {
-  // 1. Try Gemini 2.5 Flash
+  // 1. Try Gemini 2.5 Flash (paid model configured on this account)
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt });
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessage(message);
     return result.response.text();
   } catch (err) {
-    console.warn('[AI] Gemini failed:', err.message?.slice(0, 100));
+    console.warn('[AI] gemini-2.5-flash failed:', err.message?.slice(0, 80));
   }
 
   // 2. Fallback: Groq llama-3.3-70b
