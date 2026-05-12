@@ -1,10 +1,58 @@
 const express = require('express');
 const router = express.Router();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
+const OpenAI = require('openai');
 const { auth } = require('../middleware/auth');
 const prisma = require('../lib/prisma');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+const openRouter = process.env.OPENROUTER_API_KEY ? new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: 'https://openrouter.ai/api/v1',
+}) : null;
+
+// Try Gemini first, fallback to Groq, then OpenRouter
+async function callAI(systemPrompt, message, geminiHistory) {
+  // 1. Try Gemini 2.5 Flash
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt });
+    const chat = model.startChat({ history: geminiHistory });
+    const result = await chat.sendMessage(message);
+    return result.response.text();
+  } catch (err) {
+    console.warn('[AI] Gemini failed:', err.message?.slice(0, 100));
+  }
+
+  // 2. Fallback: Groq llama-3.3-70b
+  if (groq) {
+    try {
+      const msgs = [{ role: 'system', content: systemPrompt }];
+      for (const h of geminiHistory) {
+        msgs.push({ role: h.role === 'model' ? 'assistant' : 'user', content: h.parts[0].text });
+      }
+      msgs.push({ role: 'user', content: message });
+      const resp = await groq.chat.completions.create({ model: 'llama-3.3-70b-versatile', messages: msgs, max_tokens: 2048 });
+      return resp.choices[0].message.content;
+    } catch (err) {
+      console.warn('[AI] Groq failed, trying OpenRouter...');
+    }
+  }
+
+  // 3. Fallback: OpenRouter free model
+  if (openRouter) {
+    const msgs = [{ role: 'system', content: systemPrompt }];
+    for (const h of geminiHistory) {
+      msgs.push({ role: h.role === 'model' ? 'assistant' : 'user', content: h.parts[0].text });
+    }
+    msgs.push({ role: 'user', content: message });
+    const resp = await openRouter.chat.completions.create({ model: 'openai/gpt-4.1-mini', messages: msgs, max_tokens: 2048 });
+    return resp.choices[0].message.content;
+  }
+
+  throw new Error('All AI providers failed or unavailable');
+}
 
 // POST /api/ai/chat
 router.post('/chat', auth, async (req, res) => {
@@ -119,15 +167,7 @@ ${JSON.stringify(counterparties.map(c => ({ ime: c.name, tip: c.type, eik: c.eik
       parts: [{ text: h.content }],
     }));
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      systemInstruction: systemPrompt,
-    });
-
-    const chat = model.startChat({ history: geminiHistory });
-    const result = await chat.sendMessage(message);
-    const reply = result.response.text();
-
+    const reply = await callAI(systemPrompt, message, geminiHistory);
     res.json({ reply });
   } catch (err) {
     console.error('[AI chat]', err.message);
