@@ -41,76 +41,60 @@ function getAttachments(payload) {
   return atts;
 }
 
-// GET /api/gmail-inbox — fetch + sync latest 30 messages from Gmail
+// GET /api/gmail-inbox — fetch + sync latest messages from Gmail, supports ?search=&status=&limit=
 router.get('/', auth, async (req, res) => {
   try {
+    const search = (req.query.search || '').toLowerCase().trim();
+    const statusFilter = req.query.status || '';
+    const limit = Math.min(parseInt(req.query.limit) || 500, 1000);
+
     if (!process.env.GOOGLE_REFRESH_TOKEN) {
-      // Return stored messages if no Gmail connection
       const rows = await prisma.$queryRaw`
-        SELECT * FROM gmail_messages ORDER BY "createdAt" DESC LIMIT 50
+        SELECT * FROM gmail_messages ORDER BY date DESC NULLS LAST, "createdAt" DESC LIMIT ${limit}
       `;
       return res.json(rows);
     }
 
-    const gmail = getGmailClient();
-    const listRes = await gmail.users.messages.list({
-      userId: 'me',
-      maxResults: 30,
-      q: 'in:inbox',
-    });
-
-    const messages = listRes.data.messages || [];
-
-    for (const msg of messages) {
-      // Check if already stored
-      const existing = await prisma.$queryRaw`
-        SELECT id FROM gmail_messages WHERE "messageId" = ${msg.id} LIMIT 1
-      `;
-      if (existing.length > 0) continue;
-
-      // Fetch full message
-      const full = await gmail.users.messages.get({
-        userId: 'me',
-        id: msg.id,
-        format: 'full',
-      });
-
-      const headers = full.data.payload?.headers || [];
-      const subject = getHeader(headers, 'Subject') || '(без тема)';
-      const from = getHeader(headers, 'From');
-      const dateStr = getHeader(headers, 'Date');
-      const date = dateStr ? new Date(dateStr) : new Date();
-      const snippet = full.data.snippet || '';
-      const bodyText = extractText(full.data.payload);
-      const attachmentNames = getAttachments(full.data.payload);
-      const hasAttachments = attachmentNames.length > 0;
-      const threadId = full.data.threadId || null;
-
-      await prisma.$executeRaw`
-        INSERT INTO gmail_messages (
-          id, "messageId", "threadId", subject, "from", snippet, date,
-          "hasAttachments", "attachmentNames", "bodyText", status, "createdAt", "updatedAt"
-        ) VALUES (
-          gen_random_uuid()::text,
-          ${msg.id}, ${threadId}, ${subject}, ${from}, ${snippet}, ${date},
-          ${hasAttachments}, ${attachmentNames}, ${bodyText},
-          'PENDING'::"GmailMessageStatus",
-          now(), now()
-        )
-        ON CONFLICT ("messageId") DO NOTHING
-      `;
+    // Sync latest 30 new messages from Gmail
+    try {
+      const gmail = getGmailClient();
+      const listRes = await gmail.users.messages.list({ userId: 'me', maxResults: 30, q: 'in:inbox' });
+      const messages = listRes.data.messages || [];
+      for (const msg of messages) {
+        const existing = await prisma.$queryRaw`SELECT id FROM gmail_messages WHERE "messageId" = ${msg.id} LIMIT 1`;
+        if (existing.length > 0) continue;
+        const full = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'full' });
+        const headers = full.data.payload?.headers || [];
+        const subject = getHeader(headers, 'Subject') || '(без тема)';
+        const from = getHeader(headers, 'From');
+        const dateStr = getHeader(headers, 'Date');
+        const date = dateStr ? new Date(dateStr) : new Date();
+        const snippet = full.data.snippet || '';
+        const bodyText = extractText(full.data.payload);
+        const attachmentNames = getAttachments(full.data.payload);
+        const hasAttachments = attachmentNames.length > 0;
+        const threadId = full.data.threadId || null;
+        await prisma.$executeRaw`
+          INSERT INTO gmail_messages (id, "messageId", "threadId", subject, "from", snippet, date,
+            "hasAttachments", "attachmentNames", "bodyText", status, "createdAt", "updatedAt")
+          VALUES (gen_random_uuid()::text, ${msg.id}, ${threadId}, ${subject}, ${from}, ${snippet}, ${date},
+            ${hasAttachments}, ${attachmentNames}, ${bodyText}, 'PENDING'::"GmailMessageStatus", now(), now())
+          ON CONFLICT ("messageId") DO NOTHING
+        `;
+      }
+    } catch (syncErr) {
+      console.error('Gmail sync error (continuing with stored):', syncErr.message);
     }
 
     const rows = await prisma.$queryRaw`
-      SELECT * FROM gmail_messages ORDER BY date DESC NULLS LAST LIMIT 50
+      SELECT * FROM gmail_messages ORDER BY date DESC NULLS LAST, "createdAt" DESC LIMIT ${limit}
     `;
     res.json(rows);
   } catch (err) {
     console.error('Gmail inbox error:', err);
-    // Fallback: return stored messages
     try {
       const rows = await prisma.$queryRaw`
-        SELECT * FROM gmail_messages ORDER BY "createdAt" DESC LIMIT 50
+        SELECT * FROM gmail_messages ORDER BY date DESC NULLS LAST, "createdAt" DESC LIMIT 500
       `;
       res.json(rows);
     } catch (e2) {

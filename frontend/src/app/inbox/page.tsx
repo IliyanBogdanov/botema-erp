@@ -380,6 +380,7 @@ function DetailPanel({
 
 export default function InboxPage() {
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<GmailMessage | null>(null);
   const [classifying, setClassifying] = useState<GmailMessage | null>(null);
   const t = useT();
@@ -387,7 +388,7 @@ export default function InboxPage() {
 
   const { data: allMessages = [], isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['gmail-inbox'],
-    queryFn: () => api.get('/gmail-inbox').then(r => r.data),
+    queryFn: () => api.get('/gmail-inbox?limit=500').then(r => r.data),
     staleTime: 60000,
   });
 
@@ -397,9 +398,15 @@ export default function InboxPage() {
   });
 
   const messages: GmailMessage[] = Array.isArray(allMessages) ? allMessages : [];
-  const filtered = statusFilter
-    ? messages.filter(m => m.status === statusFilter)
-    : messages;
+  const filtered = messages
+    .filter(m => !statusFilter || m.status === statusFilter)
+    .filter(m => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (m.from || '').toLowerCase().includes(q) ||
+             (m.subject || '').toLowerCase().includes(q) ||
+             (m.snippet || '').toLowerCase().includes(q);
+    });
 
   const pendingCount = messages.filter(m => m.status === 'PENDING').length;
   const classifiedCount = messages.filter(m => m.status === 'CLASSIFIED').length;
@@ -456,21 +463,32 @@ export default function InboxPage() {
           ))}
         </div>
 
-        {/* Filter tabs */}
-        <div className="flex gap-1 bg-surface-container border border-outline-variant/20 p-1 w-fit">
-          {STATUS_FILTERS.map(f => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
-                statusFilter === f.value
-                  ? 'bg-primary-container text-on-primary-container'
-                  : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        {/* Filter tabs + search */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1 bg-surface-container border border-outline-variant/20 p-1 w-fit">
+            {STATUS_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                  statusFilter === f.value
+                    ? 'bg-primary-container text-on-primary-container'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-1 min-w-[200px] max-w-[360px]">
+            <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">search</span>
+            <input
+              className="input w-full py-2 pl-10 text-sm"
+              placeholder="Търси по подател, тема..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Split panel */}
