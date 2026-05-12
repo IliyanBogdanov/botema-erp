@@ -144,6 +144,101 @@ router.patch('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /api/gmail-inbox/auto-classify — auto-classify all PENDING messages
+router.post('/auto-classify', auth, async (req, res) => {
+  try {
+    const pending = await prisma.$queryRaw`
+      SELECT * FROM gmail_messages WHERE status = 'PENDING'::"GmailMessageStatus" ORDER BY date DESC
+    `;
+
+    const IGNORE_SENDERS = [
+      'railway.app', 'openai.com', 'supabase.io', 'ozone.bg',
+      'raben', 'speedy', 'allianz', 'freelancer.com',
+    ];
+    const IGNORE_SUBJECTS = [
+      'build failed', 'security vulnerabilities', 'застрахователно', 'investment news',
+      'new arrivals', 'reduced prices', 'spam', 'unsubscribe',
+    ];
+
+    const results = { ignored: 0, invoiceIn: 0, bankStatement: 0, offer: 0, delivery: 0, other: 0 };
+
+    for (const msg of pending) {
+      const fromLower = (msg.from || '').toLowerCase();
+      const subjectLower = (msg.subject || '').toLowerCase();
+
+      let newStatus = null;
+      let classifiedType = null;
+
+      // Determine classification
+      const isIgnore =
+        IGNORE_SENDERS.some(s => fromLower.includes(s)) ||
+        IGNORE_SUBJECTS.some(s => subjectLower.includes(s));
+
+      if (isIgnore) {
+        newStatus = 'IGNORED';
+        results.ignored++;
+      } else if (
+        subjectLower.includes('invoice number') ||
+        subjectLower.includes('фактура м') ||
+        subjectLower.includes('ф-ра м') ||
+        subjectLower.includes('last dhl') ||
+        subjectLower.includes('dhl фактура') ||
+        fromLower.includes('lodes') ||
+        fromLower.includes('dhl.com') ||
+        fromLower.includes('polaris')
+      ) {
+        newStatus = 'CLASSIFIED';
+        classifiedType = 'INVOICE_IN';
+        results.invoiceIn++;
+      } else if (
+        subjectLower.includes('bank account statement') ||
+        subjectLower.includes('банково извлечение') ||
+        fromLower.includes('teximbank')
+      ) {
+        newStatus = 'CLASSIFIED';
+        classifiedType = 'BANK_STATEMENT';
+        results.bankStatement++;
+      } else if (
+        subjectLower.includes('оферта') ||
+        subjectLower.includes('offer') && msg.hasAttachments
+      ) {
+        newStatus = 'CLASSIFIED';
+        classifiedType = 'OFFER_OUT';
+        results.offer++;
+      } else if (
+        subjectLower.includes('delivery note') ||
+        subjectLower.includes('cmr') ||
+        fromLower.includes('dachser') ||
+        fromLower.includes('fercam')
+      ) {
+        newStatus = 'CLASSIFIED';
+        classifiedType = 'DELIVERY_NOTE';
+        results.delivery++;
+      } else {
+        // Leave as PENDING for manual review
+        results.other++;
+        continue;
+      }
+
+      await prisma.$executeRaw`
+        UPDATE gmail_messages
+        SET
+          status = ${newStatus}::"GmailMessageStatus",
+          "classifiedType" = ${classifiedType},
+          "reviewedAt" = now(),
+          "reviewedById" = ${req.user.id},
+          "updatedAt" = now()
+        WHERE id = ${msg.id}
+      `;
+    }
+
+    res.json({ total: pending.length, results });
+  } catch (err) {
+    console.error('Auto-classify error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/gmail-inbox/stats — counts by status
 router.get('/stats', auth, async (req, res) => {
   try {
