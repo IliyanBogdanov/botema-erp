@@ -34,37 +34,34 @@ router.post('/chat', auth, async (req, res) => {
         orderBy: { name: 'asc' },
       }),
       prisma.project.findMany({
-        where: { status: { in: ['ACTIVE', 'IN_PROGRESS'] } },
-        include: { client: { select: { name: true } } },
-        select: { code: true, name: true, status: true, client: true, budget: true, createdAt: true },
+        where: { status: { in: ['ACTIVE', 'ON_HOLD'] } },
+        select: { code: true, name: true, status: true, year: true, notes: true, client: { select: { name: true } } },
       }),
       prisma.invoice.findMany({
         orderBy: { date: 'desc' }, take: 20,
-        include: { client: { select: { name: true } } },
-        select: { number: true, date: true, amountNet: true, amountVat: true, currency: true, status: true, client: true, description: true },
+        select: { number: true, date: true, amountNet: true, vatAmount: true, currency: true, status: true, description: true, client: { select: { name: true } } },
       }),
       prisma.invoice.findMany({
-        where: { status: { in: ['SENT', 'OVERDUE'] } },
-        include: { client: { select: { name: true } } },
-        select: { number: true, date: true, dueDate: true, amountNet: true, currency: true, status: true, client: true },
+        where: { status: { in: ['PENDING', 'OVERDUE'] } },
+        select: { number: true, date: true, dueDate: true, amountNet: true, currency: true, status: true, client: { select: { name: true } } },
         orderBy: { dueDate: 'asc' },
       }),
       prisma.bizDocument.findMany({
         orderBy: { docDate: 'desc' }, take: 30,
-        include: { counterparty: { select: { name: true, type: true } } },
-        select: { docType: true, docNumber: true, docDate: true, totalAmount: true, currency: true, counterparty: true, description: true },
+        select: { docType: true, docNumber: true, docDate: true, amountTotal: true, currency: true, notes: true, counterparty: { select: { name: true, type: true } } },
       }),
       prisma.payment.findMany({
         orderBy: { paymentDate: 'desc' }, take: 20,
-        select: { paymentDate: true, amount: true, currency: true, type: true, reference: true, counterpartyName: true, matchStatus: true },
+        select: { paymentDate: true, amount: true, currency: true, paymentType: true, reference: true, bankAccount: true, status: true },
       }),
       prisma.bizDocument.findMany({
         where: { docType: 'OFFER_OUT' },
         orderBy: { docDate: 'desc' }, take: 20,
-        include: { counterparty: { select: { name: true } } },
-        select: { docNumber: true, docDate: true, totalAmount: true, currency: true, counterparty: true, description: true },
+        select: { docNumber: true, externalRef: true, docDate: true, amountTotal: true, currency: true, notes: true, counterparty: { select: { name: true } } },
       }),
-      prisma.inventoryItem.findMany({ include: { supplier: { select: { name: true } } } }),
+      prisma.inventoryItem.findMany({
+        select: { code: true, name: true, category: true, qtyIn: true, qtyOut: true, location: true },
+      }),
       prisma.invoice.aggregate({
         where: { date: { gte: new Date(`${currentYear}-01-01`) }, status: { not: 'CANCELLED' } },
         _sum: { amountNet: true },
@@ -73,47 +70,46 @@ router.post('/chat', auth, async (req, res) => {
         where: { date: { gte: new Date(`${currentYear}-01-01`) } },
         _sum: { amount: true },
       }),
-      prisma.payment.count({ where: { matchStatus: 'UNMATCHED' } }),
+      prisma.payment.count({ where: { status: 'UNMATCHED' } }),
     ]);
 
-    const revenueEur = Number(revenueAgg._sum.amountNet || 0);
+    const revenueTotal = Number(revenueAgg._sum.amountNet || 0);
     const costsTotal = Number(costsAgg._sum.amount || 0);
-    const profit = revenueEur - costsTotal;
 
     const systemPrompt = `Ти си финансов AI асистент на Studio Botema ЕООД — бутик дизайн студио в Пазарджик, България.
 Отговаряй САМО на БЪЛГАРСКИ. Бъди кратък, точен и практичен. Използвай данните от системата за точни отговори.
 
-━━ ФИНАНСОВО РЕЗЮМЕ (${now.toLocaleDateString('bg-BG')}) ━━
-• Приходи ${currentYear}: ${revenueEur.toFixed(2)} EUR
-• Разходи ${currentYear}: ${costsTotal.toFixed(2)} BGN
-• Активни проекти: ${projects.length}
-• Клиенти в системата: ${clients.length} (CRM) + ${counterparties.length} контрагента (банкови)
-• Неплатени фактури: ${unpaidInvoices.length}
-• Ненасочени банкови транзакции: ${paymentsUnmatchedCount}
+=== ФИНАНСОВО РЕЗЮМЕ (${now.toLocaleDateString('bg-BG')}) ===
+- Приходи ${currentYear}: ${revenueTotal.toFixed(2)} EUR
+- Разходи ${currentYear}: ${costsTotal.toFixed(2)} BGN
+- Активни проекти: ${projects.length}
+- Клиенти: ${clients.length} (CRM) + ${counterparties.length} контрагента (банкови)
+- Неплатени фактури: ${unpaidInvoices.length}
+- Ненасочени банкови плащания: ${paymentsUnmatchedCount}
 
-━━ АКТИВНИ ПРОЕКТИ ━━
-${JSON.stringify(projects.map(p => ({ код: p.code, проект: p.name, клиент: p.client?.name, статус: p.status, бюджет: p.budget })), null, 2)}
+=== АКТИВНИ ПРОЕКТИ ===
+${JSON.stringify(projects.map(p => ({ kod: p.code, proekt: p.name, klient: p.client?.name, status: p.status, godina: p.year, belezhki: p.notes })), null, 2)}
 
-━━ НЕПЛАТЕНИ ФАКТУРИ ━━
-${JSON.stringify(unpaidInvoices.map(i => ({ "№": i.number, дата: i.date?.toISOString?.()?.slice(0,10), падеж: i.dueDate?.toISOString?.()?.slice(0,10), сума: Number(i.amountNet), валута: i.currency, клиент: i.client?.name, статус: i.status })), null, 2)}
+=== НЕПЛАТЕНИ ФАКТУРИ ===
+${JSON.stringify(unpaidInvoices.map(i => ({ nomer: i.number, data: i.date?.toISOString?.()?.slice(0,10), padej: i.dueDate?.toISOString?.()?.slice(0,10), suma: Number(i.amountNet), valuta: i.currency, klient: i.client?.name, status: i.status })), null, 2)}
 
-━━ ПОСЛЕДНИ 20 ФАКТУРИ ━━
-${JSON.stringify(recentInvoices.map(i => ({ "№": i.number, дата: i.date?.toISOString?.()?.slice(0,10), нето: Number(i.amountNet), ддс: Number(i.amountVat||0), валута: i.currency, клиент: i.client?.name, статус: i.status, описание: i.description })), null, 2)}
+=== ПОСЛЕДНИ 20 ФАКТУРИ ===
+${JSON.stringify(recentInvoices.map(i => ({ nomer: i.number, data: i.date?.toISOString?.()?.slice(0,10), neto: Number(i.amountNet), dds: Number(i.vatAmount||0), valuta: i.currency, klient: i.client?.name, status: i.status, opisanie: i.description })), null, 2)}
 
-━━ ПОСЛЕДНИ 30 ДОКУМЕНТА (BizDocs) ━━
-${JSON.stringify(recentBizDocs.map(d => ({ тип: d.docType, "№": d.docNumber, дата: d.docDate?.toISOString?.()?.slice(0,10), сума: Number(d.totalAmount||0), валута: d.currency, контрагент: d.counterparty?.name, описание: d.description })), null, 2)}
+=== ПОСЛЕДНИ 30 ДОКУМЕНТА ===
+${JSON.stringify(recentBizDocs.map(d => ({ tip: d.docType, nomer: d.docNumber, data: d.docDate?.toISOString?.()?.slice(0,10), suma: Number(d.amountTotal||0), valuta: d.currency, kontragent: d.counterparty?.name, belezhki: d.notes })), null, 2)}
 
-━━ ПОСЛЕДНИ 20 БАНКОВИ ТРАНЗАКЦИИ ━━
-${JSON.stringify(recentPayments.map(p => ({ дата: p.paymentDate?.toISOString?.()?.slice(0,10), сума: Number(p.amount), валута: p.currency, тип: p.type, контрагент: p.counterpartyName, референция: p.reference, статус: p.matchStatus })), null, 2)}
+=== ПОСЛЕДНИ 20 ПЛАЩАНИЯ ===
+${JSON.stringify(recentPayments.map(p => ({ data: p.paymentDate?.toISOString?.()?.slice(0,10), suma: Number(p.amount), valuta: p.currency, tip: p.paymentType, referencia: p.reference, status: p.status })), null, 2)}
 
-━━ ПОСЛЕДНИ ОФЕРТИ ━━
-${JSON.stringify(recentOffers.map(o => ({ "№": o.docNumber, дата: o.docDate?.toISOString?.()?.slice(0,10), сума: Number(o.totalAmount||0), валута: o.currency, клиент: o.counterparty?.name, описание: o.description })), null, 2)}
+=== ПОСЛЕДНИ ОФЕРТИ ===
+${JSON.stringify(recentOffers.map(o => ({ nomer: o.externalRef || o.docNumber, data: o.docDate?.toISOString?.()?.slice(0,10), suma: Number(o.amountTotal||0), valuta: o.currency, klient: o.counterparty?.name, belezhki: o.notes })), null, 2)}
 
-━━ СКЛАД ━━
-${JSON.stringify(inventory.map(i => ({ код: i.code, наименование: i.name, категория: i.category, наличност: Number(i.qtyIn)-Number(i.qtyOut), локация: i.location })), null, 2)}
+=== СКЛАД ===
+${JSON.stringify(inventory.map(i => ({ kod: i.code, naim: i.name, kat: i.category, nalichnost: Number(i.qtyIn)-Number(i.qtyOut), lok: i.location })), null, 2)}
 
-━━ ВСИЧКИ КОНТРАГЕНТИ ━━
-${JSON.stringify(counterparties.map(c => ({ име: c.name, тип: c.type, еик: c.eik })), null, 2)}
+=== ВСИЧКИ КОНТРАГЕНТИ ===
+${JSON.stringify(counterparties.map(c => ({ ime: c.name, tip: c.type, eik: c.eik })), null, 2)}
 
 Можеш да: анализираш финансови данни, правиш справки и сравнения, изчисляваш маржове и рентабилност по проект, генерираш текст за оферти/писма, предлагаш бизнес анализи, намираш неплатени задължения, обясняваш транзакции.`;
 
@@ -148,7 +144,7 @@ router.post('/extract', auth, async (req, res) => {
       {
         text: `Извлечи данните от този документ и върни САМО валиден JSON без markdown:
 {
-  "type": "INVOICE_IN"|"INVOICE_OUT"|"PROFORMA"|"DELIVERY",
+  "type": "INVOICE_IN",
   "invoiceNo": "...",
   "date": "YYYY-MM-DD",
   "supplierName": "...",
@@ -156,9 +152,9 @@ router.post('/extract', auth, async (req, res) => {
   "amount": 0.00,
   "vatAmount": 0.00,
   "amountTotal": 0.00,
-  "currency": "EUR"|"BGN",
+  "currency": "EUR",
   "description": "...",
-  "confidence": 0.00,
+  "confidence": 0.95,
   "items": [{"description":"...","qty":1,"unitPrice":0.00,"vatPct":20}]
 }`,
       },
