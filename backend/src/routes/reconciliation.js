@@ -94,6 +94,22 @@ router.post('/sync-invoice-status', auth, async (req, res) => {
       l.targetDoc?.docType === 'INVOICE_OUT'
     );
 
+    // Also mark ALL matched BizDocs (any type) as PAID directly
+    const allMatchedLinks = links.filter(l =>
+      l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL'
+    );
+    let bizDocsPaid = 0;
+    for (const link of allMatchedLinks) {
+      if (!link.targetDoc?.id) continue;
+      try {
+        await prisma.bizDocument.updateMany({
+          where: { id: link.targetDoc.id, status: { not: 'MATCHED' } },
+          data: { status: 'MATCHED' },
+        });
+        bizDocsPaid++;
+      } catch { /* ignore */ }
+    }
+
     let updated = 0;
     let alreadyPaid = 0;
     let notFound = 0;
@@ -103,10 +119,11 @@ router.post('/sync-invoice-status', auth, async (req, res) => {
       const docNumber = link.targetDoc?.docNumber;
       if (!docNumber) { notFound++; continue; }
 
-      // Try exact match first, then stripped leading zeros
+      // Try exact, stripped zeros, and zero-padded (10 digits) variants
       const strippedNum = docNumber.replace(/^0+/, '') || docNumber;
+      const paddedNum = strippedNum.padStart(10, '0');
       const invoice = await prisma.invoice.findFirst({
-        where: { number: { in: [docNumber, strippedNum] } },
+        where: { number: { in: [docNumber, strippedNum, paddedNum] } },
         select: { id: true, status: true },
       });
 
@@ -130,6 +147,7 @@ router.post('/sync-invoice-status', auth, async (req, res) => {
       updated,
       alreadyPaid,
       notFound,
+      bizDocsPaidDirectly: bizDocsPaid,
       notFoundNums: notFoundNums.slice(0, 20),
     });
   } catch (e) {
