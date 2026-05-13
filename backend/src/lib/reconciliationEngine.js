@@ -16,12 +16,28 @@ const prisma = require('./prisma');
 
 // Patterns that look like Bulgarian invoice numbers
 const INVOICE_NUMBER_PATTERNS = [
-  /\b(\d{10})\b/,                  // 10-digit number (common BG format)
-  /фактура\s*[№#]?\s*(\d+)/i,     // "фактура 1234"
-  /invoice\s*[№#]?\s*(\d+)/i,     // "invoice 1234"
-  /inv[.\-\s]?(\d+)/i,             // "inv-1234"
-  /[№#]\s*(\d{4,})/,              // "№ 1234"
+  /фактура\s*(?:номер)?\s*[№#]?\s*(\d+)/i,  // "фактура 1234" or "фактура номер 1234"
+  /проформа\s*[№#]?\s*(\d+)/i,              // "проформа 1234"
+  /invoice\s*[№#]?\s*(\d+)/i,               // "invoice 1234"
+  /inv[.\-\s]?(\d+)/i,                       // "inv-1234"
+  /[№#]\s*(\d{4,})/,                         // "№ 1234"
+  /\b(\d{10})\b/,                             // 10-digit number (common BG format)
+  /\b(\d{7,})\b/,                             // 7+ digit number (other BG formats)
 ];
+
+// Keywords indicating bank charges / fees — not invoice payments
+const BANK_CHARGE_KEYWORDS = [
+  /такса/i, /atm/i, /\[такса\]/i, /debit visa/i, /credit card/i,
+  /openai/i, /chatgpt/i, /pos\s+\d/i, /такса превод/i,
+  /такса: /i, /комисион(?!на)/i,
+];
+
+/**
+ * Strip leading zeros from a numeric string for loose matching.
+ */
+function stripLeadingZeros(s) {
+  return s ? s.replace(/^0+/, '') || '0' : s;
+}
 
 /**
  * Try to extract an invoice/document number from a payment description string.
@@ -34,6 +50,17 @@ function extractDocNumber(description) {
     if (m) return m[1];
   }
   return null;
+}
+
+/**
+ * Returns true if the payment notes indicate it's a bank fee / charge / ATM.
+ */
+function isBankCharge(payment) {
+  if (payment.paymentType === 'OTHER') {
+    const notes = (payment.notes || '') + ' ' + (payment.reference || '');
+    return BANK_CHARGE_KEYWORDS.some(p => p.test(notes));
+  }
+  return false;
 }
 
 /**
@@ -64,10 +91,27 @@ async function autoMatch({ year } = {}) {
       amount: true,
       currency: true,
       paymentDate: true,
+      paymentType: true,
       notes: true,
+      reference: true,
       counterpartyId: true,
     },
   });
+
+  // ── Step 0: auto-dismiss bank charges (fees, ATM, card charges) ──────────
+  let bankChargeCount = 0;
+  const realPayments = [];
+  for (const payment of payments) {
+    if (isBankCharge(payment)) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'MATCHED', notes: (payment.notes || '') + ' [auto:bank_charge]' },
+      });
+      bankChargeCount++;
+    } else {
+      realPayments.push(payment);
+    }
+  }
 
   // Load all invoices/proformas in the same currency once
   const docs = await prisma.bizDocument.findMany({
@@ -86,22 +130,39 @@ async function autoMatch({ year } = {}) {
     },
   });
 
-  // Build lookup map: docNumber → doc
+  // Build lookup maps: exact docNumber AND leading-zero-stripped version
   const docByNumber = new Map();
+  const docByStripped = new Map();
   for (const doc of docs) {
-    if (doc.docNumber) docByNumber.set(doc.docNumber.trim(), doc);
+    if (doc.docNumber) {
+      const trimmed = doc.docNumber.trim();
+      docByNumber.set(trimmed, doc);
+      const stripped = stripLeadingZeros(trimmed.replace(/\D/g, ''));
+      if (stripped && stripped !== trimmed) docByStripped.set(stripped, doc);
+    }
+  }
+
+  function findDocByNum(num) {
+    if (!num) return null;
+    if (docByNumber.has(num)) return docByNumber.get(num);
+    // Try stripped version of extracted number
+    const strippedNum = stripLeadingZeros(num);
+    if (docByNumber.has(strippedNum)) return docByNumber.get(strippedNum);
+    if (docByStripped.has(strippedNum)) return docByStripped.get(strippedNum);
+    return null;
   }
 
   let matched = 0, partial = 0, unmatched = 0;
 
-  for (const payment of payments) {
+  for (const payment of realPayments) {
     let bestMatch = null;
     let confidence = 0;
 
     // ── Step 1: regex extract doc number ────────────────────────────────────
     const extractedNum = extractDocNumber(payment.notes);
-    if (extractedNum && docByNumber.has(extractedNum)) {
-      bestMatch = docByNumber.get(extractedNum);
+    const docMatch = findDocByNum(extractedNum);
+    if (docMatch) {
+      bestMatch = docMatch;
       confidence = amountsMatch(payment.amount, bestMatch.amountTotal) ? 1.0 : 0.8;
     }
 
@@ -185,7 +246,7 @@ async function autoMatch({ year } = {}) {
     else partial++;
   }
 
-  return { matched, partial, unmatched, totalProcessed: payments.length };
+  return { matched, partial, unmatched, bankCharges: bankChargeCount, totalProcessed: payments.length };
 }
 
 /**
@@ -227,4 +288,4 @@ async function getStats(year) {
   };
 }
 
-module.exports = { autoMatch, getStats, extractDocNumber };
+module.exports = { autoMatch, getStats, extractDocNumber, isBankCharge, stripLeadingZeros };

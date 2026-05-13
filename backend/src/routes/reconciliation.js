@@ -87,7 +87,12 @@ router.post('/sync-invoice-status', auth, async (req, res) => {
       },
     });
 
-    const matchedLinks = links.filter(l => l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL');
+    // Only INVOICE_OUT BizDocs map to the Invoice table (outgoing invoices TO clients)
+    // INVOICE_IN are supplier/purchase invoices — they live in Purchase table, not Invoice
+    const matchedLinks = links.filter(l =>
+      (l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL') &&
+      l.targetDoc?.docType === 'INVOICE_OUT'
+    );
 
     let updated = 0;
     let alreadyPaid = 0;
@@ -98,8 +103,10 @@ router.post('/sync-invoice-status', auth, async (req, res) => {
       const docNumber = link.targetDoc?.docNumber;
       if (!docNumber) { notFound++; continue; }
 
+      // Try exact match first, then stripped leading zeros
+      const strippedNum = docNumber.replace(/^0+/, '') || docNumber;
       const invoice = await prisma.invoice.findFirst({
-        where: { number: docNumber },
+        where: { number: { in: [docNumber, strippedNum] } },
         select: { id: true, status: true },
       });
 
