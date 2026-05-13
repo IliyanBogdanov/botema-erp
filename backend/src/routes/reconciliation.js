@@ -74,4 +74,61 @@ router.post('/auto-match', auth, async (req, res) => {
   }
 });
 
+// POST /api/reconciliation/sync-invoice-status
+// For every MATCHED payment → BizDocument link, mark the corresponding Invoice as PAID.
+router.post('/sync-invoice-status', auth, async (req, res) => {
+  try {
+    // Find all payment→bizdoc links for MATCHED or PARTIAL payments
+    const links = await prisma.reconciliationLink.findMany({
+      where: { linkType: 'PAYMENT_TO_INVOICE', targetDocId: { not: null } },
+      include: {
+        payment: { select: { id: true, status: true, amount: true, currency: true } },
+        targetDoc: { select: { id: true, docNumber: true, docType: true } },
+      },
+    });
+
+    const matchedLinks = links.filter(l => l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL');
+
+    let updated = 0;
+    let alreadyPaid = 0;
+    let notFound = 0;
+    const notFoundNums = [];
+
+    for (const link of matchedLinks) {
+      const docNumber = link.targetDoc?.docNumber;
+      if (!docNumber) { notFound++; continue; }
+
+      const invoice = await prisma.invoice.findFirst({
+        where: { number: docNumber },
+        select: { id: true, status: true },
+      });
+
+      if (!invoice) {
+        notFound++;
+        notFoundNums.push(docNumber);
+        continue;
+      }
+
+      if (invoice.status === 'PAID') { alreadyPaid++; continue; }
+
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: 'PAID' },
+      });
+      updated++;
+    }
+
+    res.json({
+      processed: matchedLinks.length,
+      updated,
+      alreadyPaid,
+      notFound,
+      notFoundNums: notFoundNums.slice(0, 20),
+    });
+  } catch (e) {
+    console.error('sync-invoice-status error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

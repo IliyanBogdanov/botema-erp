@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const XLSX = require('xlsx');
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
 const { downloadDriveFile } = require('../lib/aiParser');
@@ -189,6 +192,144 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/invoices/validate-xls
+// Parses the IssuedInvoices XLS export and compares with the Invoice table.
+router.post('/validate-xls', auth, async (req, res) => {
+  const HISTORY_DIR = path.resolve(__dirname, '../../../history invoices');
+  try {
+    let xlsFiles = [];
+    if (fs.existsSync(HISTORY_DIR)) {
+      xlsFiles = fs.readdirSync(HISTORY_DIR).filter(f => /\.(xls|xlsx)$/i.test(f));
+    }
+    if (xlsFiles.length === 0) {
+      return res.status(404).json({ error: `No XLS files found in: ${HISTORY_DIR}` });
+    }
+    // Use the most recently modified file
+    const xlsPath = path.join(HISTORY_DIR, xlsFiles[xlsFiles.length - 1]);
+
+    const workbook = XLSX.readFile(xlsPath, { type: 'file', cellDates: true });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    const normalize = (row) => {
+      const keys = Object.keys(row);
+      const find = (...patterns) => {
+        for (const p of patterns) {
+          const k = keys.find(k => k.toLowerCase().includes(p.toLowerCase()));
+          if (k !== undefined) return row[k];
+        }
+        return '';
+      };
+      return {
+        number: String(find('номер', 'number', 'фактура', 'invoice') || '').trim(),
+        date: find('дата', 'date'),
+        clientName: String(find('клиент', 'client', 'получател', 'counterparty') || '').trim(),
+        amountTotal: parseFloat(String(find('сума', 'total', 'amount', 'стойност') || '0').replace(',', '.')) || 0,
+        currency: String(find('валута', 'currency') || 'EUR').trim() || 'EUR',
+      };
+    };
+
+    const xlsInvoices = rows.map(normalize).filter(r => r.number);
+
+    const dbInvoices = await prisma.invoice.findMany({
+      select: { id: true, number: true, amountTotal: true, currency: true, date: true, status: true },
+    });
+
+    const dbMap = new Map(dbInvoices.map(inv => [inv.number?.trim(), inv]));
+    const xlsMap = new Map(xlsInvoices.map(inv => [inv.number, inv]));
+
+    const matched = [];
+    const inXlsOnly = [];
+    const amountDiffs = [];
+
+    for (const xls of xlsInvoices) {
+      const db = dbMap.get(xls.number);
+      if (!db) {
+        inXlsOnly.push(xls);
+      } else {
+        const dbTotal = Number(db.amountTotal || 0);
+        const diff = Math.abs(dbTotal - xls.amountTotal);
+        if (diff > 0.02) {
+          amountDiffs.push({ number: xls.number, xlsTotal: xls.amountTotal, dbTotal, diff: Number(diff.toFixed(2)), currency: xls.currency });
+        } else {
+          matched.push(xls.number);
+        }
+      }
+    }
+
+    const inDbOnly = dbInvoices
+      .filter(db => db.number && !xlsMap.has(db.number.trim()))
+      .map(db => ({ number: db.number, status: db.status, amountTotal: Number(db.amountTotal || 0), currency: db.currency }));
+
+    res.json({
+      xlsFile: xlsFiles[xlsFiles.length - 1],
+      xlsCount: xlsInvoices.length,
+      dbCount: dbInvoices.length,
+      matchedCount: matched.length,
+      inXlsOnly,
+      inDbOnly,
+      amountDiffs,
+      summary: {
+        clean: matched.length,
+        missingFromDb: inXlsOnly.length,
+        extraInDb: inDbOnly.length,
+        amountMismatches: amountDiffs.length,
+      },
+    });
+  } catch (e) {
+    console.error('validate-xls error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/invoices/receivables-audit
+// Returns outstanding receivables: confirmed (bank-matched but not yet PAID in DB) vs unverified.
+router.get('/receivables-audit', auth, async (req, res) => {
+  try {
+    const outstanding = await prisma.invoice.findMany({
+      where: { status: { in: ['PENDING', 'OVERDUE'] } },
+      include: { client: { select: { name: true } } },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const matchedLinks = await prisma.reconciliationLink.findMany({
+      where: { linkType: 'PAYMENT_TO_INVOICE' },
+      include: {
+        payment: { select: { status: true } },
+        targetDoc: { select: { docNumber: true } },
+      },
+    });
+    const confirmedPaidNums = new Set(
+      matchedLinks
+        .filter(l => l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL')
+        .map(l => l.targetDoc?.docNumber)
+        .filter(Boolean)
+    );
+
+    const result = outstanding.map(inv => ({
+      id: inv.id,
+      number: inv.number,
+      clientName: inv.client?.name || 'Unknown',
+      amountTotal: Number(inv.amountTotal || 0),
+      currency: inv.currency,
+      date: inv.date,
+      dueDate: inv.dueDate,
+      status: inv.status,
+      confirmedPaid: confirmedPaidNums.has(inv.number),
+    }));
+
+    res.json({
+      total: result.length,
+      confirmedPaidCount: result.filter(r => r.confirmedPaid).length,
+      genuinelyOutstandingCount: result.filter(r => !r.confirmedPaid).length,
+      confirmedPaid: result.filter(r => r.confirmedPaid),
+      genuinelyOutstanding: result.filter(r => !r.confirmedPaid),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

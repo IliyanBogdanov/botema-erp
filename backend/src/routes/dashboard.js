@@ -279,4 +279,68 @@ router.get('/monthly-pnl', auth, async (req, res) => {
   }
 });
 
+// GET /api/dashboard/data-health
+// Returns data quality metrics: bank import status, reconciliation coverage, unverified invoices.
+router.get('/data-health', auth, async (req, res) => {
+  try {
+    const [
+      totalPayments,
+      matchedPayments,
+      unmatchedPayments,
+      totalInvoices,
+      paidInvoices,
+      pendingInvoices,
+      overdueInvoices,
+      totalExpenses,
+      totalBizDocs,
+    ] = await Promise.all([
+      prisma.payment.count(),
+      prisma.payment.count({ where: { status: 'MATCHED' } }),
+      prisma.payment.count({ where: { status: 'UNMATCHED' } }),
+      prisma.invoice.count({ where: { status: { not: 'CANCELLED' } } }),
+      prisma.invoice.count({ where: { status: 'PAID' } }),
+      prisma.invoice.count({ where: { status: 'PENDING' } }),
+      prisma.invoice.count({ where: { status: 'OVERDUE' } }),
+      prisma.expense.count(),
+      prisma.bizDocument.count(),
+    ]);
+
+    const reconciliationRate = totalPayments > 0
+      ? Math.round(matchedPayments / totalPayments * 100)
+      : 0;
+
+    const invoicePaidRate = totalInvoices > 0
+      ? Math.round(paidInvoices / totalInvoices * 100)
+      : 0;
+
+    res.json({
+      bankImport: {
+        total: totalPayments,
+        matched: matchedPayments,
+        unmatched: unmatchedPayments,
+        reconciliationRate,
+        status: totalPayments === 0 ? 'empty' : reconciliationRate >= 80 ? 'good' : reconciliationRate >= 50 ? 'partial' : 'poor',
+      },
+      invoices: {
+        total: totalInvoices,
+        paid: paidInvoices,
+        pending: pendingInvoices,
+        overdue: overdueInvoices,
+        invoicePaidRate,
+        status: invoicePaidRate >= 80 ? 'good' : invoicePaidRate >= 50 ? 'partial' : 'poor',
+      },
+      expenses: {
+        total: totalExpenses,
+        status: totalExpenses > 0 ? 'good' : 'empty',
+      },
+      bizDocs: {
+        total: totalBizDocs,
+        status: totalBizDocs > 0 ? 'good' : 'empty',
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

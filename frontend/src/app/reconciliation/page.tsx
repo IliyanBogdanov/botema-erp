@@ -83,6 +83,8 @@ export default function ReconciliationPage() {
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: number; currency?: string } | null>(null);
   const [importLocalResult, setImportLocalResult] = useState<{ totalCreated: number; totalSkipped: number; files: Array<{ file: string; created?: number; skipped?: number; currency?: string; error?: string }> } | null>(null);
   const [matchResult, setMatchResult] = useState<{ matched: number; partial: number; unmatched: number; totalProcessed: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ processed: number; updated: number; alreadyPaid: number; notFound: number } | null>(null);
+  const [xlsResult, setXlsResult] = useState<any>(null);
   const [migJobId, setMigJobId] = useState<string | null>(null);
   const [migJob, setMigJob] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -151,7 +153,22 @@ export default function ReconciliationPage() {
       setMatchResult(data);
       qc.invalidateQueries({ queryKey: ['payments'] });
       qc.invalidateQueries({ queryKey: ['recon-stats'] });
+      qc.invalidateQueries({ queryKey: ['data-health'] });
     },
+  });
+
+  const syncInvoiceStatus = useMutation({
+    mutationFn: () => api.post('/reconciliation/sync-invoice-status').then(r => r.data),
+    onSuccess: (data) => {
+      setSyncResult(data);
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['data-health'] });
+    },
+  });
+
+  const validateXls = useMutation({
+    mutationFn: () => api.post('/invoices/validate-xls').then(r => r.data),
+    onSuccess: (data) => setXlsResult(data),
   });
 
   const migratePurchases = useMutation({
@@ -167,6 +184,11 @@ export default function ReconciliationPage() {
     queryFn: () => api.get(`/reconciliation/stats?year=${bankYear}`).then(r => r.data),
     enabled: tab === 'bank',
     refetchInterval: migJob?.status === 'running' ? 5000 : false,
+  });
+
+  const { data: dataHealth } = useQuery({
+    queryKey: ['data-health'],
+    queryFn: () => api.get('/dashboard/data-health').then(r => r.data),
   });
 
   // Group links by type for tabs
@@ -232,8 +254,32 @@ export default function ReconciliationPage() {
       </div>
 
       <div className="px-8 py-6">
-
-        {/* ── TAB: LINKS ─────────────────────────────────────────────────────── */}
+        {/* ── DATA HEALTH WIDGET ─────────────────────────────────────────────── */}
+        {dataHealth && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            {[
+              { label: 'Банкови транзакции', icon: 'account_balance', value: `${dataHealth.bankImport.matched}/${dataHealth.bankImport.total}`, sub: `${dataHealth.bankImport.reconciliationRate}% съвпадат`, status: dataHealth.bankImport.status },
+              { label: 'Фактури платени', icon: 'receipt_long', value: `${dataHealth.invoices.paid}/${dataHealth.invoices.total}`, sub: `${dataHealth.invoices.invoicePaidRate}% платени`, status: dataHealth.invoices.status },
+              { label: 'Режийни разходи', icon: 'payments', value: `${dataHealth.expenses.total} записа`, sub: dataHealth.expenses.status === 'empty' ? 'Няма данни' : 'Активни', status: dataHealth.expenses.status },
+              { label: 'BizDocuments', icon: 'folder_open', value: `${dataHealth.bizDocs.total} документа`, sub: dataHealth.bizDocs.status === 'empty' ? 'Нужна миграция' : 'Готови', status: dataHealth.bizDocs.status },
+            ].map(card => (
+              <div key={card.label} className="border border-outline-variant/10 bg-surface-container-low px-4 py-3 flex items-start gap-3">
+                <div className={`w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 ${
+                  card.status === 'good' ? 'bg-primary/10' : card.status === 'partial' ? 'bg-warning/10' : 'bg-error/10'
+                }`}>
+                  <span className={`material-symbols-outlined text-[16px] ${
+                    card.status === 'good' ? 'text-primary' : card.status === 'partial' ? 'text-warning' : 'text-error'
+                  }`}>{card.icon}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="font-label-caps text-label-caps text-on-surface-variant text-[9px]">{card.label.toUpperCase()}</p>
+                  <p className="font-headline text-sm text-on-surface">{card.value}</p>
+                  <p className="font-label-caps text-label-caps text-on-surface-variant/60 text-[9px]">{card.sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {tab === 'links' && (
           <div className="space-y-4">
             {/* link type filter row */}
@@ -510,6 +556,24 @@ export default function ReconciliationPage() {
                 <span className="material-symbols-outlined text-[16px]">auto_fix_high</span>
                 {autoMatch.isPending ? 'Обработва...' : 'Авто-Match'}
               </button>
+              <button
+                onClick={() => syncInvoiceStatus.mutate()}
+                disabled={syncInvoiceStatus.isPending}
+                title="Маркира фактурите като PAID ако имат съвпадение в банковите транзакции"
+                className="flex items-center gap-2 px-4 py-2 border border-primary/40 bg-primary/5 font-label-caps text-label-caps text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">price_check</span>
+                {syncInvoiceStatus.isPending ? 'Синхронизира...' : 'Sync Invoice → PAID'}
+              </button>
+              <button
+                onClick={() => validateXls.mutate()}
+                disabled={validateXls.isPending}
+                title="Сравнява IssuedInvoices.xls с базата данни"
+                className="flex items-center gap-2 px-4 py-2 border border-outline-variant/30 bg-surface-container-low font-label-caps text-label-caps text-on-surface hover:bg-surface-container disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">difference</span>
+                {validateXls.isPending ? 'Сравнява...' : 'Verify XLS'}
+              </button>
             </div>
 
             {/* result banners */}
@@ -558,6 +622,59 @@ export default function ReconciliationPage() {
                 <button onClick={() => setMatchResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
                   <span className="material-symbols-outlined text-[16px]">close</span>
                 </button>
+              </div>
+            )}
+            {syncResult && (
+              <div className="flex items-center gap-4 border border-primary/20 bg-primary/5 px-4 py-3">
+                <span className="material-symbols-outlined text-[18px] text-primary">price_check</span>
+                <span className="font-label-caps text-label-caps text-on-surface">
+                  Sync завършен: <span className="text-primary">{syncResult.updated} фактури → PAID</span>, {syncResult.alreadyPaid} вече платени, {syncResult.notFound} не са намерени
+                </span>
+                <button onClick={() => setSyncResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
+            {xlsResult && (
+              <div className="border border-outline-variant/20 bg-surface-container-low px-4 py-3 space-y-2">
+                <div className="flex items-center gap-4">
+                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">difference</span>
+                  <span className="font-label-caps text-label-caps text-on-surface">
+                    XLS Verify: {xlsResult.xlsFile} · XLS: {xlsResult.xlsCount} | DB: {xlsResult.dbCount}
+                  </span>
+                  <button onClick={() => setXlsResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-3 pl-8">
+                  <div className="text-center">
+                    <p className="text-primary font-headline text-lg">{xlsResult.summary.clean}</p>
+                    <p className="font-label-caps text-label-caps text-on-surface-variant/60 text-[9px]">СЪВПАДАТ</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-headline text-lg ${xlsResult.summary.missingFromDb > 0 ? 'text-error' : 'text-on-surface'}`}>{xlsResult.summary.missingFromDb}</p>
+                    <p className="font-label-caps text-label-caps text-on-surface-variant/60 text-[9px]">САМО В XLS</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-headline text-lg ${xlsResult.summary.extraInDb > 0 ? 'text-warning' : 'text-on-surface'}`}>{xlsResult.summary.extraInDb}</p>
+                    <p className="font-label-caps text-label-caps text-on-surface-variant/60 text-[9px]">САМО В DB</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-headline text-lg ${xlsResult.summary.amountMismatches > 0 ? 'text-warning' : 'text-on-surface'}`}>{xlsResult.summary.amountMismatches}</p>
+                    <p className="font-label-caps text-label-caps text-on-surface-variant/60 text-[9px]">РАЗЛИКИ В СУМИ</p>
+                  </div>
+                </div>
+                {xlsResult.inXlsOnly.length > 0 && (
+                  <div className="pl-8 mt-2">
+                    <p className="font-label-caps text-label-caps text-error/80 text-[9px] mb-1">ЛИПСВАТ В DB:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {xlsResult.inXlsOnly.slice(0, 20).map((inv: any) => (
+                        <span key={inv.number} className="bg-error/5 border border-error/20 px-2 py-0.5 font-mono text-[10px] text-error">{inv.number}</span>
+                      ))}
+                      {xlsResult.inXlsOnly.length > 20 && <span className="text-[10px] text-on-surface-variant/60">+{xlsResult.inXlsOnly.length - 20} още</span>}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
