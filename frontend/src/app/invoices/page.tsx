@@ -343,7 +343,7 @@ function AgingView() {
             <div key={b.key} className="bg-surface-container-low border border-outline-variant/10 p-4">
               <p className="font-label-caps text-[9px] text-on-surface-variant mb-2">{b.label}</p>
               <p className={`font-headline text-headline-sm ${b.color}`}>
-                {amt.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+                {(amt / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
               </p>
               <div className="mt-2 h-1 bg-surface-container-high overflow-hidden">
                 <div className={`h-full ${b.bar} transition-all duration-700`} style={{ width: `${pct}%` }} />

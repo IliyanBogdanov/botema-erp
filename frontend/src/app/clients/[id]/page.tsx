@@ -68,7 +68,8 @@ export default function ClientDetailPage() {
   );
 
   const yearEntries = Object.entries(client.revenueByYear).sort((a, b) => Number(b[0]) - Number(a[0]));
-  const maxYear = Math.max(...yearEntries.map(([, v]) => v), 1);
+  const yearEntriesEur = yearEntries.map(([year, v]) => [year, (v as number) / 1.95583] as [string, number]);
+  const maxYear = Math.max(...yearEntriesEur.map(([, v]) => v), 1);
   const paidCount = client.invoices.filter(i => i.status === 'PAID').length;
   const overdueCount = client.invoices.filter(i => i.status === 'OVERDUE').length;
 
@@ -110,13 +111,13 @@ export default function ClientDetailPage() {
           <div className="bg-surface-container-low border border-outline-variant/10 p-5">
             <p className="font-label-caps text-label-caps text-on-surface-variant mb-3">ПРИХОДИ НЕТО</p>
             <p className="font-headline text-headline-md text-on-surface">
-              {client.totalRevenueBGN.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+              {(client.totalRevenueBGN / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
             </p>
           </div>
           <div className="bg-surface-container-low border border-outline-variant/10 p-5">
             <p className="font-label-caps text-label-caps text-on-surface-variant mb-3">НЕПЛАТЕНО</p>
             <p className={`font-headline text-headline-md ${client.outstandingBGN > 0 ? 'text-warning' : 'text-on-surface'}`}>
-              {client.outstandingBGN.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+              {(client.outstandingBGN / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
             </p>
           </div>
           <div className="bg-surface-container-low border border-outline-variant/10 p-5">
@@ -160,11 +161,11 @@ export default function ClientDetailPage() {
             </div>
 
             {/* Revenue by year */}
-            {yearEntries.length > 0 && (
+            {yearEntriesEur.length > 0 && (
               <div className="bg-surface-container-low border border-outline-variant/10 p-6">
                 <h3 className="font-label-caps text-label-caps text-on-surface mb-4">ПРИХОДИ ПО ГОДИНИ</h3>
                 <div className="space-y-4">
-                  {yearEntries.map(([year, amount]) => (
+                  {yearEntriesEur.map(([year, amount]) => (
                     <div key={year} className="flex items-center gap-3">
                       <span className="font-label-caps text-[10px] text-on-surface-variant w-10 shrink-0">{year}</span>
                       <div className="flex-1 h-2 bg-surface-container-high overflow-hidden">
@@ -172,7 +173,7 @@ export default function ClientDetailPage() {
                           style={{ width: `${Math.round((amount / maxYear) * 100)}%` }} />
                       </div>
                       <span className="font-data-mono text-[11px] text-primary w-28 text-right shrink-0">
-                        {amount.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+                        {amount.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
                       </span>
                     </div>
                   ))}

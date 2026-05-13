@@ -131,10 +131,10 @@ export default function ExpensesPage() {
       )
     : expenses;
 
-  const totalBGN = filtered.reduce((s, e) => {
+  const totalEUR = filtered.reduce((s, e) => {
     const amt = Number(e.amount);
-    if (e.currency === 'BGN') return s + amt;
-    if (e.currency === 'EUR') return s + amt * 1.95583;
+    if (e.currency === 'BGN') return s + amt / 1.95583;
+    if (e.currency === 'EUR') return s + amt;
     return s + amt;
   }, 0);
 
@@ -215,9 +215,9 @@ export default function ExpensesPage() {
           {!isLoading && filtered.length > 0 && (
             <tfoot>
               <tr className="bg-[#1d1d1f]">
-                <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (в BGN)</td>
+                <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (EUR)</td>
                 <td className="table-cell text-right font-bold text-white text-base">
-                  {totalBGN.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} BGN
+                  {totalEUR.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
                 </td>
                 <td className="table-cell" />
               </tr>

@@ -416,7 +416,7 @@ export default function DashboardPage() {
                     <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5">{inv.number}</p>
                   </div>
                   <span className="font-data-mono text-data-mono text-on-surface">
-                    {parseFloat(inv.total || 0).toLocaleString()} BGN
+                    {(parseFloat(inv.total || 0) / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
                   </span>
                 </div>
               ))}

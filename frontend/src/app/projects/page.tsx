@@ -148,8 +148,9 @@ function ProjectStatusBadge({ status, activeLabel }: { status: string; activeLab
   );
 }
 
+const BGN_PER_EUR = 1.95583;
 function fmtBGN(n: number) {
-  return n.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' лв.';
+  return (n / BGN_PER_EUR).toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
 }
 
 function MarginBadge({ pct }: { pct: number | null }) {
@@ -301,13 +302,13 @@ export default function ProjectsPage() {
                         <div>
                           <p className="font-label-caps text-[8px] text-on-surface-variant">ПРИХОДИ</p>
                           <p className="mt-1 font-data-mono text-[11px] text-on-surface">
-                            {(project.revenueBGN || 0).toLocaleString('bg-BG')} лв.
+                            {((project.revenueBGN || 0) / BGN_PER_EUR).toLocaleString('bg-BG')} €
                           </p>
                         </div>
                         <div>
                           <p className="font-label-caps text-[8px] text-on-surface-variant">РАЗХОДИ</p>
                           <p className="mt-1 font-data-mono text-[11px] text-on-surface">
-                            {(project.costsBGN || 0).toLocaleString('bg-BG')} лв.
+                            {((project.costsBGN || 0) / BGN_PER_EUR).toLocaleString('bg-BG')} €
                           </p>
                         </div>
                         <div>
@@ -359,9 +360,9 @@ export default function ProjectsPage() {
                     <th className="table-header">ПРОЕКТ</th>
                     <th className="table-header">КЛИЕНТ</th>
                     <th className="table-header">СТАТУС</th>
-                    <th className="table-header text-right">ПРИХОДИ (лв.)</th>
-                    <th className="table-header text-right">РАЗХОДИ (лв.)</th>
-                    <th className="table-header text-right">ПЕЧАЛБА (лв.)</th>
+                    <th className="table-header text-right">ПРИХОДИ (EUR)</th>
+                    <th className="table-header text-right">РАЗХОДИ (EUR)</th>
+                    <th className="table-header text-right">ПЕЧАЛБА (EUR)</th>
                     <th className="table-header text-right">МАРЖ</th>
                     <th className="table-header text-center">ФАКТУРИ</th>
                   </tr>
@@ -379,13 +380,13 @@ export default function ProjectsPage() {
                         <ProjectStatusBadge status={p.status} activeLabel="АКТИВЕН" />
                       </td>
                       <td className="table-cell text-right font-mono text-sm text-primary">
-                        {(p.revenueBGN || 0).toLocaleString('bg-BG')}
+                        {((p.revenueBGN || 0) / BGN_PER_EUR).toLocaleString('bg-BG')}
                       </td>
                       <td className="table-cell text-right font-mono text-sm text-on-surface">
-                        {(p.costsBGN || 0).toLocaleString('bg-BG')}
+                        {((p.costsBGN || 0) / BGN_PER_EUR).toLocaleString('bg-BG')}
                       </td>
                       <td className={`table-cell text-right font-mono text-sm font-semibold ${(p.profitBGN || 0) >= 0 ? 'text-primary' : 'text-error'}`}>
-                        {(p.profitBGN || 0).toLocaleString('bg-BG')}
+                        {((p.profitBGN || 0) / BGN_PER_EUR).toLocaleString('bg-BG')}
                       </td>
                       <td className="table-cell text-right">
                         <MarginBadge pct={p.marginPct} />

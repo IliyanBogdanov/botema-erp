@@ -395,9 +395,8 @@ export default function PurchasesPage() {
               <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.totalBgn')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
-                  {total.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} BGN
+                  {total.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
                 </span>
-                <div className="text-xs text-on-surface-variant mt-1">at rate 1.95583</div>
               </div>
             </div>
             <div className="bg-surface-container-high p-6 border border-error/20 flex flex-col justify-between">
