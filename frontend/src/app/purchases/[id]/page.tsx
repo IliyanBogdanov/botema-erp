@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, fmt, fmtDate } from '@/lib/api';
+import { api, fmt, fmtBgn, fmtDate } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 
 const BGN_PER_EUR = 1.95583;
@@ -122,7 +122,7 @@ export default function PurchaseDetailPage() {
                   <td className="px-4 py-3 text-right font-title-sm text-primary">
                     {fmt(total, purchase.currency)}
                     {purchase.currency === 'EUR' && (
-                      <span className="text-on-surface-variant font-body-sm ml-2">({fmt(totalBgn, 'BGN')})</span>
+                      <span className="text-on-surface-variant font-body-sm ml-2">({fmtBgn(totalBgn)})</span>
                     )}
                   </td>
                 </tr>

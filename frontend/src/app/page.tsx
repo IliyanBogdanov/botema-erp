@@ -23,8 +23,8 @@ function exportDashboardCsv(data: any, year: number) {
   const rows: string[][] = [
     ['Studio Botema ERP — Dashboard Export', String(year)],
     [],
-    ['KPI', 'Стойност'],
-    ['Приходи (BGN)', String(kpis.revenue || 0)],
+    ['KPI', 'Стойност (EUR)'],
+    ['Приходи (EUR)', String(((kpis.revenueEur || kpis.revenue / 1.95583) || 0).toFixed(2))],
     ['Разходи EUR', String(kpis.totalPurchasesEur || 0)],
     ['Брой покупки', String(kpis.totalPurchasesCount || 0)],
     ['Брой фактури', String(kpis.invoiceCount || 0)],
@@ -33,12 +33,12 @@ function exportDashboardCsv(data: any, year: number) {
     ['Топ доставчици', 'EUR'],
     ...(data?.topSuppliers || []).map((s: any) => [s.name, String(s.amount)]),
     [],
-    ['Топ клиенти', 'BGN нето'],
-    ...(data?.topClients || []).map((c: any) => [c.name, String(c.revenue)]),
+    ['Топ клиенти', 'EUR нето'],
+    ...(data?.topClients || []).map((c: any) => [c.name, String((c.revenue / 1.95583).toFixed(2))]),
     [],
-    ['Приходи по месец', 'BGN', 'Бранд'],
+    ['Приходи по месец', 'EUR', 'Бранд'],
     ...(data?.revenueByMonth || []).map((m: any) => [
-      `Месец ${m.month}`, String(Number(m.revenue || 0).toFixed(2)), m.brand || '',
+      `Месец ${m.month}`, String((Number(m.revenue || 0) / 1.95583).toFixed(2)), m.brand || '',
     ]),
   ];
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -201,19 +201,19 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* BGN */}
+          {/* EUR Revenue */}
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
             <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.revenueBgn')}</p>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">
-                {(kpis.revenue || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                {(kpis.revenueEur || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
-              <span className="font-label-caps text-[11px] text-secondary-fixed-dim tracking-[0.15em]">BGN</span>
+              <span className="font-label-caps text-[11px] text-secondary-fixed-dim tracking-[0.15em]">EUR</span>
             </div>
             <div className="mt-5 h-px bg-outline-variant/20 overflow-hidden rounded-full">
               <div
                 className="h-full bg-primary-container/50 rounded-full transition-all duration-1000"
-                style={{ width: `${Math.min(100, kpis.revenue > 0 ? Math.round((kpis.costs / kpis.revenue) * 100) : 0)}%` }}
+                style={{ width: `${Math.min(100, kpis.revenueEur > 0 ? Math.round(((kpis.costsEur || kpis.costs / 1.95583) / kpis.revenueEur) * 100) : 0)}%` }}
               />
             </div>
           </div>
@@ -315,7 +315,7 @@ export default function DashboardPage() {
                       <p className="font-body-sm text-on-surface truncate text-[13px]">{name}</p>
                       {amount ? (
                         <p className="font-data-mono text-[10px] text-primary mt-0.5">
-                          {Number(amount).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {data.currency || 'BGN'}
+                          {Number(amount).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {data.currency === 'BGN' ? 'EUR' : (data.currency || 'EUR')}
                         </p>
                       ) : (
                         <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{doc.filename?.slice(0, 28)}</p>
@@ -377,23 +377,23 @@ export default function DashboardPage() {
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.outVat')}</p>
               <p className="font-display text-[36px] leading-none italic text-on-surface">
-                {vat.outputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">BGN</span>
+                {(vat.outputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.inVat')}</p>
               <p className="font-display text-[36px] leading-none italic text-on-surface">
-                {vat.estimatedInputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">BGN</span>
+                {(vat.estimatedInputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.netVat')}</p>
               <p className={`font-display text-[36px] leading-none italic ${vat.netVat >= 0 ? 'text-error' : 'text-primary'}`}>
-                {vat.netVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">BGN</span>
+                {(vat.netVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
               {vat.pendingCredit > 0 && (
                 <p className="font-label-caps text-[9px] text-on-surface-variant/50 mt-3">
-                  {t('dash.potentialCredit')}: {vat.pendingCredit.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+                  {t('dash.potentialCredit')}: {(vat.pendingCredit / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} EUR
                 </p>
               )}
             </div>

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, fmt } from '@/lib/api';
+import { api, fmt, fmtBgn } from '@/lib/api';
 
 const MONTH_NAMES = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
 const MONTH_SHORT = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
@@ -67,9 +67,9 @@ export default function FinancePage() {
             [...Array(4)].map((_, i) => <div key={i} className="h-28 bg-surface-container-low border border-outline-variant/10 animate-pulse" />)
           ) : (
             <>
-              <KpiCard icon="trending_up" label={`ПРИХОДИ ${year}`} value={fmt(totals.revenue, 'BGN')} sub={`Нет от ${year} г.`} />
-              <KpiCard icon="shopping_cart" label={`РАЗХОДИ ${year}`} value={fmt(totals.costs, 'BGN')} sub={`Покупки за ${year} г.`} />
-              <KpiCard icon="savings" label={`БРУТНА ПЕЧАЛБА ${year}`} value={fmt(totals.profit, 'BGN')}
+              <KpiCard icon="trending_up" label={`ПРИХОДИ ${year}`} value={fmtBgn(totals.revenue)} sub={`Нет от ${year} г.`} />
+              <KpiCard icon="shopping_cart" label={`РАЗХОДИ ${year}`} value={fmtBgn(totals.costs)} sub={`Покупки за ${year} г.`} />
+              <KpiCard icon="savings" label={`БРУТНА ПЕЧАЛБА ${year}`} value={fmtBgn(totals.profit)}
                 sub={`Марж ${totals.margin}%`} positive={totals.profit > 0} />
               <KpiCard icon="percent" label="БРУТЕН МАРЖ" value={`${totals.margin}%`} positive={totals.margin > 20} />
             </>
@@ -91,8 +91,8 @@ export default function FinancePage() {
               <thead>
                 <tr className="border-b border-outline-variant/10">
                   <th className="table-header text-left w-36">МЕСЕЦ</th>
-                  <th className="table-header text-right">ПРИХОДИ (BGN)</th>
-                  <th className="table-header text-right">РАЗХОДИ (BGN)</th>
+                  <th className="table-header text-right">ПРИХОДИ (EUR)</th>
+                  <th className="table-header text-right">РАЗХОДИ (EUR)</th>
                   <th className="table-header text-right">БРУТНА ПЕЧАЛБА</th>
                   <th className="table-header text-right">МАРЖ</th>
                 </tr>
@@ -119,16 +119,16 @@ export default function FinancePage() {
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
-                              : <span className="font-data-mono text-data-mono text-on-surface">{fmt(m.revenue, 'BGN')}</span>}
+                              : <span className="font-data-mono text-data-mono text-on-surface">{fmtBgn(m.revenue)}</span>}
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
-                              : <span className="font-data-mono text-data-mono text-error/80">{fmt(m.costs, 'BGN')}</span>}
+                              : <span className="font-data-mono text-data-mono text-error/80">{fmtBgn(m.costs)}</span>}
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
                               : <span className={`font-data-mono text-data-mono font-semibold ${m.profit >= 0 ? 'text-emerald-400' : 'text-error'}`}>
-                                  {m.profit >= 0 ? '+' : ''}{fmt(m.profit, 'BGN')}
+                                  {m.profit >= 0 ? '+' : ''}{fmtBgn(m.profit)}
                                 </span>}
                           </td>
                           <td className="table-cell text-right">
@@ -145,11 +145,11 @@ export default function FinancePage() {
                 <tfoot>
                   <tr className="border-t-2 border-outline-variant/20 bg-surface-container">
                     <td className="table-cell font-semibold text-on-surface">ОБЩО {year}</td>
-                    <td className="table-cell text-right font-semibold font-data-mono text-on-surface">{fmt(totals.revenue, 'BGN')}</td>
-                    <td className="table-cell text-right font-semibold font-data-mono text-error/80">{fmt(totals.costs, 'BGN')}</td>
+                    <td className="table-cell text-right font-semibold font-data-mono text-on-surface">{fmtBgn(totals.revenue)}</td>
+                    <td className="table-cell text-right font-semibold font-data-mono text-error/80">{fmtBgn(totals.costs)}</td>
                     <td className="table-cell text-right font-semibold font-data-mono">
                       <span className={totals.profit >= 0 ? 'text-emerald-400' : 'text-error'}>
-                        {totals.profit >= 0 ? '+' : ''}{fmt(totals.profit, 'BGN')}
+                        {totals.profit >= 0 ? '+' : ''}{fmtBgn(totals.profit)}
                       </span>
                     </td>
                     <td className="table-cell text-right font-semibold">
@@ -190,3 +190,5 @@ export default function FinancePage() {
     </div>
   );
 }
+
+

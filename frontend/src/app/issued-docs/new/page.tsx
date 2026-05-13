@@ -40,7 +40,7 @@ export default function NewIssuedDocPage() {
     dueDate: '',
     clientId: '',
     projectId: '',
-    currency: 'BGN',
+    currency: 'EUR',
     description: '',
     notes: '',
     brand: 'STUDIO_BOTEMA',

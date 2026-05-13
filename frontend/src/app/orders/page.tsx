@@ -30,7 +30,7 @@ interface OrderLine {
 function OrderModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    orderType: 'CLIENT_ORDER', status: 'DRAFT', currency: 'BGN',
+    orderType: 'CLIENT_ORDER', status: 'DRAFT', currency: 'EUR',
     orderDate: new Date().toISOString().slice(0, 10),
     counterpartyId: '', projectId: '', notes: '',
   });

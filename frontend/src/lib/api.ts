@@ -22,8 +22,15 @@ api.interceptors.response.use(
 );
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
-export const fmt = (n: number | string | null | undefined, currency = 'BGN') =>
+export const BGN_PER_EUR = 1.95583;
+
+/** Format a number as EUR currency */
+export const fmt = (n: number | string | null | undefined, currency = 'EUR') =>
   new Intl.NumberFormat('bg-BG', { style: 'currency', currency, minimumFractionDigits: 2 }).format(Number(n) || 0);
+
+/** Convert BGN amount to EUR and format */
+export const fmtBgn = (n: number | string | null | undefined) =>
+  fmt(Number(n || 0) / BGN_PER_EUR, 'EUR');
 
 export const fmtDate = (d: string | Date) =>
   new Date(d).toLocaleDateString('bg-BG', { day: '2-digit', month: '2-digit', year: 'numeric' });

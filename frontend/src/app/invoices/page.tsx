@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, fmt, fmtDate, statusConfig } from '@/lib/api';
+import { api, fmt, fmtBgn, fmtDate, statusConfig } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
@@ -34,7 +34,7 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
   const qc = useQueryClient();
   const [form, setForm] = useState({
     clientId: '', projectId: '', type: 'INVOICE', brand: 'STUDIO_BOTEMA',
-    currency: 'BGN', date: new Date().toISOString().slice(0, 10),
+    currency: 'EUR', date: new Date().toISOString().slice(0, 10),
     dueDate: '', description: '', notes: '',
   });
   const [items, setItems] = useState<InvoiceItem[]>([
@@ -452,8 +452,8 @@ export default function InvoicesPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label={t('inv.totalInvoices')} value={String(invoices.length)} sub={`${year} година`} />
-          <MetricCard label={t('inv.totalBgn')} value={fmt(totalAmount, 'BGN')} sub="фактурирана стойност" />
-          <MetricCard label={t('inv.outstanding')} value={fmt(outstanding, 'BGN')} sub="неприключени фактури" />
+          <MetricCard label={t('inv.totalBgn')} value={fmtBgn(totalAmount)} sub="фактурирана стойност" />
+          <MetricCard label={t('inv.outstanding')} value={fmtBgn(outstanding)} sub="неприключени фактури" />
           <MetricCard label={t('inv.paid')} value={String(paidCount)} sub="приключени плащания" />
         </div>
 
@@ -564,3 +564,4 @@ export default function InvoicesPage() {
     </div>
   );
 }
+

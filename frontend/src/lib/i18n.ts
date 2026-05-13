@@ -62,7 +62,7 @@ const bg = {
   'dash.title':         'Executive Dashboard',
   'dash.exportReport':  'ЕКСПОРТ',
   'dash.totalEur':      'ОБЩО ОБОРОТ (EUR)',
-  'dash.revenueBgn':    'ПРИХОДИ (BGN)',
+  'dash.revenueBgn':    'ПРИХОДИ (EUR)',
   'dash.grossMargin':   'БРУТЕН МАРЖ',
   'dash.allCurrencies': 'ВСИЧКИ ВАЛУТИ',
   'dash.suppliers':     'ТОП ДОСТАВЧИЦИ',
@@ -102,7 +102,7 @@ const bg = {
   'pur.colStatus':      'СТАТУС',
   'pur.noData':         'Няма покупки',
   'pur.totalEur':       'ОБЩО EUR',
-  'pur.totalBgn':       'ОБЩО BGN',
+  'pur.totalBgn':       'ОБЩО EUR',
   'pur.zeroAmt':        'НУЛЕВА СУМА',
   'pur.pending':        'ЧАКАЩИ',
 
@@ -192,7 +192,7 @@ const bg = {
   'inv.colStatus':      'СТАТУС',
   'inv.none':           'Няма фактури',
   'inv.totalInvoices':  'ФАКТУРИ ОБЩО',
-  'inv.totalBgn':       'ОБЩО BGN',
+  'inv.totalBgn':       'ОБЩО EUR',
   'inv.outstanding':    'НЕПЛАТЕНИ',
   'inv.paid':           'ПЛАТЕНИ',
 
@@ -258,7 +258,7 @@ const en: Record<keyof typeof bg, string> = {
   'dash.title':         'Executive Dashboard',
   'dash.exportReport':  'EXPORT REPORT',
   'dash.totalEur':      'TOTAL TURNOVER (EUR)',
-  'dash.revenueBgn':    'REVENUE (BGN)',
+  'dash.revenueBgn':    'REVENUE (EUR)',
   'dash.grossMargin':   'GROSS MARGIN',
   'dash.allCurrencies': 'ALL CURRENCIES',
   'dash.suppliers':     'TOP PROCUREMENT SUPPLIERS',
@@ -298,7 +298,7 @@ const en: Record<keyof typeof bg, string> = {
   'pur.colStatus':      'STATUS',
   'pur.noData':         'No purchases found',
   'pur.totalEur':       'TOTAL EUR',
-  'pur.totalBgn':       'TOTAL BGN',
+  'pur.totalBgn':       'TOTAL EUR',
   'pur.zeroAmt':        'ZERO AMOUNT',
   'pur.pending':        'PENDING',
 
@@ -388,7 +388,7 @@ const en: Record<keyof typeof bg, string> = {
   'inv.colStatus':      'STATUS',
   'inv.none':           'No invoices',
   'inv.totalInvoices':  'TOTAL INVOICES',
-  'inv.totalBgn':       'TOTAL BGN',
+  'inv.totalBgn':       'TOTAL EUR',
   'inv.outstanding':    'OUTSTANDING',
   'inv.paid':           'PAID',
 

@@ -137,15 +137,21 @@ router.get('/', auth, async (req, res) => {
     const totalPurchasesCount = purchaseRows.reduce((sum, row) => sum + Number(row._count.id || 0), 0);
 
     const revenueNum = revenueInvoices.reduce((s, inv) => s + toBgn(inv.amountNet, inv.currency), 0);
+    const revenueEur = revenueInvoices.reduce((s, inv) => s + toEur(inv.amountNet, inv.currency), 0);
     const vatCollected = revenueInvoices.reduce((s, inv) => s + toBgn(inv.vatAmount, inv.currency), 0);
+    const vatCollectedEur = revenueInvoices.reduce((s, inv) => s + toEur(inv.vatAmount, inv.currency), 0);
     const costsNum = Number(totalPurchasesBgn || 0);
+    const costsEur = Number(totalPurchasesEur || 0);
     const available = Number(totalInventory._sum.qtyIn || 0) - Number(totalInventory._sum.qtyOut || 0);
 
     res.json({
       kpis: {
         revenue: Number(revenueNum.toFixed(2)),
+        revenueEur: Number(revenueEur.toFixed(2)),
         vatCollected: Number(vatCollected.toFixed(2)),
+        vatCollectedEur: Number(vatCollectedEur.toFixed(2)),
         costs: Number(costsNum.toFixed(2)),
+        costsEur: Number(costsEur.toFixed(2)),
         totalPurchasesEur: Number(totalPurchasesEur.toFixed(2)),
         totalPurchasesBgn: Number(totalPurchasesBgn.toFixed(2)),
         totalPurchasesCount,

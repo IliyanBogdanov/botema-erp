@@ -95,7 +95,7 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
     supplierId: '',
     projectId: '',
     invoiceNo: '',
-    currency: 'BGN',
+    currency: 'EUR',
     amount: '',
     description: '',
     status: 'PENDING',
@@ -228,7 +228,7 @@ export default function PurchasesPage() {
       )
     : purchases;
 
-  const total = filtered.reduce((s, p) => s + (p.currency === 'BGN' ? Number(p.amount) : Number(p.amount) * 1.95583), 0);
+  const total = filtered.reduce((s, p) => s + (p.currency === 'BGN' ? Number(p.amount) / 1.95583 : Number(p.amount)), 0);
 
   return (
     <div className="p-container-padding">
@@ -428,3 +428,4 @@ export default function PurchasesPage() {
     </div>
   );
 }
+

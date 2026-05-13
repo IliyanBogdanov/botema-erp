@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
-import { api, fmt, fmtDate, statusConfig } from '@/lib/api';
+import { api, fmt, fmtBgn, fmtDate, statusConfig } from '@/lib/api';
 
 const PROJ_IMGS = [
   'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&auto=format&q=80',
@@ -289,9 +289,9 @@ export default function ProjectDetailPage() {
         {/* KPI CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { icon: 'trending_up', label: 'ПРИХОДИ', val: fmt(totalRevenue, 'BGN'), sub: `${invoices.length} фактури`, accent: totalRevenue > 0 },
-            { icon: 'shopping_cart', label: 'РАЗХОДИ', val: fmt(totalCosts, 'BGN'), sub: `${purchases.length} покупки` },
-            { icon: 'percent', label: 'МАРЖ', val: totalRevenue > 0 ? ((margin / totalRevenue) * 100).toFixed(1) + '%' : '—', sub: fmt(margin, 'BGN') },
+            { icon: 'trending_up', label: 'ПРИХОДИ', val: fmtBgn(totalRevenue), sub: `${invoices.length} фактури`, accent: totalRevenue > 0 },
+            { icon: 'shopping_cart', label: 'РАЗХОДИ', val: fmtBgn(totalCosts), sub: `${purchases.length} покупки` },
+            { icon: 'percent', label: 'МАРЖ', val: totalRevenue > 0 ? ((margin / totalRevenue) * 100).toFixed(1) + '%' : '—', sub: fmtBgn(margin) },
             { icon: 'inventory_2', label: 'СКЛАД', val: String(inventory.length), sub: 'артикула' },
           ].map(c => (
             <div key={c.label} className={`border p-4 flex flex-col gap-2 ${c.accent ? 'border-primary-container/40 bg-primary-container/5' : 'border-outline-variant/10 bg-surface-container-low'}`}>

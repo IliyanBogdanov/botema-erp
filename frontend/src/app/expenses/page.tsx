@@ -28,7 +28,7 @@ function ExpenseModal({ open, onClose }: { open: boolean; onClose: () => void })
     supplierId: '',
     description: '',
     amount: '',
-    currency: 'BGN',
+    currency: 'EUR',
   });
   const [error, setError] = useState('');
 

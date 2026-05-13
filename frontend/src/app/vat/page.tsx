@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, fmt } from '@/lib/api';
+import { api, fmt, fmtBgn } from '@/lib/api';
 
 const BGN_PER_EUR = 1.95583;
 
@@ -31,8 +31,8 @@ function MonthBar({ month, out, inn, max }: { month: string; out: number; inn: n
   return (
     <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
       <div className="w-full flex items-end gap-0.5 h-24">
-        <div className="flex-1 rounded-sm bg-primary/60 transition-all" style={{ height: `${outH}%` }} title={`Изходящ: ${fmt(out, 'BGN')}`} />
-        <div className="flex-1 rounded-sm bg-primary-container/40 transition-all" style={{ height: `${innH}%` }} title={`Входящ: ${fmt(inn, 'BGN')}`} />
+        <div className="flex-1 rounded-sm bg-primary/60 transition-all" style={{ height: `${outH}%` }} title={`Изходящ: ${fmtBgn(out)}`} />
+        <div className="flex-1 rounded-sm bg-primary-container/40 transition-all" style={{ height: `${innH}%` }} title={`Входящ: ${fmtBgn(inn)}`} />
       </div>
       <span className="font-label-caps text-[9px] text-on-surface-variant/60 truncate w-full text-center">{month}</span>
     </div>
@@ -96,10 +96,10 @@ export default function VatPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <VatMetricCard icon="receipt" label="ИЗХОДЯЩ ДДС" value={fmt(out, 'BGN')} sub={`${counts.outgoingInvoices || 0} фактури за ${year} г.`} />
-            <VatMetricCard icon="shopping_cart" label="ВХОДЯЩ ДДС" value={fmt(inn, 'BGN')} sub={`${counts.incomingPurchases || 0} покупки за ${year} г.`} />
-            <VatMetricCard icon="pending_actions" label="ПОТЕНЦИАЛЕН КРЕДИТ" value={fmt(pending, 'BGN')} sub={`${counts.pendingDocuments || 0} непрегледани`} />
-            <VatMetricCard icon={net > 0 ? 'trending_up' : 'trending_down'} label="НЕТ ДДС ПОЗИЦИЯ" value={fmt(net, 'BGN')} sub={afterCredit !== net ? `След кредит: ${fmt(afterCredit, 'BGN')}` : `За ${year} г.`} accent />
+            <VatMetricCard icon="receipt" label="ИЗХОДЯЩ ДДС" value={fmtBgn(out)} sub={`${counts.outgoingInvoices || 0} фактури за ${year} г.`} />
+            <VatMetricCard icon="shopping_cart" label="ВХОДЯЩ ДДС" value={fmtBgn(inn)} sub={`${counts.incomingPurchases || 0} покупки за ${year} г.`} />
+            <VatMetricCard icon="pending_actions" label="ПОТЕНЦИАЛЕН КРЕДИТ" value={fmtBgn(pending)} sub={`${counts.pendingDocuments || 0} непрегледани`} />
+            <VatMetricCard icon={net > 0 ? 'trending_up' : 'trending_down'} label="НЕТ ДДС ПОЗИЦИЯ" value={fmtBgn(net)} sub={afterCredit !== net ? `След кредит: ${fmtBgn(afterCredit)}` : `За ${year} г.`} accent />
           </div>
         )}
 
@@ -145,16 +145,16 @@ export default function VatPage() {
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
-                              : <span className="font-data-mono text-data-mono text-on-surface">{fmt(m.outputVat, 'BGN')}</span>}
+                              : <span className="font-data-mono text-data-mono text-on-surface">{fmtBgn(m.outputVat)}</span>}
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
-                              : <span className="font-data-mono text-data-mono text-primary">{fmt(m.inputVat, 'BGN')}</span>}
+                              : <span className="font-data-mono text-data-mono text-primary">{fmtBgn(m.inputVat)}</span>}
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
                               : <span className={`font-data-mono text-data-mono font-semibold ${m.netVat > 0 ? 'text-error' : 'text-emerald-400'}`}>
-                                  {m.netVat > 0 ? '+' : ''}{fmt(m.netVat, 'BGN')}
+                                  {m.netVat > 0 ? '+' : ''}{fmtBgn(m.netVat)}
                                 </span>}
                           </td>
                           <td className="table-cell text-right">
@@ -175,10 +175,10 @@ export default function VatPage() {
                   <tfoot>
                     <tr className="border-t-2 border-outline-variant/20 bg-surface-container">
                       <td className="table-cell font-semibold text-on-surface">ОБЩО {year}</td>
-                      <td className="table-cell text-right font-semibold font-data-mono text-on-surface">{fmt(totOut, 'BGN')}</td>
-                      <td className="table-cell text-right font-semibold font-data-mono text-primary">{fmt(totIn, 'BGN')}</td>
+                      <td className="table-cell text-right font-semibold font-data-mono text-on-surface">{fmtBgn(totOut)}</td>
+                      <td className="table-cell text-right font-semibold font-data-mono text-primary">{fmtBgn(totIn)}</td>
                       <td className="table-cell text-right font-semibold font-data-mono">
-                        <span className={totNet > 0 ? 'text-error' : 'text-emerald-400'}>{totNet > 0 ? '+' : ''}{fmt(totNet, 'BGN')}</span>
+                        <span className={totNet > 0 ? 'text-error' : 'text-emerald-400'}>{totNet > 0 ? '+' : ''}{fmtBgn(totNet)}</span>
                       </td>
                       <td className="table-cell" />
                     </tr>
@@ -233,12 +233,12 @@ export default function VatPage() {
               <tbody className="divide-y divide-outline-variant/5">
                 {[
                   { label: 'Издадени фактури', val: `${counts.outgoingInvoices || 0} бр.` },
-                  { label: `Изходящ ДДС (${year})`, val: fmt(out, 'BGN') },
+                  { label: `Изходящ ДДС (${year})`, val: fmtBgn(out) },
                   { label: 'Входящи покупки', val: `${counts.incomingPurchases || 0} бр.` },
-                  { label: `Входящ ДДС (${year})`, val: fmt(inn, 'BGN') },
-                  { label: 'EUR → BGN курс', val: BGN_PER_EUR.toFixed(5) },
-                  { label: `Нет ДДС позиция (${year})`, val: fmt(net, 'BGN'), accent: true, bold: true },
-                  { label: 'След потенциален кредит', val: fmt(afterCredit, 'BGN'), bold: true },
+                  { label: `Входящ ДДС (${year})`, val: fmtBgn(inn) },
+                  { label: 'BGN/EUR курс fixe', val: BGN_PER_EUR.toFixed(5) },
+                  { label: `Нет ДДС позиция (${year})`, val: fmtBgn(net), accent: true, bold: true },
+                  { label: 'След потенциален кредит', val: fmtBgn(afterCredit), bold: true },
                 ].map(row => (
                   <tr key={row.label}>
                     <td className="py-2.5 text-on-surface-variant font-body-sm text-body-sm">{row.label}</td>
@@ -262,3 +262,4 @@ export default function VatPage() {
     </div>
   );
 }
+
