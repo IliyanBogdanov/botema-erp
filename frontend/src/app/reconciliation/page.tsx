@@ -81,6 +81,7 @@ export default function ReconciliationPage() {
   const [bankStatus, setBankStatus] = useState('');
   const [bankPage, setBankPage] = useState(1);
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: number; currency?: string } | null>(null);
+  const [importLocalResult, setImportLocalResult] = useState<{ totalCreated: number; totalSkipped: number; files: Array<{ file: string; created?: number; skipped?: number; currency?: string; error?: string }> } | null>(null);
   const [matchResult, setMatchResult] = useState<{ matched: number; partial: number; unmatched: number; totalProcessed: number } | null>(null);
   const [migJobId, setMigJobId] = useState<string | null>(null);
   const [migJob, setMigJob] = useState<any>(null);
@@ -132,6 +133,14 @@ export default function ReconciliationPage() {
     },
     onSuccess: (data) => {
       setImportResult(data);
+      qc.invalidateQueries({ queryKey: ['payments'] });
+    },
+  });
+
+  const importLocal = useMutation({
+    mutationFn: () => api.post('/payments/import-local').then(r => r.data),
+    onSuccess: (data) => {
+      setImportLocalResult(data);
       qc.invalidateQueries({ queryKey: ['payments'] });
     },
   });
@@ -476,6 +485,15 @@ export default function ReconciliationPage() {
                 {importCsv.isPending ? 'Зарежда...' : 'Импорт CSV'}
               </button>
               <button
+                onClick={() => importLocal.mutate()}
+                disabled={importLocal.isPending}
+                title="Импортира всички банкови CSV файлове от папка 'bank statements/' на сървъра"
+                className="flex items-center gap-2 px-4 py-2 border border-primary/40 bg-primary/5 font-label-caps text-label-caps text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">folder_open</span>
+                {importLocal.isPending ? 'Импортира...' : 'Импорт от диск'}
+              </button>
+              <button
                 onClick={() => migratePurchases.mutate()}
                 disabled={migratePurchases.isPending || migJob?.status === 'running'}
                 title="Мигрира Purchase и Invoice записи в BizDocument модела за reconciliation"
@@ -505,6 +523,29 @@ export default function ReconciliationPage() {
                 <button onClick={() => setImportResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
                   <span className="material-symbols-outlined text-[16px]">close</span>
                 </button>
+              </div>
+            )}
+            {importLocalResult && (
+              <div className="border border-primary/20 bg-primary/5 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-4">
+                  <span className="material-symbols-outlined text-[18px] text-primary">folder_open</span>
+                  <span className="font-label-caps text-label-caps text-on-surface">
+                    Импорт от диск: <span className="text-primary">{importLocalResult.totalCreated} нови</span>, {importLocalResult.totalSkipped} пропуснати
+                  </span>
+                  <button onClick={() => setImportLocalResult(null)} className="ml-auto text-on-surface-variant/40 hover:text-on-surface">
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+                <div className="space-y-1 pl-8">
+                  {importLocalResult.files.map(f => (
+                    <div key={f.file} className="font-label-caps text-label-caps text-on-surface-variant text-[10px]">
+                      {f.error
+                        ? <span className="text-error">⚠ {f.file}: {f.error}</span>
+                        : <span>{f.file}: +{f.created} нови, {f.skipped} пропуснати {f.currency && `(${f.currency})`}</span>
+                      }
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {matchResult && (

@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const multer = require('multer');
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
@@ -174,6 +176,91 @@ router.post('/import-csv', auth, upload.single('file'), async (req, res) => {
     res.json({ created, skipped: rows.length - created, errors: 0, currency: meta.currency, iban: meta.iban });
   } catch (e) {
     console.error('import-csv error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── POST /api/payments/import-local ─────────────────────────────────────────
+// Reads all CSV files from the 'bank statements/' folder in the project root
+// and imports them without needing a file upload.
+router.post('/import-local', auth, async (req, res) => {
+  const BANK_DIR = path.resolve(__dirname, '../../../bank statements');
+  try {
+    if (!fs.existsSync(BANK_DIR)) {
+      return res.status(404).json({ error: `Bank statements folder not found at: ${BANK_DIR}` });
+    }
+
+    const csvFiles = fs.readdirSync(BANK_DIR).filter(f => f.toLowerCase().endsWith('.csv'));
+    if (csvFiles.length === 0) {
+      return res.status(404).json({ error: 'No CSV files found in bank statements folder' });
+    }
+
+    // Fetch all existing references once (to skip duplicates across all files)
+    const existingRefs = await prisma.payment.findMany({ select: { reference: true } });
+    const refSet = new Set(existingRefs.map(p => p.reference));
+
+    const results = [];
+
+    for (const filename of csvFiles) {
+      const filePath = path.join(BANK_DIR, filename);
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const { meta, rows } = parseBankStatementBuffer(buffer);
+
+        const newRows = rows.filter(r => r.reference && !refSet.has(r.reference));
+
+        if (newRows.length === 0) {
+          results.push({ file: filename, created: 0, skipped: rows.length, currency: meta.currency, iban: meta.iban });
+          continue;
+        }
+
+        // Upsert counterparties
+        const cpMap = new Map();
+        for (const row of newRows) {
+          const key = row.counterpartyIban || normName(row.counterpartyName) || '';
+          if (key && !cpMap.has(key)) {
+            cpMap.set(key, await upsertCounterparty(row));
+          }
+        }
+
+        const paymentData = newRows.map(row => {
+          const key = row.counterpartyIban || normName(row.counterpartyName) || '';
+          refSet.add(row.reference); // prevent cross-file duplicates
+          return {
+            paymentDate: row.date,
+            amount: row.amount,
+            currency: row.currency,
+            reference: row.reference,
+            notes: row.description || null,
+            paymentType: row.paymentType,
+            status: 'UNMATCHED',
+            bankAccount: meta.iban,
+            counterpartyId: cpMap.get(key) || null,
+          };
+        });
+
+        const CHUNK = 50;
+        let created = 0;
+        for (let i = 0; i < paymentData.length; i += CHUNK) {
+          const result = await prisma.payment.createMany({
+            data: paymentData.slice(i, i + CHUNK),
+            skipDuplicates: true,
+          });
+          created += result.count;
+        }
+
+        results.push({ file: filename, created, skipped: rows.length - created, currency: meta.currency, iban: meta.iban });
+      } catch (fileErr) {
+        results.push({ file: filename, error: fileErr.message });
+      }
+    }
+
+    const totalCreated = results.reduce((s, r) => s + (r.created || 0), 0);
+    const totalSkipped = results.reduce((s, r) => s + (r.skipped || 0), 0);
+
+    res.json({ totalCreated, totalSkipped, files: results });
+  } catch (e) {
+    console.error('import-local error:', e);
     res.status(500).json({ error: e.message });
   }
 });
