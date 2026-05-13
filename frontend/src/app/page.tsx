@@ -102,35 +102,36 @@ export default function DashboardPage() {
     <div className="min-h-screen">
 
       {/* ── HERO BANNER ─────────────────────────────────────────────────────── */}
-      <div className="relative h-56 overflow-hidden">
+      <div className="relative h-72 overflow-hidden">
         <img
           src={HERO_IMG}
           alt="Studio Botema interior"
           className="w-full h-full object-cover object-center scale-105"
-          style={{ filter: 'brightness(0.45) saturate(0.8)' }}
+          style={{ filter: 'brightness(0.35) saturate(0.7)' }}
         />
-        {/* gradient: left = solid surface, right = transparent so image bleeds */}
-        <div className="absolute inset-0 bg-gradient-to-r from-surface/95 via-surface/60 to-transparent" />
-        {/* subtle blue glow in top-right */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary-container/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        {/* gradient: left solid, right transparent */}
+        <div className="absolute inset-0 bg-gradient-to-r from-background/98 via-background/65 to-transparent" />
+        {/* subtle ambient glow */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary-container/8 rounded-full blur-[100px] -translate-y-1/3 translate-x-1/4 pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-primary-container/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* overlaid text */}
-        <div className="absolute inset-0 flex flex-col justify-end p-container-padding pb-8">
-          <p className="font-label-caps text-label-caps text-primary mb-2 tracking-widest">{t('dash.overviewLabel')}</p>
-          <h2 className="font-headline text-headline-lg text-on-surface">{t('dash.title')}</h2>
-          <p className="font-label-caps text-[10px] text-on-surface-variant/60 mt-2 tracking-widest">
+        <div className="absolute inset-0 flex flex-col justify-end p-container-padding pb-10">
+          <p className="font-label-caps text-label-caps text-primary/80 mb-3 tracking-[0.22em]">{t('dash.overviewLabel')}</p>
+          <h2 className="font-display text-display-lg text-on-surface italic leading-none">{t('dash.title')}</h2>
+          <p className="font-label-caps text-[10px] text-on-surface-variant/45 mt-3 tracking-[0.2em]">
             Studio Botema ЕООД · {year}
           </p>
         </div>
 
         {/* year + export row pinned bottom-right of hero */}
-        <div className="absolute bottom-6 right-container-padding flex gap-3">
-          <div className="flex gap-1 border border-outline-variant/30 bg-surface/60 backdrop-blur-sm p-1">
+        <div className="absolute bottom-8 right-container-padding flex gap-3">
+          <div className="flex gap-1 border border-outline-variant/20 bg-surface/40 backdrop-blur-md rounded-md p-1">
             {[2024, 2025, 2026].map(y => (
               <button
                 key={y}
                 onClick={() => setYear(y)}
-                className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
+                className={`px-4 py-1.5 font-label-caps text-label-caps rounded-sm transition-colors ${
                   year === y
                     ? 'bg-primary-container text-on-primary-container'
                     : 'text-on-surface-variant hover:text-on-surface'
@@ -141,7 +142,7 @@ export default function DashboardPage() {
             ))}
           </div>
           <button
-            className="btn-secondary bg-surface/60 backdrop-blur-sm"
+            className="border border-outline-variant/20 bg-surface/40 backdrop-blur-md rounded-md px-5 py-2 font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors"
             onClick={() => data && exportDashboardCsv(data, year)}
             disabled={!data}
           >
@@ -154,7 +155,7 @@ export default function DashboardPage() {
 
         {/* ── ALERT BANNERS ──────────────────────────────────────────────────── */}
         {(Array.isArray(alertsList) ? alertsList : []).length > 0 && (
-          <div className="bg-surface-container-low border border-error/20 border-l-4 border-l-error p-4 flex items-center justify-between">
+          <div className="bg-surface-container-low rounded-xl border border-error/15 border-l-4 border-l-error p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-error">warning</span>
               <div>
@@ -170,7 +171,7 @@ export default function DashboardPage() {
           </div>
         )}
         {pendingDocs.length > 0 && (
-          <div className="bg-surface-container-low border border-outline-variant/10 border-l-4 border-l-primary-container p-4 flex items-center justify-between -mt-8">
+          <div className="bg-surface-container-low rounded-xl border border-outline-variant/8 border-l-4 border-l-primary-container p-4 flex items-center justify-between -mt-8">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
               <span className="font-label-caps text-label-caps text-on-surface">
@@ -184,48 +185,49 @@ export default function DashboardPage() {
         {/* ── KPI CARDS ──────────────────────────────────────────────────────── */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
           {/* EUR */}
-          <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden group hover:border-primary-container/30 transition-colors">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-primary-container/8 rounded-bl-full translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.5)]" />
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.totalEur')}</p>
+          <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden group hover:border-primary-container/20 hover:shadow-[0_0_48px_rgba(62,144,255,0.07)] transition-all duration-300">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container/5 rounded-bl-full translate-x-12 -translate-y-12 group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute top-4 right-4 w-1.5 h-1.5 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.6)]" />
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.totalEur')}</p>
             <div className="flex items-baseline gap-2">
-              <span className="font-headline text-headline-xl text-on-surface">
+              <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">
                 {totalPurchasesEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
-              <span className="font-data-mono text-data-mono text-primary">EUR</span>
+              <span className="font-label-caps text-[11px] text-primary tracking-[0.15em]">EUR</span>
             </div>
-            <div className="mt-4 flex items-center gap-2 text-primary">
-              <span className="material-symbols-outlined text-[16px]">trending_up</span>
-              <span className="font-label-caps text-[10px]">{t('dash.allCurrCombined')}</span>
+            <div className="mt-5 flex items-center gap-2 text-primary/60">
+              <span className="material-symbols-outlined text-[14px]">trending_up</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">{t('dash.allCurrCombined')}</span>
             </div>
           </div>
 
           {/* BGN */}
-          <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden hover:border-outline-variant/20 transition-colors">
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.revenueBgn')}</p>
+          <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.revenueBgn')}</p>
             <div className="flex items-baseline gap-2">
-              <span className="font-headline text-headline-xl text-on-surface">
+              <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">
                 {(kpis.revenue || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
-              <span className="font-data-mono text-data-mono text-secondary-fixed-dim">BGN</span>
+              <span className="font-label-caps text-[11px] text-secondary-fixed-dim tracking-[0.15em]">BGN</span>
             </div>
-            <div className="mt-4 h-1.5 bg-surface-variant/30 overflow-hidden">
+            <div className="mt-5 h-px bg-outline-variant/20 overflow-hidden rounded-full">
               <div
-                className="h-full bg-primary-container transition-all duration-700"
+                className="h-full bg-primary-container/50 rounded-full transition-all duration-1000"
                 style={{ width: `${Math.min(100, kpis.revenue > 0 ? Math.round((kpis.costs / kpis.revenue) * 100) : 0)}%` }}
               />
             </div>
           </div>
 
           {/* Margin */}
-          <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden hover:border-outline-variant/20 transition-colors">
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.grossMargin')}</p>
-            <div className="flex items-baseline gap-2">
-              <span className="font-headline text-headline-xl text-on-surface">{margin || '—'}%</span>
+          <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.grossMargin')}</p>
+            <div className="flex items-baseline gap-1">
+              <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">{margin || '—'}</span>
+              {margin > 0 && <span className="font-label-caps text-[18px] text-on-surface-variant/40 self-end mb-2">%</span>}
             </div>
-            <div className="mt-4 flex items-center gap-2 text-on-surface-variant/60">
-              <span className="material-symbols-outlined text-[16px]">analytics</span>
-              <span className="font-label-caps text-[10px]">{kpis.invoiceCount || 0} {t('dash.invoices')}</span>
+            <div className="mt-5 flex items-center gap-2 text-on-surface-variant/40">
+              <span className="material-symbols-outlined text-[14px]">analytics</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">{kpis.invoiceCount || 0} {t('dash.invoices')}</span>
             </div>
           </div>
         </section>
@@ -234,7 +236,7 @@ export default function DashboardPage() {
         <section className="grid grid-cols-12 gap-gutter">
 
           {/* Top Suppliers — col 8 */}
-          <div className="col-span-12 lg:col-span-8 bg-surface-container-low p-8 border border-outline-variant/10">
+          <div className="col-span-12 lg:col-span-8 bg-surface-container-low p-8 rounded-xl border border-outline-variant/8">
             <div className="flex justify-between items-center mb-10">
               <h3 className="font-label-caps text-label-caps text-on-surface">{t('dash.suppliers')}</h3>
               <span className="font-data-mono text-data-mono text-on-surface-variant">{topSuppliers.length} suppliers</span>
@@ -292,7 +294,7 @@ export default function DashboardPage() {
           </div>
 
           {/* AI Document Center — col 4 */}
-          <div className="col-span-12 lg:col-span-4 bg-surface-container-high p-8 border border-outline-variant/10 relative overflow-hidden">
+          <div className="col-span-12 lg:col-span-4 bg-surface-container-high p-8 rounded-xl border border-outline-variant/8 relative overflow-hidden">
             {/* accent glow */}
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container/6 rounded-full blur-2xl pointer-events-none" />
             <div className="flex items-center gap-2 mb-8 relative">
@@ -334,14 +336,14 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            <a href="/documents" className="block w-full mt-8 py-3 border border-outline-variant/20 font-label-caps text-label-caps text-center text-on-surface-variant hover:bg-surface-variant/10 transition-colors relative">
+            <a href="/documents" className="block w-full mt-8 py-3 rounded-lg border border-outline-variant/15 font-label-caps text-label-caps text-center text-on-surface-variant hover:bg-surface-variant/10 transition-colors relative">
               {t('dash.viewQueue')}
             </a>
           </div>
         </section>
 
         {/* ── BANK RECONCILIATION STATUS ─────────────────────────────────────── */}
-        <section className="bg-surface-container-low border border-outline-variant/10 p-6 flex flex-col md:flex-row md:items-center gap-6">
+        <section className="bg-surface-container-low rounded-xl border border-outline-variant/8 p-6 flex flex-col md:flex-row md:items-center gap-6">
           <div className="flex items-center gap-3 shrink-0">
             <span className="material-symbols-outlined text-primary">account_balance</span>
             <div>
@@ -372,25 +374,25 @@ export default function DashboardPage() {
         {/* ── VAT CARDS ──────────────────────────────────────────────────────── */}
         {vat && (
           <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-            <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.outVat')}</p>
-              <p className="font-headline text-headline-md text-on-surface">
-                {vat.outputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+            <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
+              <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.outVat')}</p>
+              <p className="font-display text-[36px] leading-none italic text-on-surface">
+                {vat.outputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">BGN</span>
               </p>
             </div>
-            <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.inVat')}</p>
-              <p className="font-headline text-headline-md text-on-surface">
-                {vat.estimatedInputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+            <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
+              <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.inVat')}</p>
+              <p className="font-display text-[36px] leading-none italic text-on-surface">
+                {vat.estimatedInputVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">BGN</span>
               </p>
             </div>
-            <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-              <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">{t('dash.netVat')}</p>
-              <p className={`font-headline text-headline-md ${vat.netVat >= 0 ? 'text-error' : 'text-primary'}`}>
-                {vat.netVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
+            <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
+              <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.netVat')}</p>
+              <p className={`font-display text-[36px] leading-none italic ${vat.netVat >= 0 ? 'text-error' : 'text-primary'}`}>
+                {vat.netVat.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">BGN</span>
               </p>
               {vat.pendingCredit > 0 && (
-                <p className="font-label-caps text-[10px] text-on-surface-variant/60 mt-2">
+                <p className="font-label-caps text-[9px] text-on-surface-variant/50 mt-3">
                   {t('dash.potentialCredit')}: {vat.pendingCredit.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} BGN
                 </p>
               )}
@@ -400,12 +402,12 @@ export default function DashboardPage() {
 
         {/* ── REVENUE CHART + RECENT INVOICES ────────────────────────────────── */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
-          <div className="lg:col-span-2 bg-surface-container-low p-8 border border-outline-variant/10">
-            <h3 className="font-label-caps text-label-caps text-on-surface mb-8">{t('dash.revenueByMonth')}</h3>
+          <div className="lg:col-span-2 bg-surface-container-low p-8 rounded-xl border border-outline-variant/8">
+            <h3 className="font-label-caps text-[10px] text-on-surface-variant/60 mb-8 tracking-[0.14em]">{t('dash.revenueByMonth')}</h3>
             <RevenueChart data={data?.revenueByMonth || []} />
           </div>
-          <div className="bg-surface-container-low p-8 border border-outline-variant/10">
-            <h3 className="font-label-caps text-label-caps text-on-surface mb-8">{t('dash.recentInvoices')}</h3>
+          <div className="bg-surface-container-low p-8 rounded-xl border border-outline-variant/8">
+            <h3 className="font-label-caps text-[10px] text-on-surface-variant/60 mb-8 tracking-[0.14em]">{t('dash.recentInvoices')}</h3>
             <div className="space-y-3">
               {(data?.recentInvoices || []).slice(0, 6).map((inv: any) => (
                 <div key={inv.id} className="flex justify-between items-center py-3 border-b border-outline-variant/5 group/inv hover:bg-surface-container-high -mx-2 px-2 transition-colors">
@@ -436,24 +438,24 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-3 gap-gutter">
             {(projList.length > 0 ? projList : [{code:'—', name:'Sofia Penthouse'},{code:'—', name:'Luminavera Showroom'},{code:'—', name:'Coastal Villa'}]).map((proj: any, i: number) => (
-              <a key={proj.id || i} href={proj.id ? `/projects/${proj.id}` : '/projects'} className="group relative overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors cursor-pointer block">
+              <a key={proj.id || i} href={proj.id ? `/projects/${proj.id}` : '/projects'} className="group relative overflow-hidden rounded-xl border border-outline-variant/8 hover:border-primary-container/20 hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 cursor-pointer block">
                 <img
                   src={PROJ_IMG_POOL[i % PROJ_IMG_POOL.length]}
                   alt={proj.name}
-                  className="w-full h-48 object-cover transition-transform duration-700 group-hover:scale-105"
-                  style={{ filter: 'brightness(0.7) saturate(0.9)' }}
+                  className="w-full h-52 object-cover transition-transform duration-700 group-hover:scale-108"
+                  style={{ filter: 'brightness(0.65) saturate(0.85)' }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-surface/90 via-surface/20 to-transparent" />
-                <div className="absolute inset-0 border border-primary-container/0 group-hover:border-primary-container/40 transition-colors" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/20 to-transparent" />
+                <div className="absolute inset-0 rounded-xl border border-primary-container/0 group-hover:border-primary-container/30 transition-colors" />
                 <div className="absolute bottom-0 left-0 right-0 p-5">
-                  <p className="font-label-caps text-[9px] text-primary mb-1 tracking-widest">{t('dash.activeProject')}</p>
-                  <p className="font-label-caps text-label-caps text-on-surface">{proj.code !== '—' ? `${proj.code} — ` : ''}{proj.name}</p>
+                  <p className="font-label-caps text-[9px] text-primary/70 mb-1 tracking-[0.2em]">{t('dash.activeProject')}</p>
+                  <p className="font-label-caps text-[11px] text-on-surface leading-snug">{proj.code !== '—' ? `${proj.code} — ` : ''}{proj.name}</p>
                   {proj.client?.name && (
-                    <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{proj.client.name}</p>
+                    <p className="font-label-caps text-[9px] text-on-surface-variant/50 mt-0.5 truncate">{proj.client.name}</p>
                   )}
                 </div>
                 <div className="absolute top-3 right-3">
-                  <div className="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.8)] animate-pulse" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary-container shadow-[0_0_6px_rgba(62,144,255,0.8)] animate-pulse" />
                 </div>
               </a>
             ))}
@@ -468,16 +470,16 @@ export default function DashboardPage() {
 function LoadingSkeleton() {
   return (
     <div className="min-h-screen animate-pulse">
-      <div className="h-56 bg-surface-container" />
+      <div className="h-72 bg-surface-container" />
       <div className="p-container-padding space-y-section-gap">
         <div className="grid grid-cols-3 gap-gutter">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-32 bg-surface-container-low border border-outline-variant/10" />
+            <div key={i} className="h-36 bg-surface-container-low rounded-xl border border-outline-variant/8" />
           ))}
         </div>
         <div className="grid grid-cols-12 gap-gutter">
-          <div className="col-span-8 h-72 bg-surface-container-low border border-outline-variant/10" />
-          <div className="col-span-4 h-72 bg-surface-container-high border border-outline-variant/10" />
+          <div className="col-span-8 h-72 bg-surface-container-low rounded-xl border border-outline-variant/8" />
+          <div className="col-span-4 h-72 bg-surface-container-high rounded-xl border border-outline-variant/8" />
         </div>
       </div>
     </div>

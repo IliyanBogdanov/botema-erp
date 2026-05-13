@@ -12,6 +12,9 @@ const LINK_TYPE_LABELS: Record<string, { bg: string; en: string; icon: string; c
   ORDER_TO_PROJECT:     { bg: 'Поръчка → Проект', en: 'Order → Project', icon: 'folder_open', color: 'text-warning' },
   DOCUMENT_TO_PURCHASE: { bg: 'Документ → Покупка', en: 'Document → Purchase', icon: 'receipt', color: 'text-primary' },
   DOCUMENT_TO_INVOICE:  { bg: 'Документ → Фактура', en: 'Document → Invoice', icon: 'receipt_long', color: 'text-primary' },
+  DOCUMENT_TO_SOURCE:   { bg: 'Документ → Източник', en: 'Document → Source', icon: 'link', color: 'text-secondary' },
+  EMAIL_TO_DOCUMENT:    { bg: 'Имейл → Документ', en: 'Email → Document', icon: 'mail', color: 'text-on-surface-variant' },
+  PARTIAL_MATCH:        { bg: 'Частично съвпадение', en: 'Partial Match', icon: 'match_case', color: 'text-warning' },
 };
 
 const MISSING_TYPE_LABELS: Record<string, string> = {

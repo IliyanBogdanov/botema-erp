@@ -125,7 +125,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 px-gutter flex items-center justify-between bg-surface-dim border-b border-outline-variant/10 flex-shrink-0">
+        <header className="h-14 px-gutter flex items-center justify-between bg-surface-dim/70 backdrop-blur-xl border-b border-outline-variant/8 flex-shrink-0 sticky top-0 z-30">
           {/* Hamburger — mobile only */}
           <button
             className="md:hidden mr-3 p-2 text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
@@ -141,9 +141,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {searching ? 'hourglass_empty' : 'search'}
               </span>
               <input
-                className="w-full bg-surface-container border-none py-2 pl-10 pr-4 text-body-sm font-body-sm
+                className="w-full bg-surface-container/60 backdrop-blur-sm border border-outline-variant/15 rounded-lg py-2 pl-10 pr-4 text-body-sm font-body-sm
                            text-on-surface placeholder:text-on-surface-variant/40 outline-none
-                           focus:ring-1 focus:ring-primary-container transition-all"
+                           focus:ring-1 focus:ring-primary-container/50 focus:border-primary-container/30 transition-all"
                 placeholder={`${t('header.search')}  Ctrl+K`}
                 value={search}
                 onChange={e => handleSearch(e.target.value)}
@@ -152,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
               {/* Search dropdown */}
               {dropdownOpen && results.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-surface-container-high border border-outline-variant/20 shadow-2xl z-50 max-h-[420px] overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-surface-container-high/95 backdrop-blur-xl border border-outline-variant/20 rounded-lg shadow-2xl z-50 max-h-[420px] overflow-y-auto overflow-hidden">
                   {results.map((r, i) => (
                     <button
                       key={`${r.type}-${r.id}-${i}`}
@@ -187,7 +187,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
 
               {dropdownOpen && search.length >= 2 && results.length === 0 && !searching && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-surface-container-high border border-outline-variant/20 shadow-2xl z-50 px-4 py-6 text-center">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-surface-container-high/95 backdrop-blur-xl border border-outline-variant/20 rounded-lg shadow-2xl z-50 px-4 py-6 text-center">
                   <span className="font-label-caps text-label-caps text-on-surface-variant/50">Няма резултати за „{search}"</span>
                 </div>
               )}
@@ -245,7 +245,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-primary-container text-on-primary-container text-[12px] font-bold flex items-center justify-center border border-outline-variant flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-primary-container/20 text-primary text-[11px] font-bold flex items-center justify-center border border-primary-container/30 flex-shrink-0">
               {user?.name?.charAt(0).toUpperCase() ?? 'S'}
             </div>
           </div>

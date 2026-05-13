@@ -12,7 +12,7 @@ interface Expense {
   description?: string;
   amount: number;
   currency: string;
-  supplier?: { id: string; name: string };
+  supplier?: string;
 }
 
 const CATEGORY_SUGGESTIONS = [
@@ -125,7 +125,7 @@ export default function ExpensesPage() {
 
   const filtered = search
     ? expenses.filter(e =>
-        (e.supplier?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.supplier || '').toLowerCase().includes(search.toLowerCase()) ||
         (e.category || '').toLowerCase().includes(search.toLowerCase()) ||
         (e.description || '').toLowerCase().includes(search.toLowerCase())
       )
@@ -204,7 +204,7 @@ export default function ExpensesPage() {
                       {e.category}
                     </span>
                   </td>
-                  <td className="table-cell text-[#a1a1aa]">{e.supplier?.name || '—'}</td>
+                  <td className="table-cell text-[#a1a1aa]">{e.supplier || '—'}</td>
                   <td className="table-cell text-[#71717a] truncate max-w-[220px]">{e.description || '—'}</td>
                   <td className="table-cell text-right font-semibold text-white">{fmt(e.amount, e.currency)}</td>
                   <td className="table-cell text-[#71717a] text-xs">{e.currency}</td>

@@ -481,6 +481,7 @@ model Counterparty {
   name        String
   type        CounterpartyType
   subtype     String?         // "COURIER", "BANK", "ACCOUNTING", "CUSTOMS" etc.
+  isIndividual Boolean        @default(false)  // физическо лице
   eik         String?
   vat         String?
   country     String          @default("BG")
@@ -489,6 +490,8 @@ model Counterparty {
   city        String?
   email       String?
   phone       String?
+  website     String?
+  logoUrl     String?         // logo image URL (Clearbit or manual)
   notes       String?
   companyId   String?         // Studio Botema or Luminavera
   createdAt   DateTime        @default(now())
