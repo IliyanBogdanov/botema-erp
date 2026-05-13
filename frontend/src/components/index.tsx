@@ -95,8 +95,8 @@ export function RevenueChart({ data }: { data: any[] }) {
                 zIndex: 10, pointerEvents: 'none',
               }}>
                 <div style={{ fontWeight: 700, marginBottom: 2 }}>{MONTHS[i]}</div>
-                {d.SB > 0 && <div style={{ color: '#0a84ff' }}>SB {fmt(d.SB, 'BGN')}</div>}
-                {d.LV > 0 && <div style={{ color: '#30d158' }}>LV {fmt(d.LV, 'BGN')}</div>}
+                {d.SB > 0 && <div style={{ color: '#0a84ff' }}>SB {fmt(d.SB)} EUR</div>}
+                {d.LV > 0 && <div style={{ color: '#30d158' }}>LV {fmt(d.LV)} EUR</div>}
               </div>
             )}
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: BAR_H, gap: 2 }}>
@@ -165,7 +165,7 @@ export function RecentInvoices({ invoices, showStatus }: { invoices: any[]; show
             <div className="text-xs text-[#71717a]">{fmtDate(inv.date)} · {inv.number}</div>
           </div>
           <div className="flex flex-col items-end ml-4 flex-shrink-0">
-            <span className="text-sm font-bold text-white">{fmt(inv.amountNet, inv.currency || 'BGN')}</span>
+            <span className="text-sm font-bold text-white">{fmt(inv.currency === 'BGN' ? Number(inv.amountNet) / 1.95583 : Number(inv.amountNet))} EUR</span>
             {showStatus && <StatusBadge status={inv.status} />}
           </div>
         </div>
