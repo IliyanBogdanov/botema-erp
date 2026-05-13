@@ -13,6 +13,63 @@ const toNumber = value => {
 
 const asBgn = (amount, currency) => currency === 'EUR' ? toNumber(amount) * BGN_PER_EUR : toNumber(amount);
 
+// GET /api/vat/monthly-breakdown?year=2025
+// Returns all 12 months at once: outputVat, inputVat, netVat per month
+router.get('/monthly-breakdown', auth, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getFullYear());
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end   = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+
+    const [invoices, purchases] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { date: { gte: start, lte: end }, status: { not: 'CANCELLED' } },
+        select: { date: true, currency: true, vatAmount: true, amountNet: true, amountTotal: true },
+      }),
+      prisma.purchase.findMany({
+        where: { date: { gte: start, lte: end } },
+        select: { date: true, currency: true, amount: true, extractedData: true },
+      }),
+    ]);
+
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      monthLabel: ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'][i],
+      outputVat: 0,
+      outputNet: 0,
+      inputVat: 0,
+      inputNet: 0,
+      netVat: 0,
+    }));
+
+    for (const inv of invoices) {
+      const m = new Date(inv.date).getUTCMonth();
+      months[m].outputVat  += asBgn(inv.vatAmount, inv.currency);
+      months[m].outputNet  += asBgn(inv.amountNet, inv.currency);
+    }
+
+    for (const pur of purchases) {
+      const m = new Date(pur.date).getUTCMonth();
+      const explicit = toNumber(pur.extractedData?.vatAmount);
+      const gross = asBgn(pur.amount, pur.currency);
+      months[m].inputVat  += explicit ? asBgn(explicit, pur.currency) : gross / 6;
+      months[m].inputNet  += explicit ? gross - asBgn(explicit, pur.currency) : gross * 5 / 6;
+    }
+
+    for (const m of months) {
+      m.outputVat = Number(m.outputVat.toFixed(2));
+      m.outputNet = Number(m.outputNet.toFixed(2));
+      m.inputVat  = Number(m.inputVat.toFixed(2));
+      m.inputNet  = Number(m.inputNet.toFixed(2));
+      m.netVat    = Number((m.outputVat - m.inputVat).toFixed(2));
+    }
+
+    res.json({ year, months });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/overview', auth, async (req, res) => {
   try {
     const year = parseInt(req.query.year || new Date().getFullYear());

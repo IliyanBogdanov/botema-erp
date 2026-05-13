@@ -184,4 +184,67 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /api/dashboard/monthly-pnl?year=2025
+// Revenue, costs, gross profit per month
+router.get('/monthly-pnl', auth, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getFullYear());
+
+    const [invoices, purchases] = await Promise.all([
+      prisma.invoice.findMany({
+        where: {
+          date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
+          status: { not: 'CANCELLED' },
+        },
+        select: { date: true, currency: true, amountNet: true, vatAmount: true, amountTotal: true },
+      }),
+      prisma.purchase.findMany({
+        where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) } },
+        select: { date: true, currency: true, amount: true },
+      }),
+    ]);
+
+    const MONTH_NAMES = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      label: MONTH_NAMES[i],
+      revenue: 0,
+      costs: 0,
+      profit: 0,
+      margin: 0,
+    }));
+
+    for (const inv of invoices) {
+      const m = new Date(inv.date).getMonth();
+      months[m].revenue += toBgn(inv.amountNet, inv.currency);
+    }
+
+    for (const pur of purchases) {
+      const m = new Date(pur.date).getMonth();
+      months[m].costs += toBgn(pur.amount, pur.currency);
+    }
+
+    for (const m of months) {
+      m.revenue = Number(m.revenue.toFixed(2));
+      m.costs   = Number(m.costs.toFixed(2));
+      m.profit  = Number((m.revenue - m.costs).toFixed(2));
+      m.margin  = m.revenue > 0 ? Number(((m.revenue - m.costs) / m.revenue * 100).toFixed(1)) : 0;
+    }
+
+    // Yearly totals
+    const totals = months.reduce((acc, m) => ({
+      revenue: acc.revenue + m.revenue,
+      costs:   acc.costs   + m.costs,
+      profit:  acc.profit  + m.profit,
+    }), { revenue: 0, costs: 0, profit: 0 });
+    totals.margin = totals.revenue > 0
+      ? Number((totals.profit / totals.revenue * 100).toFixed(1))
+      : 0;
+
+    res.json({ year, months, totals });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

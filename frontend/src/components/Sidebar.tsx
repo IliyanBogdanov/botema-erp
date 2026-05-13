@@ -25,6 +25,7 @@ const navGroups = [
       { key: 'nav.issuedDocs', href: '/issued-docs',  icon: 'edit_document' },
       { key: 'nav.expenses',   href: '/expenses',  icon: 'receipt' },
       { key: 'nav.vat',        href: '/vat',       icon: 'account_balance' },
+      { key: 'nav.finance',    href: '/finance',   icon: 'bar_chart' },
       { key: 'nav.reconciliation', href: '/reconciliation', icon: 'account_tree' },
     ],
   },
