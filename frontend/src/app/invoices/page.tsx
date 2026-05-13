@@ -334,6 +334,14 @@ function AgingView() {
 
   return (
     <div className="space-y-6">
+      {/* Aging disclaimer */}
+      <div className="flex items-center gap-2 text-on-surface-variant/50">
+        <span className="material-symbols-outlined text-[14px]">info</span>
+        <p className="font-label-caps text-[9px] tracking-wider uppercase">
+          Всички неплатени фактури към {new Date().toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' })} — независимо от година
+        </p>
+      </div>
+
       {/* Bucket summary */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         {AGING_BUCKETS.map(b => {

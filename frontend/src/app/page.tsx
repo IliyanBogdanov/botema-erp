@@ -196,8 +196,8 @@ export default function DashboardPage() {
               <span className="font-label-caps text-[11px] text-primary tracking-[0.15em]">EUR</span>
             </div>
             <div className="mt-5 flex items-center gap-2 text-primary/60">
-              <span className="material-symbols-outlined text-[14px]">trending_up</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">{t('dash.allCurrCombined')}</span>
+              <span className="material-symbols-outlined text-[14px]">calendar_today</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">1 Яну {year} — 31 Дек {year} · {t('dash.allCurrCombined')}</span>
             </div>
           </div>
 
@@ -216,6 +216,10 @@ export default function DashboardPage() {
                 style={{ width: `${Math.min(100, kpis.revenueEur > 0 ? Math.round(((kpis.costsEur || kpis.costs / 1.95583) / kpis.revenueEur) * 100) : 0)}%` }}
               />
             </div>
+            <div className="mt-3 flex items-center gap-2 text-on-surface-variant/40">
+              <span className="material-symbols-outlined text-[14px]">calendar_today</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">Нетни приходи за {year} г.</span>
+            </div>
           </div>
 
           {/* Margin */}
@@ -227,7 +231,7 @@ export default function DashboardPage() {
             </div>
             <div className="mt-5 flex items-center gap-2 text-on-surface-variant/40">
               <span className="material-symbols-outlined text-[14px]">analytics</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">{kpis.invoiceCount || 0} {t('dash.invoices')}</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">{kpis.invoiceCount || 0} {t('dash.invoices')} за {year} г.</span>
             </div>
           </div>
         </section>
@@ -379,12 +383,14 @@ export default function DashboardPage() {
               <p className="font-display text-[36px] leading-none italic text-on-surface">
                 {(vat.outputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Изходящ ДДС от фактури за {year} г.</p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.inVat')}</p>
               <p className="font-display text-[36px] leading-none italic text-on-surface">
                 {(vat.estimatedInputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Входящ ДДС от покупки за {year} г.</p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.netVat')}</p>
@@ -396,6 +402,7 @@ export default function DashboardPage() {
                   {t('dash.potentialCredit')}: {(vat.pendingCredit / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} EUR
                 </p>
               )}
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-1">Нет ДДС позиция за {year} г.</p>
             </div>
           </section>
         )}
@@ -403,7 +410,10 @@ export default function DashboardPage() {
         {/* ── REVENUE CHART + RECENT INVOICES ────────────────────────────────── */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
           <div className="lg:col-span-2 bg-surface-container-low p-8 rounded-xl border border-outline-variant/8">
-            <h3 className="font-label-caps text-[10px] text-on-surface-variant/60 mb-8 tracking-[0.14em]">{t('dash.revenueByMonth')}</h3>
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.14em]">{t('dash.revenueByMonth')}</h3>
+              <span className="font-label-caps text-[9px] text-on-surface-variant/40 bg-surface-container-high px-2 py-1 rounded">Период: {year} г.</span>
+            </div>
             <RevenueChart data={data?.revenueByMonth || []} />
           </div>
           <div className="bg-surface-container-low p-8 rounded-xl border border-outline-variant/8">

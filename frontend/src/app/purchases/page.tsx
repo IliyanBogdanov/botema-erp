@@ -386,26 +386,9 @@ export default function PurchasesPage() {
               <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.totalEur')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
-                  {(total / 1.95583).toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} EUR
-                </span>
-                <div className="text-xs text-primary mt-1">{purchases.length} invoices</div>
-              </div>
-            </div>
-            <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
-              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.totalBgn')}</span>
-              <div className="mt-4">
-                <span className="font-headline text-headline-md text-on-background">
                   {total.toLocaleString('bg-BG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
                 </span>
-              </div>
-            </div>
-            <div className="bg-surface-container-high p-6 border border-error/20 flex flex-col justify-between">
-              <span className="font-label-caps text-label-caps text-error uppercase">{t('pur.zeroAmt')}</span>
-              <div className="mt-4">
-                <span className="font-headline text-headline-md text-error">
-                  {purchases.filter(p => Number(p.amount) === 0).length}
-                </span>
-                <div className="text-xs text-on-surface-variant mt-1">invoices need review</div>
+                <div className="text-xs text-primary mt-1">{purchases.length} фактури за {year} г.</div>
               </div>
             </div>
             <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
@@ -414,7 +397,25 @@ export default function PurchasesPage() {
                 <span className="font-headline text-headline-md text-on-background">
                   {purchases.filter(p => p.status !== 'PAID').length}
                 </span>
-                <div className="text-xs text-on-surface-variant mt-1">unpaid invoices</div>
+                <div className="text-xs text-on-surface-variant mt-1">неплатени за {year} г.</div>
+              </div>
+            </div>
+            <div className="bg-surface-container-high p-6 border border-error/20 flex flex-col justify-between">
+              <span className="font-label-caps text-label-caps text-error uppercase">{t('pur.zeroAmt')}</span>
+              <div className="mt-4">
+                <span className="font-headline text-headline-md text-error">
+                  {purchases.filter(p => Number(p.amount) === 0).length}
+                </span>
+                <div className="text-xs text-on-surface-variant mt-1">изискват проверка</div>
+              </div>
+            </div>
+            <div className="bg-surface-container p-6 border border-outline-variant/10 flex flex-col justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">ДОСТАВЧИЦИ</span>
+              <div className="mt-4">
+                <span className="font-headline text-headline-md text-on-background">
+                  {new Set(purchases.map(p => p.supplier?.id).filter(Boolean)).size}
+                </span>
+                <div className="text-xs text-on-surface-variant mt-1">уникални доставчика за {year} г.</div>
               </div>
             </div>
           </div>

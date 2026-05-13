@@ -215,7 +215,7 @@ export default function ExpensesPage() {
           {!isLoading && filtered.length > 0 && (
             <tfoot>
               <tr className="bg-[#1d1d1f]">
-                <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (EUR)</td>
+                <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (EUR) — {year} г.</td>
                 <td className="table-cell text-right font-bold text-white text-base">
                   {totalEUR.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
                 </td>
