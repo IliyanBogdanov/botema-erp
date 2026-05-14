@@ -61,14 +61,23 @@ export default function FinancePage() {
       </div>
 
       <div className="px-8 py-6 space-y-6">
+        {/* YTD disclaimer for current year */}
+        {year === new Date().getFullYear() && (
+          <div className="border border-outline-variant/10 border-l-4 border-l-primary-container/40 bg-surface-container-low px-4 py-2.5 flex items-center gap-3">
+            <span className="material-symbols-outlined text-[16px] text-primary/50">info</span>
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.1em]">
+              ДАННИТЕ СА ЯНУ–{MONTH_SHORT[new Date().getMonth()]} {year} (YTD) — РАЗХОДИТЕ ВКЛЮЧВАТ АВАНСОВИ ПОКУПКИ ЗА БЪДЕЩИ ПРОЕКТИ, КОЕТО ВРЕМЕННО ЗАНИЖАВА МАРЖА
+            </p>
+          </div>
+        )}
         {/* Annual KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {isLoading ? (
             [...Array(4)].map((_, i) => <div key={i} className="h-28 bg-surface-container-low border border-outline-variant/10 animate-pulse" />)
           ) : (
             <>
-              <KpiCard icon="trending_up" label={`ПРИХОДИ ${year}`} value={fmtBgn(totals.revenue)} sub={`Нет от ${year} г.`} />
-              <KpiCard icon="shopping_cart" label={`РАЗХОДИ ${year}`} value={fmtBgn(totals.costs)} sub={`Покупки за ${year} г.`} />
+              <KpiCard icon="trending_up" label={`ПРИХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmtBgn(totals.revenue)} sub={`Нет от ${year} г.`} />
+              <KpiCard icon="shopping_cart" label={`РАЗХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmtBgn(totals.costs)} sub={`Покупки за ${year} г. (вкл. авансови)`} />
               <KpiCard icon="savings" label={`БРУТНА ПЕЧАЛБА ${year}`} value={fmtBgn(totals.profit)}
                 sub={`Марж ${totals.margin}%`} positive={totals.profit > 0} />
               <KpiCard icon="percent" label="БРУТЕН МАРЖ" value={`${totals.margin}%`} positive={totals.margin > 20} />

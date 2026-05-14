@@ -98,6 +98,15 @@ export default function DashboardPage() {
   const matchRate = bankRecon.total > 0 ? Math.round((bankRecon.matched / bankRecon.total) * 100) : 0;
   const barOpacity = [1, 0.8, 0.6, 0.4, 0.25];
 
+  // Period context
+  const today = new Date();
+  const isCurrentYear = year === today.getFullYear();
+  const BG_MONTHS = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+  const periodEnd = isCurrentYear
+    ? `${today.getDate()} ${BG_MONTHS[today.getMonth()]} ${year}`
+    : `31 Дек ${year}`;
+  const periodLabel = `01 Яну ${year} — ${periodEnd}`;
+
   return (
     <div className="min-h-screen">
 
@@ -182,6 +191,16 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* ── YTD PERIOD BANNER (current year only) ──────────────────────────── */}
+        {isCurrentYear && (
+          <div className="bg-surface-container-low rounded-xl border border-outline-variant/8 border-l-4 border-l-primary-container/40 px-5 py-3 flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary/50 text-[18px]">info</span>
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.1em]">
+              ДАННИТЕ СА ЗА ПЕРИОДА <span className="text-on-surface/70">{periodLabel}</span> — РАЗХОДИТЕ ВКЛЮЧВАТ АВАНСОВИ ПОКУПКИ ЗА БЪДЕЩИ ДОСТАВКИ
+            </p>
+          </div>
+        )}
+
         {/* ── KPI CARDS ──────────────────────────────────────────────────────── */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
           {/* EUR */}
@@ -197,7 +216,7 @@ export default function DashboardPage() {
             </div>
             <div className="mt-5 flex items-center gap-2 text-primary/60">
               <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">1 Яну {year} — 31 Дек {year} · {t('dash.allCurrCombined')}</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">{periodLabel}{isCurrentYear ? ' (ЯНУ)' : ''} · {t('dash.allCurrCombined')}</span>
             </div>
           </div>
 
@@ -218,7 +237,7 @@ export default function DashboardPage() {
             </div>
             <div className="mt-3 flex items-center gap-2 text-on-surface-variant/40">
               <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">Нетни приходи за {year} г.</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">Нетни приходи · {periodLabel}</span>
             </div>
           </div>
 
@@ -226,13 +245,18 @@ export default function DashboardPage() {
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
             <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.grossMargin')}</p>
             <div className="flex items-baseline gap-1">
-              <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">{margin || '—'}</span>
-              {margin > 0 && <span className="font-label-caps text-[18px] text-on-surface-variant/40 self-end mb-2">%</span>}
+              <span className={`font-display text-[52px] leading-none italic tracking-tight ${margin < -30 ? 'text-error/80' : 'text-on-surface'}`}>{margin || '—'}</span>
+              {margin !== 0 && <span className="font-label-caps text-[18px] text-on-surface-variant/40 self-end mb-2">%</span>}
             </div>
             <div className="mt-5 flex items-center gap-2 text-on-surface-variant/40">
               <span className="material-symbols-outlined text-[14px]">analytics</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">{kpis.invoiceCount || 0} {t('dash.invoices')} за {year} г.</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">{kpis.invoiceCount || 0} {t('dash.invoices')} · {periodLabel}</span>
             </div>
+            {margin < -30 && isCurrentYear && (
+              <div className="mt-3 px-2 py-1.5 bg-error/5 border border-error/15 rounded text-[9px] font-label-caps text-error/70 leading-relaxed">
+                ⚠ YTD: разходите включват авансови покупки за бъдещи проекти
+              </div>
+            )}
           </div>
         </section>
 
@@ -383,14 +407,14 @@ export default function DashboardPage() {
               <p className="font-display text-[36px] leading-none italic text-on-surface">
                 {(vat.outputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
-              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Изходящ ДДС от фактури за {year} г.</p>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Изходящ ДДС · {periodLabel}</p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.inVat')}</p>
               <p className="font-display text-[36px] leading-none italic text-on-surface">
                 {(vat.estimatedInputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
-              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Входящ ДДС от покупки за {year} г.</p>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Входящ ДДС · {periodLabel}</p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.netVat')}</p>
@@ -402,7 +426,7 @@ export default function DashboardPage() {
                   {t('dash.potentialCredit')}: {(vat.pendingCredit / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} EUR
                 </p>
               )}
-              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-1">Нет ДДС позиция за {year} г.</p>
+              <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-1">Нет ДДС позиция · {periodLabel}</p>
             </div>
           </section>
         )}
