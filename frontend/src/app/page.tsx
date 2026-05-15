@@ -262,7 +262,7 @@ export default function DashboardPage() {
             <div className="absolute top-4 right-4 w-1.5 h-1.5 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.6)]" />
             <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.totalEur')}</p>
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">
+              <span className="font-display text-[40px] leading-none text-on-surface italic tracking-tight">
                 {totalPurchasesEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
               <span className="font-label-caps text-[11px] text-primary tracking-[0.15em]">EUR</span>
@@ -277,7 +277,7 @@ export default function DashboardPage() {
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
             <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.revenueBgn')}</p>
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-[52px] leading-none text-on-surface italic tracking-tight">
+              <span className="font-display text-[40px] leading-none text-on-surface italic tracking-tight">
                 {(kpis.revenueEur || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
               <span className="font-label-caps text-[11px] text-secondary-fixed-dim tracking-[0.15em]">EUR</span>
@@ -298,7 +298,7 @@ export default function DashboardPage() {
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
             <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.grossMargin')}</p>
             <div className="flex items-baseline gap-1">
-              <span className={`font-display text-[52px] leading-none italic tracking-tight ${margin < -30 ? 'text-error/80' : 'text-on-surface'}`}>{margin || '—'}</span>
+              <span className={`font-display text-[40px] leading-none italic tracking-tight ${margin < -30 ? 'text-error/80' : 'text-on-surface'}`}>{margin || '—'}</span>
               {margin !== 0 && <span className="font-label-caps text-[18px] text-on-surface-variant/40 self-end mb-2">%</span>}
             </div>
             <div className="mt-5 flex items-center gap-2 text-on-surface-variant/40">
@@ -320,7 +320,7 @@ export default function DashboardPage() {
           <div className="col-span-12 lg:col-span-8 bg-surface-container-low p-8 rounded-xl border border-outline-variant/8">
             <div className="flex justify-between items-center mb-10">
               <h3 className="font-label-caps text-label-caps text-on-surface">{t('dash.suppliers')}</h3>
-              <span className="font-data-mono text-data-mono text-on-surface-variant">{topSuppliers.length} suppliers</span>
+              <span className="font-data-mono text-data-mono text-on-surface-variant">{topSuppliers.length} доставчика</span>
             </div>
             <div className="space-y-7">
               {topSuppliers.map(([name, amount], i) => (
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                 </div>
               ))}
               {topSuppliers.length === 0 && (
-                <p className="text-on-surface-variant font-body-sm text-body-sm opacity-60">No purchase data yet.</p>
+                <p className="text-on-surface-variant font-body-sm text-body-sm opacity-60">Все още няма данни за покупки.</p>
               )}
             </div>
 
@@ -440,10 +440,10 @@ export default function DashboardPage() {
               />
             </div>
             <div className="flex gap-6 font-label-caps text-[10px] text-on-surface-variant">
-              <span><span className="text-primary font-data-mono">{bankRecon.matched}</span> MATCHED</span>
-              <span><span className="text-on-surface font-data-mono">{bankRecon.partial}</span> PARTIAL</span>
-              <span><span className="text-error font-data-mono">{bankRecon.unmatched}</span> UNMATCHED</span>
-              <span className="ml-auto"><span className="font-data-mono text-on-surface">{bankRecon.total}</span> TOTAL</span>
+              <span><span className="text-primary font-data-mono">{bankRecon.matched}</span> Съвпад.</span>
+              <span><span className="text-on-surface font-data-mono">{bankRecon.partial}</span> Частично</span>
+              <span><span className="text-error font-data-mono">{bankRecon.unmatched}</span> Несъвп.</span>
+              <span className="ml-auto"><span className="font-data-mono text-on-surface">{bankRecon.total}</span> Общо</span>
             </div>
           </div>
           <a href="/reconciliation" className="btn-ghost shrink-0 font-label-caps text-label-caps flex items-center gap-2">

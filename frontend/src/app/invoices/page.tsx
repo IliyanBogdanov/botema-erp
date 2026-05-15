@@ -270,8 +270,8 @@ function StatusMenu({ invoice }: { invoice: Invoice }) {
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-2 border border-outline-variant/20 bg-surface-container px-3 py-2 font-label-caps text-label-caps text-on-surface transition-colors hover:bg-surface-container-high">
-        <span className="material-symbols-outlined text-[18px]">visibility</span>
-        View
+        <span className="material-symbols-outlined text-[18px]">edit</span>
+        Статус
         <span className="material-symbols-outlined text-[18px]">expand_more</span>
       </button>
       {open && (
@@ -411,7 +411,7 @@ function AgingView() {
 }
 
 export default function InvoicesPage() {
-  const [year, setYear] = useState(new Date().getFullYear());
+  const [year, setYear] = useState(2025);
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);

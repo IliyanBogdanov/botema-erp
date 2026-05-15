@@ -276,9 +276,11 @@ export default function ProjectsPage() {
                   onClick={() => router.push(`/projects/${project.id}`)}
                   className="group relative h-[320px] overflow-hidden border border-outline-variant/10 bg-surface-container-low text-left"
                   style={{
-                    backgroundImage: `linear-gradient(180deg, rgba(14,14,16,0.08) 0%, rgba(14,14,16,0.78) 55%, rgba(14,14,16,0.94) 100%), url(${projectImages[index % projectImages.length]})`,
+                    backgroundImage: `linear-gradient(180deg, rgba(14,14,16,0.08) 0%, rgba(14,14,16,0.72) 55%, rgba(14,14,16,0.90) 100%), url(${projectImages[index % projectImages.length]})`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundColor: '#1c2433',
                   }}
                 >
                   <div className="absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/0" />
