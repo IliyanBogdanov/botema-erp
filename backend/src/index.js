@@ -82,5 +82,8 @@ app.listen(PORT, () => {
 startAlertJobs(prisma);
 startGmailScanJob(prisma);
 
+const { startNightlyImportJob } = require('./jobs/nightlyImportJob');
+startNightlyImportJob();
+
 module.exports = app;
 

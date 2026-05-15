@@ -168,19 +168,23 @@ export default function BackfillPage() {
             onClick={() => runAll.mutate()}
             disabled={runAll.isPending || runAllJob?.status === 'running'}
             style={{
-              background: runAllJob?.status === 'done' ? '#30d158' : '#0a84ff',
+              background: runAllJob?.status === 'done'
+                ? '#30d158'
+                : 'linear-gradient(135deg, #0a84ff, #0066cc)',
               color: '#fff',
-              border: 'none',
-              borderRadius: 10,
-              padding: '12px 24px',
-              fontSize: 15,
-              fontWeight: 600,
+              border: '2px solid rgba(255,255,255,0.15)',
+              borderRadius: 12,
+              padding: '14px 32px',
+              fontSize: 16,
+              fontWeight: 700,
               cursor: runAll.isPending || runAllJob?.status === 'running' ? 'not-allowed' : 'pointer',
-              opacity: runAll.isPending || runAllJob?.status === 'running' ? 0.6 : 1,
-              minWidth: 180,
+              opacity: runAll.isPending || runAllJob?.status === 'running' ? 0.65 : 1,
+              minWidth: 220,
+              boxShadow: '0 4px 20px rgba(10,132,255,0.35)',
+              letterSpacing: '0.3px',
             }}
           >
-            {runAllJob?.status === 'running' ? '⏳ Върви...' : runAllJob?.status === 'done' ? '✅ Готово' : 'Старт на пълен импорт'}
+            {runAllJob?.status === 'running' ? '⏳ Върви...' : runAllJob?.status === 'done' ? '✅ Готово' : '🚀 Стартирай пълен импорт'}
           </button>
         </div>
 

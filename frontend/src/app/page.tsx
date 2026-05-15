@@ -1,8 +1,8 @@
 'use client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { RevenueChart } from '@/components/RevenueChart';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useT } from '@/lib/i18n';
 
 // Premium Unsplash interiors — stable CDN URLs
@@ -53,6 +53,33 @@ function exportDashboardCsv(data: any, year: number) {
 
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear());
+  const qc = useQueryClient();
+
+  // Sync pipeline state
+  const [syncJobId, setSyncJobId] = useState<string | null>(null);
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
+
+  useEffect(() => {
+    if (!syncJobId || !syncRunning) return;
+    const iv = setInterval(async () => {
+      try {
+        const { data: job } = await api.get(`/backfill/job/${syncJobId}`);
+        if (job.status === 'done' || job.status === 'error') {
+          setSyncRunning(false);
+          setSyncDone(job.status === 'done');
+          clearInterval(iv);
+          qc.invalidateQueries();
+        }
+      } catch { /* ignore */ }
+    }, 4000);
+    return () => clearInterval(iv);
+  }, [syncJobId, syncRunning]);
+
+  const syncNow = useMutation({
+    mutationFn: () => api.post('/backfill/run-all').then(r => r.data),
+    onSuccess: (data: any) => { setSyncJobId(data.jobId); setSyncRunning(true); setSyncDone(false); },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', year],
@@ -157,8 +184,34 @@ export default function DashboardPage() {
           >
             {t('dash.exportReport')}
           </button>
+          <button
+            onClick={() => syncNow.mutate()}
+            disabled={syncRunning || syncNow.isPending}
+            style={{
+              background: syncDone ? '#30d158' : syncRunning ? '#3a3a3c' : '#0a84ff',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: syncRunning ? 'not-allowed' : 'pointer',
+              opacity: syncRunning ? 0.8 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {syncRunning ? '⏳ Синхронизира...' : syncDone ? '✅ Готово' : '🔄 Синхронизирай данните'}
+          </button>
         </div>
       </div>
+      {syncRunning && (
+        <div style={{ background: '#1c1c1e', borderTop: '1px solid #3a3a3c', padding: '8px 24px', fontSize: 12, color: '#8e8e93' }}>
+          ⏳ Импортира данни от Gmail, Drive и PDF фактури — може да отнеме 5–15 мин...
+        </div>
+      )}
 
       <div className="p-container-padding space-y-section-gap">
 
