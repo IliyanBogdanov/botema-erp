@@ -235,7 +235,7 @@ export default function ReconciliationPage() {
         <div className="px-8 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="font-label-caps text-label-caps text-primary mb-0.5">ДОКУМЕНТАЛЕН ОДИТ</p>
-            <h1 className="font-headline text-headline-lg text-on-surface">Reconciliation</h1>
+            <h1 className="font-headline text-headline-lg text-on-surface">Банково Съгласуване</h1>
           </div>
           <div className="flex items-center gap-2 text-on-surface-variant/60">
             <span className="material-symbols-outlined text-[18px]">link</span>
@@ -261,7 +261,7 @@ export default function ReconciliationPage() {
             <button
               key={item.key}
               onClick={() => setTab(item.key as any)}
-              className={`flex items-center gap-2 px-5 py-3 font-label-caps text-label-caps transition-colors border-b-2 -mb-px ${
+              className={`flex items-center gap-2 px-5 py-3 font-label-caps text-label-caps transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0 ${
                 tab === item.key ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'
               }`}
             >

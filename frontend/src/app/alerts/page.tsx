@@ -30,10 +30,11 @@ export default function AlertsPage() {
   const t = useT();
   const severityConfig = getSeverityConfig(t);
 
-  const { data: alerts = [], isLoading } = useQuery({
+  const { data: alerts = [], isLoading, isError } = useQuery({
     queryKey: ['alerts', status],
     queryFn: () => api.get(`/alerts?status=${status}`).then(r => r.data),
     refetchInterval: status === 'ACTIVE' ? 60000 : undefined,
+    retry: 2,
   });
 
   const updateAlert = useMutation({
@@ -184,6 +185,12 @@ export default function AlertsPage() {
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-24 bg-surface-container-low border border-outline-variant/10 animate-pulse" />
           ))}
+        </div>
+      ) : isError ? (
+        <div className="bg-error/5 border border-error/20 p-8 text-center">
+          <span className="material-symbols-outlined text-error text-[32px] block mb-2">wifi_off</span>
+          <p className="font-label-caps text-label-caps text-error/80">Грешка при зареждане на сигналите</p>
+          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Провери връзката с бекенда и опитай отново.</p>
         </div>
       ) : !displayed.length ? (
         <div className="bg-surface-container-low border border-outline-variant/10 p-16 flex flex-col items-center text-center">

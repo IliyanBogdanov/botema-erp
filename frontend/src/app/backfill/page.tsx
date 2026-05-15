@@ -148,7 +148,7 @@ export default function BackfillPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Backfill & Coverage</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Обхождане & Покритие</h1>
       <p style={{ color: '#8e8e93', marginBottom: 24, fontSize: 14 }}>
         Gmail и Drive обхождане — записва исторически файлове в нормализираната база
       </p>

@@ -31,6 +31,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const ALL_TYPES = ['', 'CLIENT', 'SUPPLIER', 'COURIER', 'BANK', 'ACCOUNTING', 'OTHER'];
+const cleanName = (n: string) => n?.replace(/^"|"$/g, '').trim() || n;
 
 function CounterpartyAvatar({ cp }: { cp: Counterparty }) {
   if (cp.logoUrl && !cp.isIndividual) {
@@ -43,7 +44,7 @@ function CounterpartyAvatar({ cp }: { cp: Counterparty }) {
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
         <span className="absolute inset-0 flex items-center justify-center font-headline text-base text-on-surface-variant">
-          {cp.name.charAt(0).toUpperCase()}
+          {cleanName(cp.name).charAt(0).toUpperCase()}
         </span>
       </div>
     );
@@ -57,7 +58,7 @@ function CounterpartyAvatar({ cp }: { cp: Counterparty }) {
   }
   return (
     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container/10 border border-primary/10 font-headline text-base text-primary">
-      {cp.name.charAt(0).toUpperCase()}
+      {cleanName(cp.name).charAt(0).toUpperCase()}
     </div>
   );
 }
@@ -236,7 +237,7 @@ export default function CounterpartiesPage() {
                     <td className="table-cell">
                       <div>
                         <p className="font-medium text-on-surface flex items-center gap-2">
-                          {cp.name}
+                          {cleanName(cp.name)}
                           {cp.isIndividual && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/10 font-label-caps text-[9px] text-amber-300">
                               физ. лице

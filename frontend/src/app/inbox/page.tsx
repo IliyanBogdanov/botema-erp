@@ -419,7 +419,7 @@ export default function InboxPage() {
         <section className="flex items-end justify-between">
           <div>
             <p className="font-label-caps text-label-caps text-primary mb-2">СЛУЖЕБНА ПОЩА</p>
-            <h1 className="font-headline text-headline-lg text-on-surface">Inbox Review</h1>
+            <h1 className="font-headline text-headline-lg text-on-surface">Входяща поща</h1>
             <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
               Преглеждай имейли и ги класифицирай кейс по кейс
             </p>

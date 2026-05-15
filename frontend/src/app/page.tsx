@@ -396,7 +396,7 @@ export default function DashboardPage() {
                       <p className="font-body-sm text-on-surface truncate text-[13px]">{name}</p>
                       {amount ? (
                         <p className="font-data-mono text-[10px] text-primary mt-0.5">
-                          {Number(amount).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {data.currency === 'BGN' ? 'EUR' : (data.currency || 'EUR')}
+                          {Number(amount).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {data.currency || 'EUR'}
                         </p>
                       ) : (
                         <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{doc.filename?.slice(0, 28)}</p>

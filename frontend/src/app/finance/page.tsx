@@ -25,9 +25,9 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 }
 
 export default function FinancePage() {
-  const [year, setYear] = useState(new Date().getFullYear());
+  const [year, setYear] = useState(2025);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['monthly-pnl', year],
     queryFn: () => api.get(`/dashboard/monthly-pnl?year=${year}`).then(r => r.data),
   });
@@ -74,6 +74,8 @@ export default function FinancePage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {isLoading ? (
             [...Array(4)].map((_, i) => <div key={i} className="h-28 bg-surface-container-low border border-outline-variant/10 animate-pulse" />)
+          ) : isError ? (
+            <div className="col-span-4 p-6 text-center text-on-surface-variant font-body-sm">Грешка при зареждане на данните. Опитайте отново.</div>
           ) : (
             <>
               <KpiCard icon="trending_up" label={`ПРИХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmtBgn(totals.revenue)} sub={`Нет от ${year} г.`} />
