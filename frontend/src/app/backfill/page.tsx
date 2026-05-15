@@ -73,6 +73,36 @@ export default function BackfillPage() {
     }
   };
 
+  // Run-all pipeline state
+  const [runAllJobId, setRunAllJobId] = useState<string | null>(null);
+  const [runAllJob, setRunAllJob] = useState<any>(null);
+
+  useEffect(() => {
+    if (!runAllJobId || runAllJob?.status === 'done' || runAllJob?.status === 'error') return;
+    const iv = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/backfill/job/${runAllJobId}`);
+        setRunAllJob(data);
+        if (data.status === 'done' || data.status === 'error') {
+          clearInterval(iv);
+          addLog(data.status === 'done' ? '✅ Пълен импорт завършен!' : `❌ Грешка: ${data.error}`);
+          qc.invalidateQueries({ queryKey: ['coverage'] });
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [runAllJobId, runAllJob?.status]);
+
+  const runAll = useMutation({
+    mutationFn: () => api.post('/backfill/run-all').then(r => r.data),
+    onSuccess: (data: any) => {
+      addLog(`⏳ Пълен импорт стартиран (job: ${data.jobId}). ~5-15 мин...`);
+      setRunAllJobId(data.jobId);
+      setRunAllJob({ status: 'running', log: [] });
+    },
+    onError: (e: any) => addLog(`❌ Грешка: ${e.message}`),
+  });
+
   // Reconciliation tools state
   const [reconJobId, setReconJobId] = useState<string | null>(null);
   const [reconJob, setReconJob] = useState<any>(null);
@@ -122,6 +152,58 @@ export default function BackfillPage() {
       <p style={{ color: '#8e8e93', marginBottom: 24, fontSize: 14 }}>
         Gmail и Drive обхождане — записва исторически файлове в нормализираната база
       </p>
+
+      {/* ── Import Everything ──────────────────────────────────────────── */}
+      <div style={{ background: 'linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%)', borderRadius: 14, padding: 20, marginBottom: 24, border: '1px solid #3a3a3c' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              🚀 Импортирай всичко
+            </h2>
+            <p style={{ color: '#8e8e93', fontSize: 13, margin: 0 }}>
+              Gmail 2023–2026 → Drive → Парсинг → Поправи нули → Reconcile → Sync статуси
+            </p>
+          </div>
+          <button
+            onClick={() => runAll.mutate()}
+            disabled={runAll.isPending || runAllJob?.status === 'running'}
+            style={{
+              background: runAllJob?.status === 'done' ? '#30d158' : '#0a84ff',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 10,
+              padding: '12px 24px',
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: runAll.isPending || runAllJob?.status === 'running' ? 'not-allowed' : 'pointer',
+              opacity: runAll.isPending || runAllJob?.status === 'running' ? 0.6 : 1,
+              minWidth: 180,
+            }}
+          >
+            {runAllJob?.status === 'running' ? '⏳ Върви...' : runAllJob?.status === 'done' ? '✅ Готово' : 'Старт на пълен импорт'}
+          </button>
+        </div>
+
+        {runAllJob && (
+          <div style={{ marginTop: 16 }}>
+            {/* Progress bar */}
+            {runAllJob.status === 'running' && (
+              <div style={{ background: '#2c2c2e', borderRadius: 4, height: 6, overflow: 'hidden', marginBottom: 10 }}>
+                <div style={{ background: '#0a84ff', height: '100%', width: '100%', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(255,255,255,0.15) 8px, rgba(255,255,255,0.15) 16px)', animation: 'slide 1s linear infinite' }} />
+              </div>
+            )}
+            {/* Log */}
+            <div style={{ background: '#000', borderRadius: 8, padding: '10px 14px', maxHeight: 200, overflowY: 'auto', fontFamily: 'monospace', fontSize: 12, color: '#a0a0a0' }}>
+              {(runAllJob.log || []).slice().reverse().map((line: string, i: number) => (
+                <div key={i} style={{ color: line.startsWith('✅') ? '#30d158' : line.startsWith('⚠') ? '#ff9f0a' : line.startsWith('▶') ? '#0a84ff' : '#a0a0a0', marginBottom: 2 }}>
+                  {line}
+                </div>
+              ))}
+              {runAllJob.log?.length === 0 && <div style={{ color: '#636366' }}>Изчакване на първи резултати...</div>}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Summary */}
       {summary && (

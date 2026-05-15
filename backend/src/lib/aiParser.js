@@ -82,6 +82,11 @@ const SUPPLIER_KEYWORDS = [
   { keys: ['nest studio', 'нест студио', 'nest '],         id: 'sup-nest'    },
   { keys: ['rashev', 'рашев', 'ultralight'],               id: 'sup-rashev'  },
   { keys: ['econt', 'еконт'],                              id: 'sup-econt'   },
+  { keys: ['exenza', 'ексенза'],                           id: 'sup-exenza'  },
+  { keys: ['fercam', 'феркам'],                            id: 'sup-fercam'  },
+  { keys: ['siltem', 'силтем'],                            id: 'sup-siltem'  },
+  { keys: ['tridonic', 'тридоник'],                        id: 'sup-tridonic'},
+  { keys: ['sielte', 'сиелте'],                            id: 'sup-sielte'  },
 ];
 
 // Folders that indicate OUTGOING documents — skip these
@@ -171,9 +176,10 @@ function parseFromFilename(filename, folder) {
     : guessFolderType(folder) === 'OFFER' ? 'OFFER'
     : 'INVOICE_IN';
 
-  // Guess currency from supplier/folder
+  // Guess currency from supplier/folder — Bulgarian suppliers use BGN, international use EUR
   const text = (folder + '/' + filename).toLowerCase();
-  const currency = text.includes('поларис') || text.includes('polaris') ? 'BGN' : 'EUR';
+  const bgSuppliers = ['поларис', 'polaris', 'omegalight', 'omega light', 'омега', 'watt', 'ватт', 'буливест', 'bulinvest', 'силтем', 'siltem', 'econt', 'еконт'];
+  const currency = bgSuppliers.some(s => text.includes(s)) ? 'BGN' : 'EUR';
 
   return {
     docType,
@@ -212,18 +218,26 @@ async function parseDocumentWithGroq(filename, folder, pdfBuffer) {
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000); // keep within token limit
 
-  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
 Document type hint: ${folderType}
 
+CRITICAL RULES:
+1. amountTotal = FINAL TOTAL DUE. Look for: "Total", "Totale", "Gesamtbetrag", "ОБЩО", "Amount due", "Da pagare"
+   - European format: "1.234,56" = 1234.56. US format: "1,234.56" = 1234.56
+   - NEVER return 0 if numeric values exist — pick the largest plausible total
+2. currency: € or EUR→EUR, лв. or BGN→BGN. Italian/Dutch/Polish/German suppliers→EUR. Bulgarian suppliers→BGN
+3. invoiceNo: look for "Фактура №", "Invoice No.", "Fattura n.", "Rechnung Nr."
+4. docDate: "Date:", "Дата:", "Data:", "Datum:" → YYYY-MM-DD
+5. supplierName: the SELLER (not Studio Botema/Luminavera)
+6. confidence: 90-100 if all 4 (invoiceNo,docDate,amountTotal,currency) found; 60-89 if 3; 30-59 if 2; 0-29 if <2
+
 Document text:
 ${text}
 
-Extract the following data as JSON. If a field cannot be found, use null.
-Return ONLY valid JSON, no explanation.
-
+Return ONLY valid JSON (no markdown):
 {
   "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
   "invoiceNo": string | null,
@@ -236,7 +250,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
+  "confidence": number
 }`;
 
   const chat = await groq.chat.completions.create({
@@ -257,18 +271,26 @@ async function parseDocumentWithOpenRouter(filename, folder, pdfBuffer) {
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000);
 
-  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
 Document type hint: ${folderType}
 
+CRITICAL RULES:
+1. amountTotal = FINAL TOTAL DUE. Look for: "Total", "Totale", "Gesamtbetrag", "ОБЩО", "Amount due", "Da pagare"
+   - European format: "1.234,56" = 1234.56. US format: "1,234.56" = 1234.56
+   - NEVER return 0 if numeric values exist — pick the largest plausible total
+2. currency: € or EUR→EUR, лв. or BGN→BGN. Italian/Dutch/Polish/German suppliers→EUR. Bulgarian suppliers→BGN
+3. invoiceNo: look for "Фактура №", "Invoice No.", "Fattura n.", "Rechnung Nr."
+4. docDate: "Date:", "Дата:", "Data:", "Datum:" → YYYY-MM-DD
+5. supplierName: the SELLER (not Studio Botema/Luminavera)
+6. confidence: 90-100 if all 4 (invoiceNo,docDate,amountTotal,currency) found; 60-89 if 3; 30-59 if 2; 0-29 if <2
+
 Document text:
 ${text}
 
-Extract the following data as JSON. If a field cannot be found, use null.
-Return ONLY valid JSON, no explanation.
-
+Return ONLY valid JSON (no markdown):
 {
   "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
   "invoiceNo": string | null,
@@ -281,7 +303,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
+  "confidence": number
 }`;
 
   const chat = await openrouter.chat.completions.create({
@@ -303,18 +325,26 @@ async function parseDocumentWithOpenAI(filename, folder, pdfBuffer) {
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 12000);
 
-  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
 Document type hint: ${folderType}
 
+CRITICAL RULES:
+1. amountTotal = FINAL TOTAL DUE. Look for: "Total", "Totale", "Gesamtbetrag", "ОБЩО", "Amount due", "Da pagare"
+   - European format: "1.234,56" = 1234.56. US format: "1,234.56" = 1234.56
+   - NEVER return 0 if numeric values exist — pick the largest plausible total
+2. currency: € or EUR→EUR, лв. or BGN→BGN. Italian/Dutch/Polish/German suppliers→EUR. Bulgarian suppliers→BGN
+3. invoiceNo: look for "Фактура №", "Invoice No.", "Fattura n.", "Rechnung Nr."
+4. docDate: "Date:", "Дата:", "Data:", "Datum:" → YYYY-MM-DD
+5. supplierName: the SELLER (not Studio Botema/Luminavera)
+6. confidence: 90-100 if all 4 (invoiceNo,docDate,amountTotal,currency) found; 60-89 if 3; 30-59 if 2; 0-29 if <2
+
 Document text:
 ${text}
 
-Extract the following data as JSON. If a field cannot be found, use null.
-Return ONLY valid JSON, no explanation.
-
+Return ONLY valid JSON (no markdown):
 {
   "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
   "invoiceNo": string | null,
@@ -327,7 +357,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
+  "confidence": number
 }`;
 
   const chat = await openai.chat.completions.create({
@@ -345,15 +375,31 @@ Return ONLY valid JSON, no explanation.
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
 
-  const prompt = `You are parsing a business document for Studio Botema, a Bulgarian interior design/lighting company.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies that import lighting and furniture from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
 Document type hint: ${folderType}
 
-Extract the following data as JSON. If a field cannot be found, use null.
-Return ONLY valid JSON, no explanation.
+CRITICAL EXTRACTION RULES:
+1. amountTotal = the FINAL TOTAL DUE (largest amount at the bottom). Look for: "Total", "Totale", "Gesamtbetrag", "ОБЩО", "Общо за плащане", "Amount due", "Da pagare"
+   - European number format: "1.234,56" means 1234.56 (period=thousands separator, comma=decimal)
+   - US/UK format: "1,234.56" means 1234.56
+   - NEVER return 0 if numeric values are visible in the document — pick the largest plausible total
+2. currency: look for €, EUR, лв., BGN, $, USD symbols
+   - Italian/Dutch/Polish/German suppliers → EUR
+   - Bulgarian suppliers (Polaris, Omega Light, Siltem, Bulinvest, Econt) → BGN
+3. invoiceNo: look for "Фактура №", "Invoice No.", "Invoice #", "Fattura n.", "Rechnung Nr.", document number in the header
+4. docDate: look for "Date:", "Дата:", "Data:", "Datum:", "Invoice date:" → format as YYYY-MM-DD
+5. supplierName: the company ISSUING this document (the seller). It is NOT Studio Botema or Luminavera.
+   Known suppliers: Lodes, Polaris, Exenza Studio, Formani, Zieta, Omega Light, DHL, Fercam, Tridonic, Sielte, Bulinvest, Microinvest, Siltem, ACA Lighting, Novaluce, Bonaldo, Macro
+6. confidence scoring:
+   - 90-100: all 4 key fields clearly found (invoiceNo, docDate, amountTotal, currency)
+   - 60-89: 3 of the 4 key fields found
+   - 30-59: 2 of the 4 key fields found
+   - 0-29: fewer than 2 fields found, or document is not a financial document
 
+Return ONLY valid JSON (no markdown, no explanation):
 {
   "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "OFFER" | "OTHER",
   "invoiceNo": string | null,
@@ -366,7 +412,7 @@ Return ONLY valid JSON, no explanation.
   "description": string | null,
   "supplierName": string | null,
   "supplierVat": string | null,
-  "confidence": number (0-100, where 0=nothing extracted, 100=all fields clearly present)
+  "confidence": number
 }`;
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });

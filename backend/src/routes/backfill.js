@@ -4,6 +4,7 @@ const { auth, requireRole } = require('../middleware/auth');
 const adminOnly = requireRole('ADMIN');
 const { gmailBackfill, driveBackfill, importInventoryFromRows } = require('../lib/backfill');
 const { downloadDriveFile, parseDocumentWithAI, parseFromFilename, guessSupplierFromPath, guessFolderType, isOutgoingFolder } = require('../lib/aiParser');
+const { autoMatch } = require('../lib/reconciliationEngine');
 const prisma = require('../lib/prisma');
 
 // In-memory job status store
@@ -778,6 +779,216 @@ router.post('/link-counterparties', auth, adminOnly, async (req, res) => {
       job.status = 'error';
       job.error = err.message;
       log(`FATAL: ${err.message}`);
+    }
+  })();
+});
+
+// POST /api/backfill/run-all — Full sequential import pipeline (Gmail + Drive + Parse + Reconcile)
+router.post('/run-all', auth, adminOnly, (req, res) => {
+  const jobId = `run-all-${Date.now()}`;
+  jobs[jobId] = { jobId, type: 'run-all', status: 'running', started: new Date(), log: [], result: {} };
+
+  res.json({ accepted: true, jobId, message: `Full import pipeline started. Poll GET /api/backfill/job/${jobId}` });
+
+  (async () => {
+    const job = jobs[jobId];
+    const log = msg => {
+      console.log('[run-all]', msg);
+      job.log.push(msg);
+      if (job.log.length > 1000) job.log.shift();
+    };
+
+    try {
+      const YEARS = [2023, 2024, 2025, 2026];
+
+      // ── Step 1: Gmail scan for each year ──────────────────────────────────
+      log('▶ Step 1/6: Gmail scan (2023–2026)...');
+      for (const year of YEARS) {
+        try {
+          log(`  Scanning Gmail ${year}...`);
+          const result = await gmailBackfill(year, (done, total, msg) => {
+            if (done % 10 === 0 || done === total) log(`    Gmail ${year}: ${done}/${total} — ${msg}`);
+          });
+          log(`  ✅ Gmail ${year}: ${result?.processed || 0} emails processed, ${result?.attachments || 0} PDFs found`);
+          job.result[`gmail_${year}`] = result;
+        } catch (e) {
+          log(`  ⚠️ Gmail ${year} error: ${e.message}`);
+        }
+      }
+
+      // ── Step 2: Drive scan ────────────────────────────────────────────────
+      log('▶ Step 2/6: Drive scan...');
+      const driveFolderId = process.env.DRIVE_INVOICES_FOLDER_ID;
+      if (driveFolderId) {
+        try {
+          const driveResult = await driveBackfill(driveFolderId, 'Drive', new Date().getFullYear(), (done, total, name) => {
+            if (done % 20 === 0 || done === total) log(`    Drive: ${done}/${total} — ${name}`);
+          });
+          log(`  ✅ Drive: ${driveResult?.processed || 0} files scanned`);
+          job.result.drive = driveResult;
+        } catch (e) {
+          log(`  ⚠️ Drive error: ${e.message}`);
+        }
+      } else {
+        log('  ⚠️ DRIVE_INVOICES_FOLDER_ID not set — skipping Drive scan');
+      }
+
+      // ── Step 3: Parse new Drive PDFs as purchases ─────────────────────────
+      log('▶ Step 3/6: Parsing new Drive PDFs into Purchase records...');
+      try {
+        const allFiles = await prisma.sourceFile.findMany({
+          where: {
+            type: 'DRIVE',
+            driveFileId: { not: null },
+            OR: [
+              { mimeType: { contains: 'pdf', mode: 'insensitive' } },
+              { filename: { endsWith: '.pdf', mode: 'insensitive' } },
+            ],
+          },
+          orderBy: { receivedAt: 'desc' },
+          take: 500,
+        });
+        const EXCLUDE = ['изходящи', 'outgoing', 'оферти', 'оферта', 'delivery', 'доставк'];
+        const INCLUDE_FOLDERS = [
+          'входящи', 'purchases', 'imports', 'лодес', 'поларис', 'фактур', 'поръчк',
+          'january', 'february', 'march', 'april', 'may', 'june', 'july',
+          'august', 'september', 'october', 'november', 'december',
+        ];
+        const files = allFiles.filter(f => {
+          const fl = f.folder.toLowerCase();
+          if (EXCLUDE.some(kw => fl.includes(kw))) return false;
+          return INCLUDE_FOLDERS.some(kw => fl.includes(kw));
+        });
+        log(`  Found ${files.length} purchase-folder Drive files`);
+        let created = 0, skipped = 0, failed = 0;
+        for (const file of files) {
+          try {
+            const existing = await prisma.purchase.findFirst({ where: { driveFileId: file.driveFileId } });
+            if (existing) { skipped++; continue; }
+            const supplierId = guessSupplierFromPath(file.folder, file.filename);
+            let parsed;
+            try {
+              const pdfBuffer = await downloadDriveFile(file.driveFileId);
+              parsed = await parseDocumentWithAI(file.filename, file.folder, pdfBuffer);
+              await new Promise(r => setTimeout(r, 2000));
+            } catch { parsed = parseFromFilename(file.filename, file.folder); }
+            const effectiveDate = parsed.docDate ? new Date(parsed.docDate) : file.receivedAt ? new Date(file.receivedAt) : new Date();
+            await prisma.purchase.create({
+              data: {
+                invoiceNo: parsed.invoiceNo || undefined,
+                date: effectiveDate,
+                supplierId: supplierId || undefined,
+                currency: parsed.currency || 'EUR',
+                amount: parsed.amountTotal || 0,
+                description: parsed.description || file.filename,
+                status: parsed.amountTotal ? 'PAID' : 'PENDING',
+                year: effectiveDate.getFullYear(),
+                driveFileId: file.driveFileId,
+              },
+            });
+            created++;
+            if (created % 10 === 0) log(`    Parsed ${created} new purchases...`);
+          } catch (e) { failed++; }
+        }
+        log(`  ✅ Parse new: created=${created} skipped=${skipped} failed=${failed}`);
+        job.result.parsePurchases = { created, skipped, failed };
+      } catch (e) {
+        log(`  ⚠️ Parse purchases error: ${e.message}`);
+      }
+
+      // ── Step 4: Reparse zero-amount purchases ─────────────────────────────
+      log('▶ Step 4/6: Reparsing zero-amount purchases...');
+      try {
+        const zeroPurchases = await prisma.purchase.findMany({
+          where: { amount: 0, driveFileId: { not: null } },
+          take: 100,
+        });
+        log(`  Found ${zeroPurchases.length} zero-amount purchases to fix`);
+        let reparsed = 0, reFailed = 0;
+        for (const p of zeroPurchases) {
+          try {
+            const pdfBuffer = await downloadDriveFile(p.driveFileId);
+            const sf = await prisma.sourceFile.findFirst({ where: { driveFileId: p.driveFileId } });
+            const folder = sf?.folder || '';
+            const parsed = await parseDocumentWithAI(p.description || p.driveFileId, folder, pdfBuffer);
+            await new Promise(r => setTimeout(r, 2000));
+            if (parsed.amountTotal && parsed.amountTotal > 0) {
+              await prisma.purchase.update({
+                where: { id: p.id },
+                data: {
+                  amount: parsed.amountTotal,
+                  currency: parsed.currency || p.currency,
+                  invoiceNo: parsed.invoiceNo || p.invoiceNo,
+                  status: 'PAID',
+                },
+              });
+              reparsed++;
+              if (reparsed % 5 === 0) log(`    Fixed ${reparsed} zero-amount purchases...`);
+            }
+          } catch { reFailed++; }
+        }
+        log(`  ✅ Reparse: fixed=${reparsed} failed=${reFailed}`);
+        job.result.reparsed = { fixed: reparsed, failed: reFailed };
+      } catch (e) {
+        log(`  ⚠️ Reparse error: ${e.message}`);
+      }
+
+      // ── Step 5: Auto-match reconciliation for each year ───────────────────
+      log('▶ Step 5/6: Auto-match reconciliation (2023–2026)...');
+      let totalMatched = 0;
+      for (const year of YEARS) {
+        try {
+          const result = await autoMatch({ year });
+          log(`  ✅ Reconcile ${year}: matched=${result.matched} partial=${result.partial} unmatched=${result.unmatched}`);
+          totalMatched += result.matched || 0;
+          job.result[`reconcile_${year}`] = result;
+        } catch (e) {
+          log(`  ⚠️ Reconcile ${year} error: ${e.message}`);
+        }
+      }
+      log(`  Total newly matched: ${totalMatched}`);
+
+      // ── Step 6: Sync invoice statuses ─────────────────────────────────────
+      log('▶ Step 6/6: Syncing invoice statuses...');
+      try {
+        const links = await prisma.reconciliationLink.findMany({
+          where: { linkType: 'PAYMENT_TO_INVOICE', targetDocId: { not: null } },
+          include: {
+            payment: { select: { status: true } },
+            targetDoc: { select: { docNumber: true, docType: true } },
+          },
+        });
+        const matchedLinks = links.filter(l =>
+          (l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL') &&
+          l.targetDoc?.docType === 'INVOICE_OUT'
+        );
+        let synced = 0;
+        for (const link of matchedLinks) {
+          const docNumber = link.targetDoc?.docNumber;
+          if (!docNumber) continue;
+          const strippedNum = docNumber.replace(/^0+/, '') || docNumber;
+          const paddedNum = strippedNum.padStart(10, '0');
+          const invoice = await prisma.invoice.findFirst({
+            where: { number: { in: [docNumber, strippedNum, paddedNum] }, status: { not: 'PAID' } },
+            select: { id: true },
+          });
+          if (invoice) {
+            await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'PAID' } });
+            synced++;
+          }
+        }
+        log(`  ✅ Synced ${synced} invoices to PAID`);
+        job.result.syncedInvoices = synced;
+      } catch (e) {
+        log(`  ⚠️ Sync error: ${e.message}`);
+      }
+
+      job.status = 'done';
+      log('✅ Full import pipeline complete!');
+    } catch (err) {
+      job.status = 'error';
+      job.error = err.message;
+      job.log.push(`FATAL: ${err.message}`);
     }
   })();
 });

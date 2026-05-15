@@ -87,6 +87,8 @@ export default function ReconciliationPage() {
   const [xlsResult, setXlsResult] = useState<any>(null);
   const [migJobId, setMigJobId] = useState<string | null>(null);
   const [migJob, setMigJob] = useState<any>(null);
+  const [matchingPayment, setMatchingPayment] = useState<any>(null);
+  const [candidateSearch, setCandidateSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Poll migration job status
@@ -176,6 +178,24 @@ export default function ReconciliationPage() {
     onSuccess: (data) => {
       setMigJobId(data.jobId);
       setMigJob({ status: 'running', log: [] });
+    },
+  });
+
+  const { data: candidatesData, isLoading: candidatesLoading } = useQuery({
+    queryKey: ['candidates', matchingPayment?.id, candidateSearch],
+    queryFn: () => api.get(`/reconciliation/candidates/${matchingPayment.id}${candidateSearch ? `?search=${encodeURIComponent(candidateSearch)}` : ''}`).then(r => r.data),
+    enabled: Boolean(matchingPayment),
+  });
+
+  const manualMatch = useMutation({
+    mutationFn: ({ paymentId, bizDocumentId }: { paymentId: string; bizDocumentId: string }) =>
+      api.post('/reconciliation/manual-match', { paymentId, bizDocumentId }).then(r => r.data),
+    onSuccess: () => {
+      setMatchingPayment(null);
+      setCandidateSearch('');
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['recon-stats'] });
+      qc.invalidateQueries({ queryKey: ['data-health'] });
     },
   });
 
@@ -721,11 +741,11 @@ export default function ReconciliationPage() {
                         <th className="table-header">ДАТА</th>
                         <th className="table-header">КОНТРАГЕНТ</th>
                         <th className="table-header">ОСНОВАНИЕ</th>
-                        <th className="table-header text-right">ДЕБИТ</th>
-                        <th className="table-header text-right">КРЕДИТ</th>
+                        <th className="table-header text-right">СУМА</th>
                         <th className="table-header">ВАЛ.</th>
                         <th className="table-header">СТАТУС</th>
                         <th className="table-header">ДОКУМЕНТ</th>
+                        <th className="table-header"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -741,10 +761,7 @@ export default function ReconciliationPage() {
                             <td className="table-cell text-on-surface-variant/70 text-xs whitespace-nowrap">{fmtDate(p.paymentDate)}</td>
                             <td className="table-cell font-medium text-on-surface max-w-[160px] truncate">{p.counterparty?.name || '—'}</td>
                             <td className="table-cell text-on-surface-variant/70 text-xs max-w-[200px] truncate">{p.notes || '—'}</td>
-                            <td className="table-cell text-right font-mono text-xs text-error">
-                              {p.amount > 0 && !p.notes?.includes('credit') ? fmt(p.amount, p.currency) : '—'}
-                            </td>
-                            <td className="table-cell text-right font-mono text-xs text-primary">
+                            <td className="table-cell text-right font-mono text-xs text-on-surface">
                               {p.amount > 0 ? fmt(p.amount, p.currency) : '—'}
                             </td>
                             <td className="table-cell text-on-surface-variant/60 text-xs">{p.currency}</td>
@@ -757,6 +774,16 @@ export default function ReconciliationPage() {
                               {linkedDoc ? (
                                 <span className="text-primary font-mono">{linkedDoc.docNumber || linkedDoc.docType}</span>
                               ) : '—'}
+                            </td>
+                            <td className="table-cell">
+                              {p.status === 'UNMATCHED' && (
+                                <button
+                                  onClick={() => { setMatchingPayment(p); setCandidateSearch(''); }}
+                                  className="px-2 py-0.5 text-[9px] font-label-caps border border-primary/30 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
+                                >
+                                  Ръчен Match
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -784,6 +811,93 @@ export default function ReconciliationPage() {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* ── MANUAL MATCH SLIDE-OVER ────────────────────────────────────────── */}
+        {matchingPayment && (
+          <div className="fixed inset-0 z-50 flex">
+            <div className="flex-1 bg-black/50" onClick={() => setMatchingPayment(null)} />
+            <div className="w-[480px] bg-surface-container-lowest border-l border-outline-variant/10 flex flex-col h-full overflow-hidden">
+              {/* header */}
+              <div className="px-5 py-4 border-b border-outline-variant/10 flex items-center justify-between">
+                <div>
+                  <p className="font-label-caps text-label-caps text-primary text-[9px]">РЪЧНО СВЪРЗВАНЕ</p>
+                  <h3 className="font-headline text-sm text-on-surface mt-0.5">
+                    {fmt(matchingPayment.amount, matchingPayment.currency)} · {fmtDate(matchingPayment.paymentDate)}
+                  </h3>
+                  <p className="text-xs text-on-surface-variant/60 truncate max-w-[360px]">
+                    {matchingPayment.counterparty?.name || '—'} · {matchingPayment.notes || '—'}
+                  </p>
+                </div>
+                <button onClick={() => setMatchingPayment(null)} className="text-on-surface-variant/40 hover:text-on-surface">
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+
+              {/* search */}
+              <div className="px-5 py-3 border-b border-outline-variant/10">
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-on-surface-variant/50">search</span>
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-8 pr-4 py-2 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/40"
+                    placeholder="Търси по номер или доставчик..."
+                    value={candidateSearch}
+                    onChange={e => setCandidateSearch(e.target.value)}
+                  />
+                </div>
+                <p className="text-[10px] text-on-surface-variant/40 mt-1.5">
+                  {candidateSearch ? 'Търсене в базата' : `Предложения: ±15% от ${fmt(matchingPayment.amount, matchingPayment.currency)}, ±90 дни`}
+                </p>
+              </div>
+
+              {/* candidates list */}
+              <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+                {candidatesLoading && (
+                  <div className="space-y-2">
+                    {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-surface-container-low border border-outline-variant/10 animate-pulse rounded-lg" />)}
+                  </div>
+                )}
+                {!candidatesLoading && (candidatesData?.candidates ?? []).length === 0 && (
+                  <div className="py-12 text-center">
+                    <span className="material-symbols-outlined text-4xl text-on-surface-variant/20 block mb-2">search_off</span>
+                    <p className="text-sm text-on-surface-variant/50">Няма подходящи документи</p>
+                    <p className="text-xs text-on-surface-variant/30 mt-1">Опитай с текстово търсене</p>
+                  </div>
+                )}
+                {(candidatesData?.candidates ?? []).map((doc: any) => {
+                  const score = doc._score ?? 0;
+                  const scoreColor = score > 0.8 ? 'text-primary' : score > 0.6 ? 'text-warning' : 'text-on-surface-variant';
+                  return (
+                    <div key={doc.id} className="border border-outline-variant/15 bg-surface-container-low rounded-lg p-3 hover:border-primary/30 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="font-label-caps text-[9px] text-on-surface-variant/60">{doc.docType}</span>
+                            {doc.docNumber && <span className="font-mono text-xs text-primary">#{doc.docNumber}</span>}
+                            <span className={`font-label-caps text-[9px] ml-auto ${scoreColor}`}>
+                              {Math.round(score * 100)}% match
+                            </span>
+                          </div>
+                          <p className="text-sm font-medium text-on-surface truncate">{doc.counterparty?.name || 'Непознат'}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="font-mono text-xs font-semibold text-on-surface">{fmt(doc.amountTotal, doc.currency)}</span>
+                            {doc.docDate && <span className="text-xs text-on-surface-variant/50">{fmtDate(doc.docDate)}</span>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => manualMatch.mutate({ paymentId: matchingPayment.id, bizDocumentId: doc.id })}
+                          disabled={manualMatch.isPending}
+                          className="px-3 py-1.5 bg-primary text-on-primary text-xs font-label-caps font-semibold hover:bg-primary/90 disabled:opacity-50 rounded flex-shrink-0"
+                        >
+                          Свържи
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 
