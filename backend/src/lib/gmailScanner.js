@@ -8,6 +8,7 @@
 const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const pdfParse = require('pdf-parse');
+const { buildBankPaymentKey } = require('./bankStatementParser');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -154,14 +155,40 @@ async function importBankStatementTransactions(prisma, extracted, gmailMessageId
     const isOutgoing = tx.debit > 0;
     const ref = tx.reference || tx.description?.substring(0, 100) || '';
 
-    const exists = await prisma.payment.findFirst({
+    const existing = await prisma.payment.findMany({
       where: {
         paymentDate: txDate,
         amount: { gte: amount - 0.01, lte: amount + 0.01 },
         currency: currency || 'BGN',
-        reference: ref || undefined,
+        bankAccount: iban || null,
       },
-      select: { id: true },
+      select: { id: true, paymentDate: true, reference: true, amount: true, currency: true, bankAccount: true, notes: true },
+    });
+    const txKey = buildBankPaymentKey({
+      date: txDate,
+      reference: ref,
+      amount,
+      currency: currency || 'BGN',
+      isOutgoing,
+    }, iban || null);
+    const exists = existing.some(p => {
+      const hasDirection = /\[(IN|OUT)\]/.test(p.notes || '');
+      if (hasDirection) {
+        return buildBankPaymentKey({
+          date: p.paymentDate,
+          reference: p.reference,
+          amount: p.amount,
+          currency: p.currency,
+          isOutgoing: /\[OUT\]/.test(p.notes || ''),
+        }, p.bankAccount) === txKey;
+      }
+      return [false, true].some(direction => buildBankPaymentKey({
+        date: p.paymentDate,
+        reference: p.reference,
+        amount: p.amount,
+        currency: p.currency,
+        isOutgoing: direction,
+      }, p.bankAccount) === txKey);
     });
 
     if (exists) { skipped++; continue; }
@@ -199,7 +226,7 @@ async function importBankStatementTransactions(prisma, extracted, gmailMessageId
         bankAccount: iban || null,
         status: 'UNMATCHED',
         counterpartyId,
-        notes: `Gmail import: ${gmailMessageId}${bankName ? ` | ${bankName}` : ''}`,
+        notes: `${isOutgoing ? '[OUT]' : '[IN]'} | Gmail import: ${gmailMessageId}${bankName ? ` | ${bankName}` : ''}`,
       },
     });
     imported++;

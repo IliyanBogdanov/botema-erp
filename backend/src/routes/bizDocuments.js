@@ -61,17 +61,20 @@ router.get('/graph', auth, async (req, res) => {
       take: 500,
     });
 
-    // Build chains: group by source doc
+    // Build chains. Payment links often only have a target document; use it as
+    // the root so the graph is not collapsed into a single null bucket.
     const chains = new Map();
     for (const link of links) {
-      const key = link.sourceDocId;
+      const root = link.sourceDoc || link.targetDoc;
+      if (!root) continue;
+      const key = root.id;
       if (!chains.has(key)) {
-        chains.set(key, { root: link.sourceDoc, links: [] });
+        chains.set(key, { root, links: [] });
       }
       chains.get(key).links.push({
         linkType: link.linkType,
         confidence: link.confidence,
-        target: link.targetDoc,
+        target: link.sourceDoc && link.targetDoc ? link.targetDoc : null,
         payment: link.payment,
       });
     }

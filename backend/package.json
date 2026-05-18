@@ -9,7 +9,17 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "node src/lib/seed.js",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "audit:financial": "node scripts/financialDataAudit.js",
+    "import:bank": "node scripts/importBankStatements.js",
+    "import:invoices": "node scripts/importXlsInvoices.js",
+    "quarantine:future-invoices": "node scripts/quarantineFutureOutgoingInvoices.js --apply",
+    "normalize:payments": "node scripts/normalizePaymentCounterparties.js --apply",
+    "flag:incomplete-invoices": "node scripts/flagIncompleteInvoiceBizDocs.js --apply",
+    "import:invoicepro-export": "node scripts/importInvoiceProExport.js --apply",
+    "import:microinvest-xml": "node scripts/importMicroinvestDeltaProXml.js --apply",
+    "clean:bizdocs": "node scripts/cleanBizDocumentDuplicates.js --apply",
+    "promote:documents": "node scripts/promoteDocumentsToBizDocs.js --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",

@@ -103,7 +103,7 @@ async function main() {
 
     // Determine brand from обект (object/brand column, index 6)
     const brand = String(row[6] || '').toUpperCase().includes('LUMINA')
-      ? 'LUMINA_VERA'
+      ? 'LUMINAVERA'
       : 'STUDIO_BOTEMA';
 
     try {

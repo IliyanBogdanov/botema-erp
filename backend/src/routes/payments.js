@@ -5,7 +5,7 @@ const path = require('path');
 const multer = require('multer');
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
-const { parseBankStatementBuffer } = require('../lib/bankStatementParser');
+const { parseBankStatementBuffer, buildBankPaymentKey } = require('../lib/bankStatementParser');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -37,6 +37,57 @@ async function upsertCounterparty(row) {
     },
   });
   return created.id;
+}
+
+async function buildExistingPaymentKeys() {
+  const existingPayments = await prisma.payment.findMany({
+    select: { paymentDate: true, reference: true, amount: true, currency: true, bankAccount: true, notes: true },
+  });
+  const keys = new Set();
+  for (const p of existingPayments) {
+    const hasDirection = /\[(IN|OUT)\]/.test(p.notes || '');
+    const base = { date: p.paymentDate, reference: p.reference, amount: p.amount, currency: p.currency };
+    if (hasDirection) {
+      keys.add(buildBankPaymentKey({ ...base, isOutgoing: /\[OUT\]/.test(p.notes || '') }, p.bankAccount));
+    } else {
+      keys.add(buildBankPaymentKey({ ...base, isOutgoing: false }, p.bankAccount));
+      keys.add(buildBankPaymentKey({ ...base, isOutgoing: true }, p.bankAccount));
+    }
+  }
+  return keys;
+}
+
+function filterNewBankRows(rows, meta, existingKeys) {
+  const seen = new Set();
+  const newRows = [];
+  for (const row of rows) {
+    if (!row.reference) continue;
+    const key = buildBankPaymentKey(row, meta.iban);
+    if (existingKeys.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    newRows.push(row);
+  }
+  return newRows;
+}
+
+function buildPaymentData(row, meta, cpMap) {
+  const key = row.counterpartyIban || normName(row.counterpartyName) || '';
+  return {
+    paymentDate: row.date,
+    amount: row.amount,
+    currency: row.currency,
+    reference: row.reference,
+    notes: [
+      row.isOutgoing ? '[OUT]' : '[IN]',
+      row.description || null,
+      row.isFee ? '[ТАКСА]' : null,
+      row.counterpartyIban ? `IBAN: ${row.counterpartyIban}` : null,
+    ].filter(Boolean).join(' | ') || null,
+    paymentType: row.paymentType,
+    status: 'UNMATCHED',
+    bankAccount: meta.iban,
+    counterpartyId: cpMap.get(key) || null,
+  };
 }
 
 // ─── GET /api/payments ────────────────────────────────────────────────────────
@@ -128,11 +179,8 @@ router.post('/import-csv', auth, upload.single('file'), async (req, res) => {
 
     const { meta, rows } = parseBankStatementBuffer(req.file.buffer);
 
-    // Fetch existing references to skip duplicates
-    const existingRefs = await prisma.payment.findMany({ select: { reference: true } });
-    const refSet = new Set(existingRefs.map(p => p.reference));
-
-    const newRows = rows.filter(r => !refSet.has(r.reference));
+    const existingKeys = await buildExistingPaymentKeys();
+    const newRows = filterNewBankRows(rows, meta, existingKeys);
     if (newRows.length === 0) {
       return res.json({ created: 0, skipped: rows.length, errors: 0, currency: meta.currency });
     }
@@ -147,20 +195,7 @@ router.post('/import-csv', auth, upload.single('file'), async (req, res) => {
     }
 
     // Build payment data
-    const paymentData = newRows.map(row => {
-      const key = row.counterpartyIban || normName(row.counterpartyName) || '';
-      return {
-        paymentDate: row.date,
-        amount: row.amount,
-        currency: row.currency,
-        reference: row.reference,
-        notes: row.description || null,
-        paymentType: row.paymentType,
-        status: 'UNMATCHED',
-        bankAccount: meta.iban,
-        counterpartyId: cpMap.get(key) || null,
-      };
-    });
+    const paymentData = newRows.map(row => buildPaymentData(row, meta, cpMap));
 
     // Insert in chunks
     const CHUNK = 50;
@@ -181,36 +216,41 @@ router.post('/import-csv', auth, upload.single('file'), async (req, res) => {
 });
 
 // ─── POST /api/payments/import-local ─────────────────────────────────────────
-// Reads all CSV files from the 'bank statements/' folder in the project root
+// Reads all CSV files from the bank statement export folders in the project root
 // and imports them without needing a file upload.
 router.post('/import-local', auth, async (req, res) => {
-  const BANK_DIR = path.resolve(__dirname, '../../../bank statements');
+  const BANK_DIRS = [
+    path.resolve(__dirname, '../../../bank statements and docs'),
+    path.resolve(__dirname, '../../../bank statements'),
+  ];
   try {
-    if (!fs.existsSync(BANK_DIR)) {
-      return res.status(404).json({ error: `Bank statements folder not found at: ${BANK_DIR}` });
+    const dirs = BANK_DIRS.filter(dir => fs.existsSync(dir));
+    if (!dirs.length) {
+      return res.status(404).json({ error: `Bank statements folder not found at: ${BANK_DIRS.join(', ')}` });
     }
 
-    const csvFiles = fs.readdirSync(BANK_DIR).filter(f => f.toLowerCase().endsWith('.csv'));
+    const csvFiles = dirs.flatMap(dir => fs.readdirSync(dir)
+      .filter(f => f.toLowerCase().endsWith('.csv'))
+      .sort()
+      .map(filename => ({ dir, filename })));
     if (csvFiles.length === 0) {
       return res.status(404).json({ error: 'No CSV files found in bank statements folder' });
     }
 
-    // Fetch all existing references once (to skip duplicates across all files)
-    const existingRefs = await prisma.payment.findMany({ select: { reference: true } });
-    const refSet = new Set(existingRefs.map(p => p.reference));
+    const existingKeys = await buildExistingPaymentKeys();
 
     const results = [];
 
-    for (const filename of csvFiles) {
-      const filePath = path.join(BANK_DIR, filename);
+    for (const file of csvFiles) {
+      const filePath = path.join(file.dir, file.filename);
       try {
         const buffer = fs.readFileSync(filePath);
         const { meta, rows } = parseBankStatementBuffer(buffer);
 
-        const newRows = rows.filter(r => r.reference && !refSet.has(r.reference));
+        const newRows = filterNewBankRows(rows, meta, existingKeys);
 
         if (newRows.length === 0) {
-          results.push({ file: filename, created: 0, skipped: rows.length, currency: meta.currency, iban: meta.iban });
+          results.push({ file: file.filename, created: 0, skipped: rows.length, currency: meta.currency, iban: meta.iban });
           continue;
         }
 
@@ -224,19 +264,8 @@ router.post('/import-local', auth, async (req, res) => {
         }
 
         const paymentData = newRows.map(row => {
-          const key = row.counterpartyIban || normName(row.counterpartyName) || '';
-          refSet.add(row.reference); // prevent cross-file duplicates
-          return {
-            paymentDate: row.date,
-            amount: row.amount,
-            currency: row.currency,
-            reference: row.reference,
-            notes: row.description || null,
-            paymentType: row.paymentType,
-            status: 'UNMATCHED',
-            bankAccount: meta.iban,
-            counterpartyId: cpMap.get(key) || null,
-          };
+          existingKeys.add(buildBankPaymentKey(row, meta.iban));
+          return buildPaymentData(row, meta, cpMap);
         });
 
         const CHUNK = 50;
@@ -249,9 +278,9 @@ router.post('/import-local', auth, async (req, res) => {
           created += result.count;
         }
 
-        results.push({ file: filename, created, skipped: rows.length - created, currency: meta.currency, iban: meta.iban });
+        results.push({ file: file.filename, created, skipped: rows.length - created, currency: meta.currency, iban: meta.iban });
       } catch (fileErr) {
-        results.push({ file: filename, error: fileErr.message });
+        results.push({ file: file.filename, error: fileErr.message });
       }
     }
 

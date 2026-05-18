@@ -34,11 +34,11 @@ function exportDashboardCsv(data: any, year: number) {
     ...(data?.topSuppliers || []).map((s: any) => [s.name, String(s.amount)]),
     [],
     ['Топ клиенти', 'EUR нето'],
-    ...(data?.topClients || []).map((c: any) => [c.name, String((c.revenue / 1.95583).toFixed(2))]),
+    ...(data?.topClients || []).map((c: any) => [c.name, String(Number(c.revenue || 0).toFixed(2))]),
     [],
     ['Приходи по месец', 'EUR', 'Бранд'],
     ...(data?.revenueByMonth || []).map((m: any) => [
-      `Месец ${m.month}`, String((Number(m.revenue || 0) / 1.95583).toFixed(2)), m.brand || '',
+      `Месец ${m.month}`, String(Number(m.revenue || 0).toFixed(2)), m.brand || '',
     ]),
   ];
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -503,7 +503,7 @@ export default function DashboardPage() {
                     <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5">{inv.number}</p>
                   </div>
                   <span className="font-data-mono text-data-mono text-on-surface">
-                    {(parseFloat(inv.total || 0) / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
+                    {(inv.currency === 'BGN' ? parseFloat(inv.total || 0) / 1.95583 : parseFloat(inv.total || 0)).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
                   </span>
                 </div>
               ))}

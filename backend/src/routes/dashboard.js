@@ -37,7 +37,7 @@ router.get('/', auth, async (req, res) => {
       projectStats,
       invoiceCount,
       paymentStats,
-      overdueResult,
+      pendingTotals,
     ] = await Promise.all([
       // Fetch individually so we can do proper currency conversion
       prisma.invoice.findMany({
@@ -100,10 +100,9 @@ router.get('/', auth, async (req, res) => {
         where: { date: { gte: startDate, lte: endDate }, status: { not: 'CANCELLED' } },
       }),
       prisma.payment.groupBy({ by: ['status'], _count: true }),
-      // Auto-mark overdue invoices as side-effect
-      prisma.invoice.updateMany({
-        where: { status: 'PENDING', dueDate: { lt: new Date() } },
-        data: { status: 'OVERDUE' },
+      prisma.invoice.findMany({
+        where: { status: 'PENDING' },
+        select: { amountTotal: true, currency: true },
       }),
     ]);
 
@@ -176,8 +175,8 @@ router.get('/', auth, async (req, res) => {
         invoiceCount,
         grossMargin: revenueNum > 0 ? ((revenueNum - costsNum) / revenueNum * 100).toFixed(1) : 0,
         inventoryCount: available,
-        pendingCount: pendingInvoices.length,
-        pendingAmount: pendingInvoices.reduce((sum, invoice) => sum + toBgn(invoice.amountTotal, invoice.currency), 0),
+        pendingCount: pendingTotals.length,
+        pendingAmount: pendingTotals.reduce((sum, invoice) => sum + toBgn(invoice.amountTotal, invoice.currency), 0),
       },
       revenueByMonth,
       topClients: topClients.map(c => ({

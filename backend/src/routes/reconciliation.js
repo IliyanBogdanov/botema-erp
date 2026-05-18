@@ -78,7 +78,8 @@ router.post('/auto-match', auth, async (req, res) => {
 // For every MATCHED payment → BizDocument link, mark the corresponding Invoice as PAID.
 router.post('/sync-invoice-status', auth, async (req, res) => {
   try {
-    // Find all payment→bizdoc links for MATCHED or PARTIAL payments
+    // Find all payment→bizdoc links for matched payments. PARTIAL is not enough
+    // to mark an outgoing invoice as PAID.
     const links = await prisma.reconciliationLink.findMany({
       where: { linkType: 'PAYMENT_TO_INVOICE', targetDocId: { not: null } },
       include: {
@@ -90,14 +91,12 @@ router.post('/sync-invoice-status', auth, async (req, res) => {
     // Only INVOICE_OUT BizDocs map to the Invoice table (outgoing invoices TO clients)
     // INVOICE_IN are supplier/purchase invoices — they live in Purchase table, not Invoice
     const matchedLinks = links.filter(l =>
-      (l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL') &&
+      l.payment?.status === 'MATCHED' &&
       l.targetDoc?.docType === 'INVOICE_OUT'
     );
 
     // Also mark ALL matched BizDocs (any type) as PAID directly
-    const allMatchedLinks = links.filter(l =>
-      l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL'
-    );
+    const allMatchedLinks = links.filter(l => l.payment?.status === 'MATCHED');
     let bizDocsPaid = 0;
     for (const link of allMatchedLinks) {
       if (!link.targetDoc?.id) continue;
@@ -175,7 +174,7 @@ router.get('/candidates/:paymentId', auth, async (req, res) => {
     dateTo.setDate(dateTo.getDate() + 90);
 
     const where = {
-      status: { notIn: ['MATCHED', 'ARCHIVED'] },
+      status: { notIn: ['MATCHED', 'ARCHIVED', 'REJECTED'] },
       currency: payment.currency,
       amountTotal: { gte: amount - margin, lte: amount + margin },
     };

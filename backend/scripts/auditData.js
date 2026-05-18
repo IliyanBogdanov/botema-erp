@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { PrismaClient } = require('@prisma/client');
 const p = new PrismaClient();
 
@@ -30,13 +30,13 @@ async function main() {
   const [payNoCp, bizNoNum, purchNoSup, cpTotal] = await Promise.all([
     p.payment.count({ where: { counterpartyId: null, amount: { gt: 100 } } }),
     p.bizDocument.count({ where: { docNumber: null, docType: { in: ['INVOICE_IN','INVOICE_OUT'] } } }),
-    p.purchase.count({ where: { supplierId: null } }),
+    p.$queryRawUnsafe(`SELECT COUNT(*)::int AS cnt FROM purchases WHERE "supplierId" IS NULL OR "supplierId" = ''`),
     p.counterparty.count(),
   ]);
   console.log('\n=== DATA QUALITY ===');
   console.log('Payments >100 without counterparty:', payNoCp);
   console.log('INVOICE BizDocs without docNumber:', bizNoNum);
-  console.log('Purchases without supplier:', purchNoSup);
+  console.log('Purchases without supplier:', purchNoSup[0]?.cnt || 0);
   console.log('Counterparties total:', cpTotal);
 
   // Orders check

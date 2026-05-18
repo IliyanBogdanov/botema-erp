@@ -10,8 +10,6 @@ const LINK_TYPE_LABELS: Record<string, { bg: string; en: string; icon: string; c
   INVOICE_TO_DELIVERY:  { bg: 'Фактура → Доставка', en: 'Invoice → Delivery', icon: 'local_shipping', color: 'text-on-surface' },
   DELIVERY_TO_ORDER:    { bg: 'Доставка → Поръчка', en: 'Delivery → Order', icon: 'inventory_2', color: 'text-on-surface-variant' },
   ORDER_TO_PROJECT:     { bg: 'Поръчка → Проект', en: 'Order → Project', icon: 'folder_open', color: 'text-warning' },
-  DOCUMENT_TO_PURCHASE: { bg: 'Документ → Покупка', en: 'Document → Purchase', icon: 'receipt', color: 'text-primary' },
-  DOCUMENT_TO_INVOICE:  { bg: 'Документ → Фактура', en: 'Document → Invoice', icon: 'receipt_long', color: 'text-primary' },
   DOCUMENT_TO_SOURCE:   { bg: 'Документ → Източник', en: 'Document → Source', icon: 'link', color: 'text-secondary' },
   EMAIL_TO_DOCUMENT:    { bg: 'Имейл → Документ', en: 'Email → Document', icon: 'mail', color: 'text-on-surface-variant' },
   PARTIAL_MATCH:        { bg: 'Частично съвпадение', en: 'Partial Match', icon: 'match_case', color: 'text-warning' },
@@ -912,7 +910,9 @@ export default function ReconciliationPage() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {(coverage as any[]).map((c: any) => {
-                  const pct = c.totalItems > 0 ? Math.round((c.processedItems / c.totalItems) * 100) : 0;
+                  const totalItems = Number(c.itemsFound ?? c.totalItems ?? 0);
+                  const processedItems = Number(c.itemsDone ?? c.processedItems ?? 0);
+                  const pct = totalItems > 0 ? Math.round((processedItems / totalItems) * 100) : 0;
                   const color = pct >= 80 ? 'bg-primary-container' : pct >= 50 ? 'bg-warning' : 'bg-error';
                   return (
                     <div key={c.id} className="border border-outline-variant/10 bg-surface-container-low p-5">
@@ -929,8 +929,8 @@ export default function ReconciliationPage() {
                         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex justify-between mt-2">
-                        <span className="font-label-caps text-[9px] text-on-surface-variant/60">{c.processedItems} обработени</span>
-                        <span className="font-label-caps text-[9px] text-on-surface-variant/60">{c.totalItems} общо</span>
+                        <span className="font-label-caps text-[9px] text-on-surface-variant/60">{processedItems} обработени</span>
+                        <span className="font-label-caps text-[9px] text-on-surface-variant/60">{totalItems} общо</span>
                       </div>
                       {c.notes && <p className="font-body-sm text-body-sm text-on-surface-variant/50 mt-2 text-[11px]">{c.notes}</p>}
                     </div>

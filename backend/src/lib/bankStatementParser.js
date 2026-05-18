@@ -30,12 +30,29 @@ function parseBGDate(str) {
   return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00.000Z`);
 }
 
+function formatDateKey(date) {
+  return date ? date.toISOString().slice(0, 10) : '';
+}
+
+function buildBankPaymentKey(row, bankAccountIban) {
+  return [
+    formatDateKey(row.date),
+    row.reference || '',
+    Number(row.amount || 0).toFixed(2),
+    row.currency || '',
+    bankAccountIban || row.bankAccountIban || '',
+    row.isOutgoing ? 'OUT' : 'IN',
+  ].join('|');
+}
+
 /**
  * Detect if a reference is a fee/commission row.
  * Fee rows have a timestamp appended: "TEXNSCT7-0000107441.10 09:46:57"
  */
-function isFeeRow(reference) {
-  return /\d{2}:\d{2}:\d{2}$/.test(reference.trim());
+function isFeeRow(reference, description = '') {
+  const ref = (reference || '').trim();
+  const text = `${description || ''} ${ref}`.toLowerCase();
+  return /\d{2}:\d{2}:\d{2}$/.test(ref) && /такса|fee|commission|комисион/.test(text);
 }
 
 /**
@@ -121,7 +138,7 @@ function parseBankStatementBuffer(buffer) {
 
     // Determine payment type
     let paymentType = 'BANK_TRANSFER';
-    if (isFeeRow(reference)) {
+    if (isFeeRow(reference, description)) {
       paymentType = 'OTHER'; // fee/commission
     } else if (isCardTransaction(reference)) {
       paymentType = 'CARD';
@@ -155,4 +172,4 @@ function parseBankStatementBuffer(buffer) {
   return { meta: { iban, currency }, rows };
 }
 
-module.exports = { parseBankStatementBuffer, parseBGNumber, parseBGDate };
+module.exports = { parseBankStatementBuffer, parseBGNumber, parseBGDate, buildBankPaymentKey, isFeeRow };

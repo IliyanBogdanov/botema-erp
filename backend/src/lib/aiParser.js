@@ -372,6 +372,15 @@ Return ONLY valid JSON (no markdown):
   return JSON.parse(jsonMatch[0]);
 }
 
+function inferMimeType(filename, fallback = 'application/pdf') {
+  const lower = (filename || '').toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return fallback;
+}
+
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
 
@@ -416,12 +425,13 @@ Return ONLY valid JSON (no markdown, no explanation):
 }`;
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const mimeType = inferMimeType(filename);
 
   const tryGemini = async (retries = 2) => {
     try {
       const result = await model.generateContent([
         { text: prompt },
-        { inlineData: { mimeType: 'application/pdf', data: pdfBuffer.toString('base64') } },
+        { inlineData: { mimeType, data: pdfBuffer.toString('base64') } },
       ]);
       const text = result.response.text().trim();
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -442,9 +452,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     return await tryGemini();
   } catch (err) {
     const fallbackParsers = [
-      parseDocumentWithGroq,
-      parseDocumentWithOpenRouter,
-      parseDocumentWithOpenAI,
+      ...(mimeType === 'application/pdf' ? [parseDocumentWithGroq, parseDocumentWithOpenRouter, parseDocumentWithOpenAI] : []),
     ];
 
     for (const parser of fallbackParsers) {
@@ -467,6 +475,7 @@ module.exports = {
   parseDocumentWithOpenRouter,
   parseDocumentWithOpenAI,
   parseFromFilename,
+  inferMimeType,
   guessSupplierFromPath,
   guessFolderType,
   isOutgoingFolder,

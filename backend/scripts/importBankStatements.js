@@ -3,17 +3,24 @@
  *
  * Usage: node scripts/importBankStatements.js [--year=2026] [--dry-run]
  *
- * Idempotent: re-running will skip already-imported rows (upsert by reference).
+ * Idempotent: re-running skips already-imported rows by a stable bank key.
  * Uses batch DB operations for speed.
  */
 
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const prisma = require('../src/lib/prisma');
-const { parseBankStatementBuffer } = require('../src/lib/bankStatementParser');
+const { parseBankStatementBuffer, buildBankPaymentKey } = require('../src/lib/bankStatementParser');
 
-const BANK_STATEMENTS_DIR = path.resolve(__dirname, '../../bank statements');
+const BANK_STATEMENTS_DIRS = [
+  path.resolve(__dirname, '../../bank statements and docs'),
+  path.resolve(__dirname, '../../bank statements'),
+];
+
+function existingBankDirs() {
+  return BANK_STATEMENTS_DIRS.filter(dir => fs.existsSync(dir));
+}
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
@@ -51,19 +58,46 @@ async function importFile(filePath) {
   const { meta, rows } = parseBankStatementBuffer(buffer);
   console.log(`   Account: ${meta.iban} | Currency: ${meta.currency} | Rows: ${rows.length}`);
 
-  if (DRY_RUN) {
-    console.log(`   ✅ (dry-run) Would create: ${rows.length}`);
-    return { created: rows.length, skipped: 0, errors: 0 };
+  // 1. Get all existing payments to skip duplicates. Bank references can repeat
+  // within a statement, so include date/amount/currency/account/direction.
+  const existingPayments = await prisma.payment.findMany({
+    select: { paymentDate: true, reference: true, amount: true, currency: true, bankAccount: true, notes: true },
+  });
+  const existingKeys = new Set();
+  for (const p of existingPayments) {
+    const hasDirection = /\[(IN|OUT)\]/.test(p.notes || '');
+    const base = {
+      date: p.paymentDate,
+      reference: p.reference,
+      amount: p.amount,
+      currency: p.currency,
+    };
+    if (hasDirection) {
+      existingKeys.add(buildBankPaymentKey({ ...base, isOutgoing: /\[OUT\]/.test(p.notes || '') }, p.bankAccount));
+    } else {
+      existingKeys.add(buildBankPaymentKey({ ...base, isOutgoing: false }, p.bankAccount));
+      existingKeys.add(buildBankPaymentKey({ ...base, isOutgoing: true }, p.bankAccount));
+    }
   }
 
-  // 1. Get all existing payment references to skip duplicates
-  const existingRefs = new Set(
-    (await prisma.payment.findMany({ select: { reference: true } })).map(p => p.reference)
-  );
-
-  const newRows = rows.filter(r => !existingRefs.has(r.reference));
+  const seenInRun = new Set();
+  const newRows = [];
+  let duplicateInFile = 0;
+  for (const row of rows) {
+    const key = buildBankPaymentKey(row, meta.iban);
+    if (existingKeys.has(key) || seenInRun.has(key)) {
+      if (seenInRun.has(key)) duplicateInFile++;
+      continue;
+    }
+    seenInRun.add(key);
+    newRows.push(row);
+  }
   const skipped = rows.length - newRows.length;
-  console.log(`   New: ${newRows.length} | Already in DB: ${skipped}`);
+  console.log(`   New: ${newRows.length} | Already/duplicate: ${skipped}${duplicateInFile ? ` | In-file dupes: ${duplicateInFile}` : ''}`);
+
+  if (DRY_RUN) {
+    return { created: newRows.length, skipped, errors: 0 };
+  }
 
   if (newRows.length === 0) {
     console.log(`   ⏭  Nothing to import.`);
@@ -135,6 +169,7 @@ async function importFile(filePath) {
         bankAccount: meta.iban,
         status: 'UNMATCHED',
         notes: [
+          row.isOutgoing ? '[OUT]' : '[IN]',
           row.description,
           row.isFee ? '[ТАКСА]' : null,
           row.counterpartyIban ? `IBAN: ${row.counterpartyIban}` : null,
@@ -158,13 +193,22 @@ async function importFile(filePath) {
 
 async function main() {
   console.log(`🏦 Bank Statement Import${DRY_RUN ? ' (DRY RUN)' : ''}`);
-  console.log(`   Folder: ${BANK_STATEMENTS_DIR}`);
+  const dirs = existingBankDirs();
+  console.log(`   Folder: ${dirs.join(', ') || '(none)'}`);
 
-  const years = TARGET_YEAR ? [TARGET_YEAR] : [2024, 2025, 2026];
+  const files = TARGET_YEAR
+    ? dirs.flatMap(dir => {
+        const filename = `${TARGET_YEAR}.csv`;
+        return fs.existsSync(path.join(dir, filename)) ? [{ dir, filename }] : [];
+      })
+    : dirs.flatMap(dir => fs.readdirSync(dir)
+        .filter(f => f.toLowerCase().endsWith('.csv'))
+        .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+        .map(filename => ({ dir, filename })));
   let totalCreated = 0, totalSkipped = 0, totalErrors = 0;
 
-  for (const year of years) {
-    const filePath = path.join(BANK_STATEMENTS_DIR, `${year}.csv`);
+  for (const file of files) {
+    const filePath = path.join(file.dir, file.filename);
     if (!fs.existsSync(filePath)) {
       console.log(`\n⚠️  File not found: ${filePath}`);
       continue;

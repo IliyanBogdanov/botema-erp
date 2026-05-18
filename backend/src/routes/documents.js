@@ -44,6 +44,7 @@ router.get('/reparse-job/:jobId', auth, (req, res) => {
 router.post('/reparse-all', auth, async (req, res) => {
   const jobId = `reparse-${Date.now()}`;
   reparseJobs[jobId] = { jobId, status: 'running', done: 0, total: 0, errors: 0, log: [], started: new Date() };
+  const full = req.body?.full === true || req.query.full === 'true';
 
   res.json({ accepted: true, jobId, message: `Re-parse job started. Poll GET /api/documents/reparse-job/${jobId}` });
 
@@ -51,13 +52,15 @@ router.post('/reparse-all', auth, async (req, res) => {
     const job = reparseJobs[jobId];
     try {
       const allDocs = await prisma.document.findMany({
-        where: { status: 'PENDING', confidence: { lte: 20 } },
+        where: full
+          ? { status: { in: ['PENDING', 'LINKED', 'PROCESSED'] } }
+          : { status: 'PENDING', confidence: { lte: 20 } },
         orderBy: { createdAt: 'desc' },
       });
-      const docs = allDocs.filter(d => d.driveFileId);
+      const docs = allDocs.filter(d => d.driveFileId && !String(d.driveFileId).startsWith('gmail:'));
 
       job.total = docs.length;
-      job.log.push(`Found ${docs.length} documents to re-parse`);
+      job.log.push(`Found ${docs.length} documents to re-parse${full ? ' (full mode)' : ''}`);
 
       for (const doc of docs) {
         try {

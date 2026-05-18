@@ -5,6 +5,9 @@ node_modules/
 dist/
 build/
 *.log
+.codex-logs/
 .DS_Store
 .vercel
 prisma/migrations/
+bank statements and docs/
+bank statements/

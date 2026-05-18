@@ -7,7 +7,7 @@ const toNumber = value => {
 const normalizeText = value => String(value || '').trim();
 
 const getSuggestedAction = data => {
-  const type = data?.type;
+  const type = data?.type || data?.docType;
   if (type === 'INVOICE_OUT') return 'CREATE_INVOICE';
   if (type === 'INVOICE_IN' || type === 'DELIVERY') return 'CREATE_PURCHASE';
   if (type === 'PROFORMA') return 'ARCHIVE_ONLY';
@@ -16,9 +16,13 @@ const getSuggestedAction = data => {
 
 const getConfidence = data => {
   if (typeof data?.confidence === 'number') return data.confidence;
-  const required = ['invoiceNo', 'date', 'amount', 'currency'];
-  const present = required.filter(k => data?.[k] != null && data?.[k] !== '').length;
-  return Math.round((present / required.length) * 100) / 100;
+  const present = [
+    data?.invoiceNo,
+    data?.date || data?.docDate,
+    data?.amount ?? data?.amountTotal ?? data?.amountNet,
+    data?.currency,
+  ].filter(v => v != null && v !== '').length;
+  return Math.round((present / 4) * 100) / 100;
 };
 
 const calculateTotals = data => {
@@ -31,9 +35,10 @@ const calculateTotals = data => {
 async function analyzeDocument(prisma, extractedData = {}) {
   const data = extractedData || {};
   const flags = [];
+  const type = data.type || data.docType;
   const invoiceNo = normalizeText(data.invoiceNo);
   const currency = normalizeText(data.currency);
-  const date = normalizeText(data.date);
+  const date = normalizeText(data.date || data.docDate);
   const supplierName = normalizeText(data.supplierName);
   const clientName = normalizeText(data.clientName);
   const { amountNet, vatAmount, amountTotal } = calculateTotals(data);
@@ -43,12 +48,12 @@ async function analyzeDocument(prisma, extractedData = {}) {
   if (!date || Number.isNaN(new Date(date).getTime())) flags.push('MISSING_DATE');
   if (!currency) flags.push('MISSING_CURRENCY');
   if (!amountTotal && !amountNet) flags.push('MISSING_AMOUNT');
-  if (!vatAmount && data.type !== 'PROFORMA') flags.push('MISSING_VAT');
+  if (!vatAmount && type !== 'PROFORMA') flags.push('MISSING_VAT');
   if (amountNet && vatAmount && amountTotal && Math.abs((amountNet + vatAmount) - amountTotal) > 0.05) {
     flags.push('TOTAL_MISMATCH');
   }
 
-  if (data.type === 'INVOICE_IN' || data.type === 'DELIVERY') {
+  if (type === 'INVOICE_IN' || type === 'DELIVERY') {
     const supplier = supplierName
       ? await prisma.supplier.findFirst({ where: { name: { contains: supplierName, mode: 'insensitive' } } })
       : null;
@@ -65,7 +70,7 @@ async function analyzeDocument(prisma, extractedData = {}) {
     }
   }
 
-  if (data.type === 'INVOICE_OUT') {
+  if (type === 'INVOICE_OUT') {
     const client = clientName
       ? await prisma.client.findFirst({ where: { name: { contains: clientName, mode: 'insensitive' } } })
       : null;
@@ -116,6 +121,8 @@ async function reviewDocument(prisma, docId, payload, userId) {
 
   const action = payload.action || doc.suggestedAction || 'ARCHIVE_ONLY';
   const data = { ...(doc.extractedData || {}), ...(payload.invoiceData || payload.data || {}) };
+  if (!data.type && data.docType) data.type = data.docType;
+  if (!data.date && data.docDate) data.date = data.docDate;
 
   if (action === 'REJECT') {
     return prisma.document.update({
@@ -143,7 +150,7 @@ async function reviewDocument(prisma, docId, payload, userId) {
     created = await prisma.purchase.create({
       data: {
         invoiceNo: normalizeText(data.invoiceNo) || null,
-        date: new Date(data.date || Date.now()),
+        date: new Date(data.date || data.docDate || Date.now()),
         supplierId: supplier.id,
         projectId: payload.projectId || null,
         currency: data.currency || supplier.currency || 'BGN',
@@ -151,7 +158,7 @@ async function reviewDocument(prisma, docId, payload, userId) {
         description: data.description || doc.filename,
         status: payload.status || 'PAID',
         driveFileId: doc.driveFileId,
-        year: new Date(data.date || Date.now()).getFullYear(),
+        year: new Date(data.date || data.docDate || Date.now()).getFullYear(),
         items: Array.isArray(data.items) ? {
           create: data.items.map(item => ({
             code: item.code || null,
@@ -168,13 +175,13 @@ async function reviewDocument(prisma, docId, payload, userId) {
   if (action === 'CREATE_EXPENSE') {
     created = await prisma.expense.create({
       data: {
-        date: new Date(data.date || Date.now()),
+        date: new Date(data.date || data.docDate || Date.now()),
         category: payload.category || data.category || 'Документи',
         supplier: data.supplierName || data.clientName || 'Непознат контрагент',
         description: data.description || doc.filename,
         amount: totals.amountTotal || totals.amountNet,
         currency: data.currency || 'BGN',
-        year: new Date(data.date || Date.now()).getFullYear(),
+        year: new Date(data.date || data.docDate || Date.now()).getFullYear(),
       },
     });
   }
@@ -189,7 +196,7 @@ async function reviewDocument(prisma, docId, payload, userId) {
     created = await prisma.invoice.create({
       data: {
         number: normalizeText(data.invoiceNo) || `DOC-${doc.id.slice(-8)}`,
-        date: new Date(data.date || Date.now()),
+        date: new Date(data.date || data.docDate || Date.now()),
         clientId: client.id,
         projectId: payload.projectId || null,
         type: data.type === 'PROFORMA' ? 'PROFORMA' : 'INVOICE',

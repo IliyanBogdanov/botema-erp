@@ -72,9 +72,10 @@ const DOC_TYPE_ICONS: Record<string, string> = {
 };
 
 const LINK_TYPE_COLORS: Record<string, string> = {
-  INVOICE_TO_PURCHASE: '#0a84ff',
-  OFFER_TO_PROJECT: '#30d158',
-  DELIVERY_TO_PURCHASE: '#ff9f0a',
+  PAYMENT_TO_INVOICE: '#0a84ff',
+  INVOICE_TO_DELIVERY: '#30d158',
+  DELIVERY_TO_ORDER: '#ff9f0a',
+  ORDER_TO_PROJECT: '#bf5af2',
   EMAIL_TO_DOCUMENT: '#bf5af2',
   DOCUMENT_TO_SOURCE: '#636366',
   PARTIAL_MATCH: '#ff6b35',
@@ -117,14 +118,14 @@ function LinkedDocsView() {
           <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ВЕРИГИ</span>
         </div>
         <div className="flex items-center gap-2 bg-surface-container-low rounded-lg px-4 py-2.5 border border-outline-variant/8">
-          <span className="material-symbols-outlined text-[18px]" style={{ color: LINK_TYPE_COLORS.INVOICE_TO_PURCHASE }}>receipt_long</span>
-          <span className="font-data-mono text-lg text-on-surface">{stats.byType?.INVOICE_TO_PURCHASE || 0}</span>
-          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ФАКТУРИ</span>
+          <span className="material-symbols-outlined text-[18px]" style={{ color: LINK_TYPE_COLORS.PAYMENT_TO_INVOICE }}>receipt_long</span>
+          <span className="font-data-mono text-lg text-on-surface">{stats.byType?.PAYMENT_TO_INVOICE || 0}</span>
+          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ПЛАЩАНИЯ</span>
         </div>
         <div className="flex items-center gap-2 bg-surface-container-low rounded-lg px-4 py-2.5 border border-outline-variant/8">
-          <span className="material-symbols-outlined text-[18px]" style={{ color: LINK_TYPE_COLORS.OFFER_TO_PROJECT }}>description</span>
-          <span className="font-data-mono text-lg text-on-surface">{stats.byType?.OFFER_TO_PROJECT || 0}</span>
-          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ОФЕРТИ</span>
+          <span className="material-symbols-outlined text-[18px]" style={{ color: LINK_TYPE_COLORS.INVOICE_TO_DELIVERY }}>description</span>
+          <span className="font-data-mono text-lg text-on-surface">{stats.byType?.INVOICE_TO_DELIVERY || 0}</span>
+          <span className="font-label-caps text-[9px] text-on-surface-variant/60 tracking-[0.14em]">ДОСТАВКИ</span>
         </div>
         <div className="ml-auto">
           <div className="relative">
@@ -472,7 +473,7 @@ export default function DocumentsPage() {
     : docs;
 
   const startReparse = async () => {
-    const resp = await api.post('/documents/reparse-all').then(r => r.data);
+    const resp = await api.post('/documents/reparse-all', { full: true }).then(r => r.data);
     setReparseJobId(resp.jobId);
     setReparseStatus({ status: 'running', done: 0, total: 0 });
     const poll = setInterval(async () => {

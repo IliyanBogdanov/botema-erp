@@ -1,9 +1,9 @@
 // Import issued invoices from XLS accounting export
 // Upserts by invoice number - safe to re-run
-require('dotenv').config();
 const XLSX = require('xlsx');
 const { PrismaClient } = require('@prisma/client');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const prisma = new PrismaClient();
 

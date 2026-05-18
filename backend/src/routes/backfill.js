@@ -461,6 +461,10 @@ router.post('/parse-documents', auth, adminOnly, async (req, res) => {
                 riskFlags: riskFlags.length > 0 ? riskFlags : null,
               },
             });
+            await prisma.sourceFile.update({
+              where: { id: file.id },
+              data: { processedAt: new Date() },
+            }).catch(() => {});
             created++;
             log(`  ✅ Document created (type=${docType})`);
           } else {
@@ -959,7 +963,7 @@ router.post('/run-all', auth, adminOnly, (req, res) => {
           },
         });
         const matchedLinks = links.filter(l =>
-          (l.payment?.status === 'MATCHED' || l.payment?.status === 'PARTIAL') &&
+          l.payment?.status === 'MATCHED' &&
           l.targetDoc?.docType === 'INVOICE_OUT'
         );
         let synced = 0;

@@ -127,6 +127,7 @@ async function autoMatch({ year } = {}) {
       currency: true,
       counterpartyId: true,
       docDate: true,
+      status: true,
     },
   });
 

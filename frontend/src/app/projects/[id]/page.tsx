@@ -37,23 +37,25 @@ function StatusChip({ status }: { status: string }) {
 // ─── Timeline helpers ─────────────────────────────────────────────────────────
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  OFFER_OUT: 'Оферта', OFFER_IN: 'Оферта (вх.)', PROFORMA: 'Проформа',
-  INVOICE: 'Фактура', INVOICE_IN: 'Фактура (вх.)', CREDIT_NOTE: 'Кредитно известие',
+  OFFER_OUT: 'Оферта', OFFER_IN: 'Оферта (вх.)', PROFORMA_OUT: 'Проформа', PROFORMA_IN: 'Проформа (вх.)',
+  INVOICE_OUT: 'Фактура', INVOICE_IN: 'Фактура (вх.)', CREDIT_NOTE: 'Кредитно известие',
   ADVANCE: 'Аванс', PROTOCOL: 'Протокол', DELIVERY_NOTE: 'Доставъчна бележка',
   CONTRACT: 'Договор', WARRANTY: 'Гаранция', OTHER: 'Друго',
 };
 
 const DOC_TYPE_ICON: Record<string, string> = {
-  OFFER_OUT: 'description', PROFORMA: 'receipt_long', ADVANCE: 'payments',
-  INVOICE: 'receipt', PROTOCOL: 'assignment_turned_in', DELIVERY_NOTE: 'local_shipping',
+  OFFER_OUT: 'description', PROFORMA_OUT: 'receipt_long', PROFORMA_IN: 'receipt_long', ADVANCE: 'payments',
+  INVOICE_OUT: 'receipt', INVOICE_IN: 'receipt', PROTOCOL: 'assignment_turned_in', DELIVERY_NOTE: 'local_shipping',
   WARRANTY: 'verified', CONTRACT: 'handshake', OTHER: 'article',
 };
 
 const DOC_TYPE_COLOR: Record<string, string> = {
   OFFER_OUT: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
-  PROFORMA: 'text-primary border-primary-container/40 bg-primary-container/10',
+  PROFORMA_OUT: 'text-primary border-primary-container/40 bg-primary-container/10',
+  PROFORMA_IN: 'text-primary border-primary-container/40 bg-primary-container/10',
   ADVANCE: 'text-warning border-warning/30 bg-warning/5',
-  INVOICE: 'text-primary border-primary-container/40 bg-primary-container/10',
+  INVOICE_OUT: 'text-primary border-primary-container/40 bg-primary-container/10',
+  INVOICE_IN: 'text-primary border-primary-container/40 bg-primary-container/10',
   PROTOCOL: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
   DELIVERY_NOTE: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
   WARRANTY: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
@@ -90,7 +92,7 @@ function TimelineTab({ project }: { project: any }) {
   const payments = (project.payments || []) as any[];
 
   const offers = bizDocs.filter((d: any) => d.docType === 'OFFER_OUT');
-  const proformas = bizDocs.filter((d: any) => d.docType === 'PROFORMA');
+  const proformas = bizDocs.filter((d: any) => ['PROFORMA_OUT', 'PROFORMA_IN'].includes(d.docType));
   const advances = bizDocs.filter((d: any) => d.docType === 'ADVANCE');
   const protocols = bizDocs.filter((d: any) => ['PROTOCOL', 'DELIVERY_NOTE'].includes(d.docType));
 
