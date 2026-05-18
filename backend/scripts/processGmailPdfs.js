@@ -1,0 +1,325 @@
+/**
+ * processGmailPdfs.js
+ * Downloads and processes unprocessed Gmail PDF SourceFiles from supplier domains.
+ * Creates Document records (and optionally Purchase records for high-confidence invoices).
+ *
+ * Usage:
+ *   node scripts/processGmailPdfs.js              # dry run, shows what would be processed
+ *   node scripts/processGmailPdfs.js --apply       # actually process and write to DB
+ *   node scripts/processGmailPdfs.js --apply --limit 30  # process up to 30 files
+ */
+
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
+const { google } = require('googleapis');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { PrismaClient, Prisma } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const APPLY = process.argv.includes('--apply');
+const LIMIT = (() => {
+  const i = process.argv.indexOf('--limit');
+  return i >= 0 && process.argv[i + 1] ? parseInt(process.argv[i + 1]) : 50;
+})();
+
+// Domains to process (supplier invoices / logistics)
+const PROCESS_DOMAINS = [
+  'polarislighting.bg',
+  'lodes.com',
+  'andreuworld.com',
+  'antrax.com',
+  'formani.com',
+  'fercam.com',
+  'sedap.com',
+  'zieta.pl',
+  'libero.it',
+  'mantovangroup.com',
+  'ros-bg.com',
+  'transpress.bg',
+  'teximbank.bg',
+];
+
+// Map domain → supplier name
+const DOMAIN_SUPPLIER = {
+  'polarislighting.bg': 'Polaris',
+  'lodes.com': 'Lodes',
+  'andreuworld.com': 'Andreu World',
+  'antrax.com': 'Antrax',
+  'formani.com': 'Formani',
+  'fercam.com': 'Fercam',
+  'sedap.com': 'Atelier Sedap',
+  'zieta.pl': 'Zieta',
+  'mantovangroup.com': 'Mantovan Group',
+};
+
+function getAuth() {
+  const oauth2 = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+  return oauth2;
+}
+
+function parseMsgId(gmailMsgId) {
+  if (!gmailMsgId || gmailMsgId.length < 17) return { messageId: gmailMsgId, attachmentId: null };
+  const messageId = gmailMsgId.substring(0, 16);
+  const attachmentId = gmailMsgId.substring(17); // skip the '-' separator
+  return { messageId, attachmentId: attachmentId || null };
+}
+
+function extractDomain(fromEmail) {
+  return (fromEmail || '').match(/@([^>)\s]+)/)?.[1]?.toLowerCase() || '';
+}
+
+async function downloadAttachment(gmail, messageId, filename) {
+  // Attachment IDs expire — must re-fetch from the live message
+  const msg = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
+  const parts = collectParts(msg.data.payload);
+  const part = parts.find(p => p.filename === filename) || parts.find(p =>
+    p.filename && p.filename.toLowerCase() === filename.toLowerCase()
+  );
+  if (!part?.body?.attachmentId) throw new Error(`Attachment not found in message: ${filename}`);
+  const res = await gmail.users.messages.attachments.get({
+    userId: 'me', messageId, id: part.body.attachmentId,
+  });
+  const base64 = (res.data.data || '').replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(base64, 'base64');
+}
+
+function collectParts(payload, result = []) {
+  if (!payload) return result;
+  if (payload.filename && payload.body?.attachmentId) result.push(payload);
+  for (const p of (payload.parts || [])) collectParts(p, result);
+  return result;
+}
+
+async function extractWithGemini(pdfBuffer, filename, fromDomain) {
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const supplierHint = DOMAIN_SUPPLIER[fromDomain] || '';
+  const prompt = `Extract invoice/document data from this PDF for Studio Botema (Bulgarian interior design company).
+${supplierHint ? `Supplier hint: ${supplierHint}` : ''}
+Filename: "${filename}"
+
+Return ONLY valid JSON (no markdown):
+{
+  "docType": "INVOICE_IN" | "PROFORMA" | "DELIVERY_NOTE" | "OTHER",
+  "invoiceNo": string or null,
+  "docDate": "YYYY-MM-DD" or null,
+  "dueDate": "YYYY-MM-DD" or null,
+  "supplierName": string or null,
+  "amountNet": number or null,
+  "vatAmount": number or null,
+  "amountTotal": number or null,
+  "currency": "BGN" | "EUR" | "USD" | "GBP" | null,
+  "confidence": number (0-100),
+  "description": string or null
+}
+
+Rules:
+- European number format: 1.234,56 → 1234.56
+- If amount not found, return null (never 0)
+- For delivery notes/proformas without a final amount, return docType DELIVERY_NOTE or PROFORMA`;
+
+  const result = await model.generateContent([
+    { text: prompt },
+    { inlineData: { mimeType: 'application/pdf', data: pdfBuffer.toString('base64') } },
+  ]);
+  const text = result.response.text().trim();
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON from Gemini: ' + text.substring(0, 200));
+  return JSON.parse(match[0]);
+}
+
+async function findOrCreateCounterparty(supplierName) {
+  if (!supplierName) return null;
+  const existing = await prisma.counterparty.findFirst({
+    where: { name: { equals: supplierName, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  if (!APPLY) return null;
+  const created = await prisma.counterparty.create({
+    data: { name: supplierName, type: 'SUPPLIER', country: 'BG', currency: 'EUR' },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+async function findSupplier(supplierName) {
+  if (!supplierName) return null;
+  return prisma.supplier.findFirst({
+    where: { name: { equals: supplierName, mode: 'insensitive' } },
+    select: { id: true },
+  });
+}
+
+async function main() {
+  console.log(`=== PROCESS GMAIL PDFs${APPLY ? ' (APPLY)' : ' (DRY RUN)'} | limit=${LIMIT} ===`);
+
+  const auth = getAuth();
+  const gmail = google.gmail({ version: 'v1', auth });
+
+  // Get unprocessed Gmail PDF SourceFiles from supplier domains
+  const allFiles = await prisma.sourceFile.findMany({
+    where: {
+      type: 'GMAIL',
+      processedAt: null,
+      filename: { endsWith: '.pdf', mode: 'insensitive' },
+    },
+    select: { id: true, gmailMsgId: true, filename: true, fromEmail: true, subject: true, folder: true, receivedAt: true },
+    orderBy: { receivedAt: 'desc' },
+  });
+
+  const files = allFiles.filter(f => {
+    const domain = extractDomain(f.fromEmail);
+    return PROCESS_DOMAINS.includes(domain);
+  }).slice(0, LIMIT);
+
+  console.log(`Total unprocessed supplier PDFs: ${allFiles.filter(f => PROCESS_DOMAINS.includes(extractDomain(f.fromEmail))).length}`);
+  console.log(`Processing this batch: ${files.length}`);
+
+  let created = 0, skipped = 0, failed = 0, bankTx = 0;
+
+  for (const sf of files) {
+    const domain = extractDomain(sf.fromEmail);
+    const { messageId, attachmentId } = parseMsgId(sf.gmailMsgId);
+    const supplierName = DOMAIN_SUPPLIER[domain] || null;
+
+    // Check if already have a Document for this gmail source
+    const gmailDocId = `gmail:${messageId}:${sf.filename}`;
+    const existing = await prisma.document.findFirst({
+      where: { driveFileId: gmailDocId },
+      select: { id: true },
+    });
+    if (existing) {
+      console.log(`SKIP (doc exists): ${sf.filename}`);
+      if (APPLY) await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
+      skipped++;
+      continue;
+    }
+
+    if (!attachmentId) {
+      console.log(`SKIP (no attachmentId): ${sf.filename}`);
+      if (APPLY) await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
+      skipped++;
+      continue;
+    }
+
+    console.log(`\nProcessing [${domain}]: ${sf.filename}`);
+
+    try {
+      const pdfBuffer = await downloadAttachment(gmail, messageId, sf.filename);
+      const parsed = await extractWithGemini(pdfBuffer, sf.filename, domain);
+
+      console.log(`  → docType=${parsed.docType} invoiceNo=${parsed.invoiceNo} amount=${parsed.amountTotal} ${parsed.currency} conf=${parsed.confidence}`);
+
+      const counterpartyId = await findOrCreateCounterparty(supplierName || parsed.supplierName);
+      const supplier = await findSupplier(supplierName || parsed.supplierName);
+
+      const riskFlags = [];
+      if (!parsed.invoiceNo) riskFlags.push('MISSING_INVOICE_NO');
+      if (!parsed.docDate) riskFlags.push('MISSING_DATE');
+      if (!parsed.amountTotal) riskFlags.push('MISSING_AMOUNT');
+
+      if (APPLY) {
+        // Create Document record
+        await prisma.document.create({
+          data: {
+            driveFileId: gmailDocId,
+            driveUrl: '',
+            filename: sf.filename,
+            type: parsed.docType === 'INVOICE_IN' ? 'INVOICE_IN'
+              : parsed.docType === 'PROFORMA' ? 'PROFORMA'
+              : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY'
+              : 'OTHER',
+            status: 'PENDING',
+            extractedData: {
+              ...parsed,
+              gmailMessageId: messageId,
+              gmailSubject: sf.subject,
+              from: sf.fromEmail,
+              supplierName: supplierName || parsed.supplierName,
+            },
+            confidence: (parsed.confidence || 50) / 100,
+            suggestedAction: parsed.docType === 'INVOICE_IN' ? 'CREATE_PURCHASE' : 'ARCHIVE_ONLY',
+            riskFlags: riskFlags.length > 0 ? riskFlags : null,
+          },
+        });
+
+        // Create BizDocument for high-confidence invoices
+        if (parsed.docType === 'INVOICE_IN' && parsed.amountTotal && parsed.confidence >= 70) {
+          const bizExisting = await prisma.bizDocument.findFirst({
+            where: { docType: 'INVOICE_IN', docNumber: parsed.invoiceNo || undefined, counterpartyId },
+            select: { id: true },
+          });
+          if (!bizExisting) {
+            const bizData = {
+              counterpartyId,
+              docType: 'INVOICE_IN',
+              docNumber: parsed.invoiceNo || null,
+              docDate: parsed.docDate ? new Date(parsed.docDate) : sf.receivedAt || new Date(),
+              dueDate: parsed.dueDate ? new Date(parsed.dueDate) : null,
+              currency: parsed.currency || 'EUR',
+              amountNet: parsed.amountNet != null ? new Prisma.Decimal(parsed.amountNet) : null,
+              vatAmount: parsed.vatAmount != null ? new Prisma.Decimal(parsed.vatAmount) : null,
+              amountTotal: new Prisma.Decimal(parsed.amountTotal),
+              vatType: 'STANDARD_BG',
+              status: 'IMPORTED',
+              confidence: new Prisma.Decimal(parsed.confidence || 70),
+              notes: `Gmail: ${sf.subject?.substring(0, 100)} | ${sf.fromEmail?.substring(0, 80)}`,
+            };
+            await prisma.bizDocument.create({ data: bizData });
+
+            // Create Purchase record if supplier known
+            if (supplier) {
+              const purchaseExists = await prisma.purchase.findFirst({
+                where: { invoiceNo: parsed.invoiceNo || undefined, supplierId: supplier.id },
+                select: { id: true },
+              });
+              if (!purchaseExists && parsed.invoiceNo) {
+                await prisma.purchase.create({
+                  data: {
+                    invoiceNo: parsed.invoiceNo,
+                    date: parsed.docDate ? new Date(parsed.docDate) : sf.receivedAt || new Date(),
+                    supplierId: supplier.id,
+                    currency: parsed.currency || 'EUR',
+                    amount: new Prisma.Decimal(parsed.amountTotal),
+                    description: parsed.description || sf.filename,
+                    status: 'PENDING',
+                    year: parsed.docDate ? new Date(parsed.docDate).getFullYear() : new Date().getFullYear(),
+                  },
+                });
+                console.log(`  ✅ Purchase created: ${parsed.invoiceNo} ${parsed.amountTotal} ${parsed.currency}`);
+              }
+            }
+
+            console.log(`  ✅ BizDoc created: ${parsed.invoiceNo || '?'}`);
+          } else {
+            console.log(`  → BizDoc already exists for ${parsed.invoiceNo}`);
+          }
+        }
+
+        await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
+      }
+
+      created++;
+    } catch (err) {
+      console.error(`  ❌ ${sf.filename}: ${err.message}`);
+      failed++;
+    }
+
+    // Rate limit: 3s between Gemini calls
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  console.log(`\n=== DONE ===`);
+  console.log({ created, skipped, failed, bankTx });
+}
+
+main()
+  .catch(err => { console.error(err); process.exitCode = 1; })
+  .finally(() => prisma.$disconnect());
