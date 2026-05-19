@@ -39,19 +39,43 @@ const PROCESS_DOMAINS = [
   'ros-bg.com',
   'transpress.bg',
   'teximbank.bg',
+  // New domains — logistics & additional suppliers
+  'dhl.com',
+  'alog-bg.com',
+  'offthewall.bg',
+  'led-bg.com',
+  'minileiste.com',
+  'jysk.com',
+  'acalight.gr',
+  'luminavera.com',
+  // Subscriptions → Expense
+  'stripe.com',
+  'github.com',
 ];
+
+// Domains whose PDFs should become Expense records (not BizDocument)
+const EXPENSE_DOMAINS = new Set(['stripe.com', 'github.com']);
 
 // Map domain → supplier name
 const DOMAIN_SUPPLIER = {
-  'polarislighting.bg': 'Polaris',
-  'lodes.com': 'Lodes',
+  'polarislighting.bg': 'Polaris Lighting',
+  'lodes.com': 'Lodes S.r.l.',
   'andreuworld.com': 'Andreu World',
-  'antrax.com': 'Antrax',
-  'formani.com': 'Formani',
+  'antrax.com': 'Antrax IT',
+  'formani.com': 'Formani Holland B.V.',
   'fercam.com': 'Fercam',
   'sedap.com': 'Atelier Sedap',
-  'zieta.pl': 'Zieta',
+  'zieta.pl': 'Zieta Prozessdesign',
   'mantovangroup.com': 'Mantovan Group',
+  'dhl.com': 'DHL',
+  'alog-bg.com': 'Alog BG',
+  'offthewall.bg': 'Off The Wall',
+  'led-bg.com': 'LED BG',
+  'minileiste.com': 'Minileiste',
+  'jysk.com': 'JYSK',
+  'acalight.gr': 'ACA Light',
+  'stripe.com': 'Stripe / Subscription',
+  'github.com': 'GitHub',
 };
 
 function getAuth() {
@@ -250,8 +274,37 @@ async function main() {
           },
         });
 
+        // Expense records for subscription domains (Stripe, GitHub)
+        if (EXPENSE_DOMAINS.has(domain) && parsed.amountTotal && parsed.confidence >= 60) {
+          const expDate = parsed.docDate ? new Date(parsed.docDate) : (sf.receivedAt || new Date());
+          const dupExpense = await prisma.expense.findFirst({
+            where: {
+              supplier: { contains: DOMAIN_SUPPLIER[domain] || domain, mode: 'insensitive' },
+              amount: new Prisma.Decimal(parsed.amountTotal),
+              date: expDate,
+            },
+            select: { id: true },
+          });
+          if (!dupExpense) {
+            await prisma.expense.create({
+              data: {
+                date: expDate,
+                category: 'SOFTWARE',
+                supplier: parsed.supplierName || DOMAIN_SUPPLIER[domain] || domain,
+                description: parsed.description || parsed.invoiceNo || sf.filename,
+                amount: new Prisma.Decimal(parsed.amountTotal),
+                currency: parsed.currency || 'EUR',
+                year: expDate.getFullYear(),
+              },
+            });
+            console.log(`  ✅ Expense created: ${parsed.amountTotal} ${parsed.currency} (SOFTWARE)`);
+          } else {
+            console.log(`  → Expense already exists`);
+          }
+        }
+
         // Create BizDocument for high-confidence invoices
-        if (parsed.docType === 'INVOICE_IN' && parsed.amountTotal && parsed.confidence >= 70) {
+        if (!EXPENSE_DOMAINS.has(domain) && parsed.docType === 'INVOICE_IN' && parsed.amountTotal && parsed.confidence >= 70) {
           const bizExisting = await prisma.bizDocument.findFirst({
             where: { docType: 'INVOICE_IN', docNumber: parsed.invoiceNo || undefined, counterpartyId },
             select: { id: true },
