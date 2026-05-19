@@ -32,7 +32,7 @@ router.get('/', auth, async (req, res) => {
       revenueByMonth,
       topClients,
       expenseRows,
-      purchaseRows,
+      bizCostRows,
       recentInvoices,
       projectStats,
       invoiceCount,
@@ -81,11 +81,15 @@ router.get('/', auth, async (req, res) => {
         where: { date: { gte: startDate, lte: endDate } },
         select: { amount: true, currency: true },
       }),
-      prisma.purchase.groupBy({
-        by: ['supplierId', 'currency'],
-        where: { date: { gte: startDate, lte: endDate } },
-        _sum: { amount: true },
-        _count: { id: true },
+      // Use BizDocument INVOICE_IN as the authoritative cost source (more complete than Purchase)
+      prisma.bizDocument.findMany({
+        where: {
+          docType: 'INVOICE_IN',
+          status: { not: 'REJECTED' },
+          amountTotal: { gt: 0 },
+          docDate: { gte: startDate, lte: endDate },
+        },
+        select: { amountTotal: true, currency: true, counterpartyId: true },
       }),
       prisma.invoice.findMany({
         include: { client: { select: { name: true } } },
@@ -113,28 +117,30 @@ router.get('/', auth, async (req, res) => {
     }) : [];
     const clientMap = Object.fromEntries(clientNames.map(c => [c.id, c.name]));
 
-    const purchaseTotalsByCurrency = purchaseRows.reduce((acc, row) => {
-      const amount = toNumber(row._sum.amount);
+    // Build cost totals from BizDocument INVOICE_IN
+    const purchaseTotalsByCurrency = bizCostRows.reduce((acc, row) => {
+      const amount = toNumber(row.amountTotal);
       acc[row.currency] = (acc[row.currency] || 0) + amount;
       return acc;
     }, {});
 
-    const supplierIds = [...new Set(purchaseRows.map(row => row.supplierId).filter(Boolean))];
-    const supplierNames = supplierIds.length ? await prisma.supplier.findMany({
-      where: { id: { in: supplierIds } },
+    const cpIds = [...new Set(bizCostRows.map(r => r.counterpartyId).filter(Boolean))];
+    const cpNames = cpIds.length ? await prisma.counterparty.findMany({
+      where: { id: { in: cpIds } },
       select: { id: true, name: true }
     }) : [];
-    const supplierMap = Object.fromEntries(supplierNames.map(s => [s.id, s.name]));
+    const cpMap = Object.fromEntries(cpNames.map(c => [c.id, c.name]));
 
-    const supplierTotals = purchaseRows.reduce((acc, row) => {
-      const amountEur = toEur(row._sum.amount, row.currency);
-      acc[row.supplierId] = (acc[row.supplierId] || 0) + amountEur;
+    const supplierTotals = bizCostRows.reduce((acc, row) => {
+      if (!row.counterpartyId) return acc;
+      const amountEur = toEur(toNumber(row.amountTotal), row.currency);
+      acc[row.counterpartyId] = (acc[row.counterpartyId] || 0) + amountEur;
       return acc;
     }, {});
 
     const topSuppliers = Object.entries(supplierTotals)
-      .map(([supplierId, amount]) => ({
-        name: supplierMap[supplierId] || 'Unknown',
+      .map(([cpId, amount]) => ({
+        name: cpMap[cpId] || 'Unknown',
         amount: Number(amount.toFixed(2)),
       }))
       .sort((a, b) => b.amount - a.amount)
@@ -144,7 +150,7 @@ router.get('/', auth, async (req, res) => {
       .reduce((sum, [currency, amount]) => sum + toEur(amount, currency), 0);
     const totalPurchasesBgn = Object.entries(purchaseTotalsByCurrency)
       .reduce((sum, [currency, amount]) => sum + toBgn(amount, currency), 0);
-    const totalPurchasesCount = purchaseRows.reduce((sum, row) => sum + Number(row._count.id || 0), 0);
+    const totalPurchasesCount = bizCostRows.length;
 
     // Overhead expenses (EUR)
     const expensesEur = expenseRows.reduce((s, e) => s + toEur(e.amount, e.currency), 0);
@@ -212,7 +218,7 @@ router.get('/monthly-pnl', auth, async (req, res) => {
   try {
     const year = parseInt(req.query.year || new Date().getFullYear());
 
-    const [invoices, purchases, expenses] = await Promise.all([
+    const [invoices, bizCosts, expenses] = await Promise.all([
       prisma.invoice.findMany({
         where: {
           date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
@@ -220,9 +226,15 @@ router.get('/monthly-pnl', auth, async (req, res) => {
         },
         select: { date: true, currency: true, amountNet: true, vatAmount: true, amountTotal: true },
       }),
-      prisma.purchase.findMany({
-        where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) } },
-        select: { date: true, currency: true, amount: true },
+      // BizDocument INVOICE_IN is the authoritative cost source
+      prisma.bizDocument.findMany({
+        where: {
+          docType: 'INVOICE_IN',
+          status: { not: 'REJECTED' },
+          amountTotal: { gt: 0 },
+          docDate: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
+        },
+        select: { docDate: true, currency: true, amountTotal: true },
       }),
       prisma.expense.findMany({
         where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) } },
@@ -245,9 +257,9 @@ router.get('/monthly-pnl', auth, async (req, res) => {
       months[m].revenue += toEur(inv.amountNet, inv.currency);
     }
 
-    for (const pur of purchases) {
-      const m = new Date(pur.date).getMonth();
-      months[m].costs += toEur(pur.amount, pur.currency);
+    for (const biz of bizCosts) {
+      const m = new Date(biz.docDate).getMonth();
+      months[m].costs += toEur(toNumber(biz.amountTotal), biz.currency);
     }
 
     for (const exp of expenses) {

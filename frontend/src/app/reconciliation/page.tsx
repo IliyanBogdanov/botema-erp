@@ -383,9 +383,14 @@ export default function ReconciliationPage() {
                           </td>
                           <td className="table-cell">
                             {link.payment ? (
-                              <span className="font-semibold text-primary text-sm">
-                                {fmt(link.payment.amount, link.payment.currency)}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-primary text-sm">
+                                  {fmt(link.payment.amount, link.payment.currency)}
+                                </span>
+                                {link.payment.status === 'PARTIAL' && (
+                                  <span className="font-label-caps text-[8px] px-1.5 py-0.5 border border-warning/40 bg-warning/10 text-warning">PARTIAL</span>
+                                )}
+                              </div>
                             ) : <span className="text-on-surface-variant/30">—</span>}
                           </td>
                           <td className="table-cell text-on-surface-variant/60 text-xs">
@@ -774,12 +779,12 @@ export default function ReconciliationPage() {
                               ) : '—'}
                             </td>
                             <td className="table-cell">
-                              {p.status === 'UNMATCHED' && (
+                              {(p.status === 'UNMATCHED' || p.status === 'PARTIAL') && (
                                 <button
                                   onClick={() => { setMatchingPayment(p); setCandidateSearch(''); }}
                                   className="px-2 py-0.5 text-[9px] font-label-caps border border-primary/30 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
                                 >
-                                  Ръчен Match
+                                  {p.status === 'PARTIAL' ? '+ Добави Match' : 'Ръчен Match'}
                                 </button>
                               )}
                             </td>
