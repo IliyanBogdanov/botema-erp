@@ -239,8 +239,9 @@ async function main() {
             console.log(`  → Expense already exists`);
             skipped++;
           }
-        } else if (['INVOICE_IN', 'PROFORMA'].includes(parsed.docType) && parsed.amountTotal && parsed.confidence >= 70) {
-          // Create BizDocument for supplier invoices
+        } else if (parsed.docType === 'INVOICE_IN' && parsed.amountTotal && parsed.confidence >= 70) {
+          // Create BizDocument only for confirmed incoming supplier invoices
+          // PROFORMA/INVOICE_OUT → Document record only (may be client offers, outgoing)
           const counterpartyId = await findOrCreateCounterparty(parsed.supplierName);
           const bizExisting = await prisma.bizDocument.findFirst({
             where: { docType: 'INVOICE_IN', docNumber: parsed.invoiceNo || undefined, counterpartyId },
