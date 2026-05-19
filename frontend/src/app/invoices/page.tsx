@@ -411,7 +411,7 @@ function AgingView() {
 }
 
 export default function InvoicesPage() {
-  const [year, setYear] = useState(2025);
+  const [year, setYear] = useState(new Date().getFullYear());
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);

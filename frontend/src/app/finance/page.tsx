@@ -25,7 +25,7 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 }
 
 export default function FinancePage() {
-  const [year, setYear] = useState(2025);
+  const [year, setYear] = useState(new Date().getFullYear());
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['monthly-pnl', year],
