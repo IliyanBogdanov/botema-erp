@@ -19,6 +19,7 @@ const prisma = new PrismaClient();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const APPLY = process.argv.includes('--apply');
+const ALL_DOMAINS = process.argv.includes('--all-domains');
 const LIMIT = (() => {
   const i = process.argv.indexOf('--limit');
   return i >= 0 && process.argv[i + 1] ? parseInt(process.argv[i + 1]) : 50;
@@ -124,17 +125,20 @@ function collectParts(payload, result = []) {
 async function extractWithGemini(pdfBuffer, filename, fromDomain) {
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const supplierHint = DOMAIN_SUPPLIER[fromDomain] || '';
+  const isOutgoing = ['studiobotema.com', 'micro.bg', 'invoicepro.bg'].includes(fromDomain);
   const prompt = `Extract invoice/document data from this PDF for Studio Botema (Bulgarian interior design company).
 ${supplierHint ? `Supplier hint: ${supplierHint}` : ''}
+${isOutgoing ? 'Note: This is an OUTGOING document FROM Studio Botema TO a client.' : ''}
 Filename: "${filename}"
 
 Return ONLY valid JSON (no markdown):
 {
-  "docType": "INVOICE_IN" | "PROFORMA" | "DELIVERY_NOTE" | "OTHER",
+  "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "EXPENSE" | "OTHER",
   "invoiceNo": string or null,
   "docDate": "YYYY-MM-DD" or null,
   "dueDate": "YYYY-MM-DD" or null,
   "supplierName": string or null,
+  "clientName": string or null,
   "amountNet": number or null,
   "vatAmount": number or null,
   "amountTotal": number or null,
@@ -146,7 +150,11 @@ Return ONLY valid JSON (no markdown):
 Rules:
 - European number format: 1.234,56 → 1234.56
 - If amount not found, return null (never 0)
-- For delivery notes/proformas without a final amount, return docType DELIVERY_NOTE or PROFORMA`;
+- INVOICE_IN = Studio Botema is the BUYER (incoming cost)
+- INVOICE_OUT = Studio Botema is the SELLER (outgoing revenue)
+- Salary slips, pay statements → OTHER
+- Waybills, transport docs without amount → DELIVERY_NOTE
+- Proforma offers → PROFORMA`;
 
   const result = await model.generateContent([
     { text: prompt },
@@ -182,12 +190,12 @@ async function findSupplier(supplierName) {
 }
 
 async function main() {
-  console.log(`=== PROCESS GMAIL PDFs${APPLY ? ' (APPLY)' : ' (DRY RUN)'} | limit=${LIMIT} ===`);
+  console.log(`=== PROCESS GMAIL PDFs${APPLY ? ' (APPLY)' : ' (DRY RUN)'} | limit=${LIMIT} | allDomains=${ALL_DOMAINS} ===`);
 
   const auth = getAuth();
   const gmail = google.gmail({ version: 'v1', auth });
 
-  // Get unprocessed Gmail PDF SourceFiles from supplier domains
+  // Get unprocessed Gmail PDF SourceFiles
   const allFiles = await prisma.sourceFile.findMany({
     where: {
       type: 'GMAIL',
@@ -198,12 +206,13 @@ async function main() {
     orderBy: { receivedAt: 'desc' },
   });
 
-  const files = allFiles.filter(f => {
-    const domain = extractDomain(f.fromEmail);
-    return PROCESS_DOMAINS.includes(domain);
-  }).slice(0, LIMIT);
+  const files = (ALL_DOMAINS
+    ? allFiles
+    : allFiles.filter(f => PROCESS_DOMAINS.includes(extractDomain(f.fromEmail)))
+  ).slice(0, LIMIT);
 
-  console.log(`Total unprocessed supplier PDFs: ${allFiles.filter(f => PROCESS_DOMAINS.includes(extractDomain(f.fromEmail))).length}`);
+  const knownCount = allFiles.filter(f => PROCESS_DOMAINS.includes(extractDomain(f.fromEmail))).length;
+  console.log(`Total unprocessed: known-supplier=${knownCount}, all=${allFiles.length}`);
   console.log(`Processing this batch: ${files.length}`);
 
   let created = 0, skipped = 0, failed = 0, bankTx = 0;

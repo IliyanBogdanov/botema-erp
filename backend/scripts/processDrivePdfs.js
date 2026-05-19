@@ -90,7 +90,11 @@ Return ONLY valid JSON (no markdown):
 Rules:
 - European number format: 1.234,56 → 1234.56
 - Facebook/Meta advertising invoices → docType EXPENSE
-- Delivery notes → DELIVERY_NOTE
+- Waybills, transport/delivery documents → DELIVERY_NOTE
+- Proforma offers, price quotes → PROFORMA
+- INVOICE_IN = supplier charges Studio Botema (incoming cost)
+- INVOICE_OUT = Studio Botema charges a client (outgoing revenue)
+- Contracts, offers, project documents without amounts → OTHER
 - If amount not found, return null (never 0)`;
 
   const result = await model.generateContent([
