@@ -85,15 +85,6 @@ export default function DashboardPage() {
     queryKey: ['dashboard', year],
     queryFn: () => api.get(`/dashboard?year=${year}`).then(r => r.data),
   });
-  const { data: pendingDocsRaw } = useQuery({
-    queryKey: ['pending-docs'],
-    queryFn: () => api.get('/documents?status=PENDING&limit=5').then(r => r.data),
-    refetchInterval: 30000,
-  });
-  // Support both array and {data:[]} response shapes
-  const pendingDocs: any[] = Array.isArray(pendingDocsRaw)
-    ? pendingDocsRaw
-    : (pendingDocsRaw as any)?.data || [];
 
   const { data: activeProjects = [] } = useQuery({
     queryKey: ['active-projects'],
@@ -187,29 +178,21 @@ export default function DashboardPage() {
           <button
             onClick={() => syncNow.mutate()}
             disabled={syncRunning || syncNow.isPending}
-            style={{
-              background: syncDone ? '#30d158' : syncRunning ? '#3a3a3c' : '#0a84ff',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              padding: '8px 16px',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: syncRunning ? 'not-allowed' : 'pointer',
-              opacity: syncRunning ? 0.8 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              whiteSpace: 'nowrap',
-            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-label-caps text-label-caps text-white whitespace-nowrap transition-all ${
+              syncDone ? 'bg-emerald-500' : syncRunning ? 'bg-surface-container-high opacity-80 cursor-not-allowed' : 'bg-primary hover:bg-primary/90'
+            }`}
           >
-            {syncRunning ? '⏳ Синхронизира...' : syncDone ? '✅ Готово' : '🔄 Синхронизирай данните'}
+            <span className="material-symbols-outlined text-[16px]">
+              {syncRunning ? 'sync' : syncDone ? 'check_circle' : 'cloud_sync'}
+            </span>
+            {syncRunning ? 'Синхронизира...' : syncDone ? 'Готово' : 'Синхронизирай'}
           </button>
         </div>
       </div>
       {syncRunning && (
-        <div style={{ background: '#1c1c1e', borderTop: '1px solid #3a3a3c', padding: '8px 24px', fontSize: 12, color: '#8e8e93' }}>
-          ⏳ Импортира данни от Gmail, Drive и PDF фактури — може да отнеме 5–15 мин...
+        <div className="border-t border-outline-variant/10 bg-surface-container px-6 py-2 flex items-center gap-2 font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.1em]">
+          <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+          ИМПОРТИРА ДАННИ ОТ GMAIL, DRIVE И PDF ФАКТУРИ — МОЖЕ ДА ОТНЕМЕ 5–15 МИН...
         </div>
       )}
 
@@ -230,17 +213,6 @@ export default function DashboardPage() {
               </div>
             </div>
             <a href="/alerts" className="font-label-caps text-label-caps text-primary hover:opacity-80">{t('dash.viewAll')} →</a>
-          </div>
-        )}
-        {pendingDocs.length > 0 && (
-          <div className="bg-surface-container-low rounded-xl border border-outline-variant/8 border-l-4 border-l-primary-container p-4 flex items-center justify-between -mt-8">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
-              <span className="font-label-caps text-label-caps text-on-surface">
-                {pendingDocs.length} {t('dash.pendingReview')}
-              </span>
-            </div>
-            <a href="/documents" className="font-label-caps text-label-caps text-primary hover:opacity-80">{t('doc.reviewed').toUpperCase()} →</a>
           </div>
         )}
 
@@ -374,51 +346,43 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* AI Document Center — col 4 */}
+          {/* Top Clients — col 4 */}
           <div className="col-span-12 lg:col-span-4 bg-surface-container-high p-8 rounded-xl border border-outline-variant/8 relative overflow-hidden">
-            {/* accent glow */}
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container/6 rounded-full blur-2xl pointer-events-none" />
             <div className="flex items-center gap-2 mb-8 relative">
-              <span className="material-symbols-outlined text-primary">auto_awesome</span>
-              <h3 className="font-label-caps text-label-caps text-on-surface">{t('dash.aiCenter')}</h3>
+              <span className="material-symbols-outlined text-primary">groups</span>
+              <h3 className="font-label-caps text-label-caps text-on-surface">ТОП КЛИЕНТИ</h3>
             </div>
-            <div className="space-y-5 relative">
-              {pendingDocs.slice(0, 4).map((doc: any) => {
-                const data = doc.extractedData || {};
-                const name = data.supplierName || data.clientName || doc.filename?.replace(/\.[^.]+$/, '').slice(0, 30) || 'Document';
-                const amount = data.amountTotal || data.amount;
-                return (
-                  <div key={doc.id} className="flex items-start gap-4 pb-5 border-b border-outline-variant/5 last:border-0 last:pb-0">
-                    <div className="w-10 h-10 bg-primary-container/10 border border-primary-container/20 flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-primary text-[18px]">description</span>
+            <div className="space-y-4 relative">
+              {(() => {
+                const clients = (data?.topClients || []).slice(0, 5);
+                const maxRev = Number(clients[0]?.revenue || 1);
+                return clients.map((client: any, i: number) => (
+                  <div key={client.name || i} className="space-y-1.5">
+                    <div className="flex justify-between font-label-caps text-[10px]">
+                      <span className="text-on-surface truncate max-w-[150px]">{client.name}</span>
+                      <span className="text-primary font-data-mono shrink-0 ml-2">
+                        {Number(client.revenue || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
+                      </span>
                     </div>
-                    <div className="flex-1 overflow-hidden">
-                      <p className="font-body-sm text-on-surface truncate text-[13px]">{name}</p>
-                      {amount ? (
-                        <p className="font-data-mono text-[10px] text-primary mt-0.5">
-                          {Number(amount).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} {data.currency || 'EUR'}
-                        </p>
-                      ) : (
-                        <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-0.5 truncate">{doc.filename?.slice(0, 28)}</p>
-                      )}
-                      <div className="mt-2">
-                        <span className="px-2 py-0.5 bg-primary-container/15 text-primary font-label-caps text-[8px] border border-primary-container/20">
-                          {t('dash.pendingReview')}
-                        </span>
-                      </div>
+                    <div className="h-1.5 bg-surface-container-highest overflow-hidden rounded-sm">
+                      <div
+                        className="h-full bg-primary-container/60 rounded-sm transition-all duration-1000"
+                        style={{ width: `${Math.round((Number(client.revenue || 0) / maxRev) * 100)}%` }}
+                      />
                     </div>
                   </div>
-                );
-              })}
-              {(Array.isArray(pendingDocs) ? pendingDocs : []).length === 0 && (
+                ));
+              })()}
+              {!(data?.topClients?.length) && (
                 <div className="flex flex-col items-center justify-center py-8 text-center opacity-50">
-                  <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">check_circle</span>
-                  <p className="font-label-caps text-label-caps text-on-surface-variant">{t('dash.allClear')}</p>
+                  <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">groups</span>
+                  <p className="font-label-caps text-label-caps text-on-surface-variant">Няма данни</p>
                 </div>
               )}
             </div>
-            <a href="/documents" className="block w-full mt-8 py-3 rounded-lg border border-outline-variant/15 font-label-caps text-label-caps text-center text-on-surface-variant hover:bg-surface-variant/10 transition-colors relative">
-              {t('dash.viewQueue')}
+            <a href="/clients" className="block w-full mt-8 py-3 rounded-lg border border-outline-variant/15 font-label-caps text-label-caps text-center text-on-surface-variant hover:bg-surface-variant/10 transition-colors relative">
+              Всички клиенти →
             </a>
           </div>
         </section>

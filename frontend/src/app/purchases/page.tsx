@@ -237,30 +237,22 @@ export default function PurchasesPage() {
         {/* Page Title */}
         <div className="flex justify-between items-end mb-8">
           <div>
-            <p className="font-label-caps text-label-caps text-on-surface-variant mb-2">{t('pur.label')}</p>
-            <h2 className="font-headline text-headline-lg text-on-background">{t('pur.title')}</h2>
-            <p className="text-on-surface-variant font-body-md mt-2">
-              Manage and reconcile procurement activities across all design entities.
-            </p>
+            <p className="font-label-caps text-label-caps text-primary mb-2">{t('pur.label')}</p>
+            <h2 className="font-headline text-headline-lg text-on-surface">{t('pur.title')}</h2>
           </div>
-          <div className="flex gap-4">
-            <button className="px-6 py-2 border border-outline text-on-surface font-label-caps text-label-caps hover:bg-surface-container-high transition-colors">
-              Export Report
-            </button>
-            <button
-              onClick={() => setModalOpen(true)}
-              className="px-6 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:opacity-90 transition-opacity flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[16px]">add</span>
-              {t('pur.newPurchase')}
-            </button>
-          </div>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-6 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:opacity-90 transition-opacity flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-[16px]">add</span>
+            {t('pur.newPurchase')}
+          </button>
         </div>
 
         {/* Filter Bar */}
         <div className="bg-surface-container-low p-4 flex flex-wrap items-center gap-gutter border border-outline-variant/10">
           <div className="flex items-center gap-3">
-            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Year:</span>
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Година:</span>
             <div className="flex gap-2">
               {[2024, 2025, 2026].map(y => (
                 <button
@@ -279,7 +271,7 @@ export default function PurchasesPage() {
           </div>
           <div className="h-6 w-px bg-outline-variant/20" />
           <div className="flex items-center gap-3">
-            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Supplier:</span>
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Доставчик:</span>
             <select
               className="bg-surface-container-high border-none text-body-sm font-body-sm py-1.5 pl-4 pr-10 text-on-surface focus:ring-1 focus:ring-primary-container"
               value={supplierId}

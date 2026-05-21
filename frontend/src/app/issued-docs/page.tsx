@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api, fmt, fmtDate } from '@/lib/api';
-import { Plus, FileText, Search } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
 const DOC_TYPES: Record<string, { label: string; icon: string; color: string }> = {
   PROFORMA:      { label: 'Проформа',        icon: 'receipt_long',          color: 'text-primary' },
@@ -52,23 +52,26 @@ export default function IssuedDocsPage() {
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-headline text-headline-md text-on-surface">Издадени документи</h1>
-          <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-            Проформи, оферти, протоколи, гаранции
-          </p>
+      <div className="border-b border-outline-variant/10 bg-surface-container-lowest sticky top-0 z-10">
+        <div className="px-8 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="font-label-caps text-label-caps text-primary mb-0.5">ФИНАНСИ</p>
+            <h1 className="font-headline text-headline-lg text-on-surface">Издадени документи</h1>
+          </div>
+          <Link href="/issued-docs/new"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:bg-primary/90">
+            <span className="material-symbols-outlined text-[16px]">add</span>
+            Нов документ
+          </Link>
         </div>
-        <Link href="/issued-docs/new"
-          className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Нов документ
-        </Link>
       </div>
 
+      <div className="px-8 py-6 space-y-4">
+
       {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         {Object.entries(DOC_TYPES).map(([type, cfg]) => {
           const count = docs.filter(d => d.type === type).length;
           return (
@@ -86,15 +89,15 @@ export default function IssuedDocsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <select className="input w-44" value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
+      <div className="flex gap-3 flex-wrap">
+        <select className="border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary w-44" value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
           <option value="">Всички години</option>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
+          <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
           <input
-            className="input pl-8"
+            className="w-full border border-outline-variant/30 bg-surface-container-low pl-9 pr-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary"
             placeholder="Търси по номер, клиент..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -104,6 +107,7 @@ export default function IssuedDocsPage() {
 
       {/* Table */}
       <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr>
@@ -168,6 +172,8 @@ export default function IssuedDocsPage() {
             )}
           </tbody>
         </table>
+        </div>
+      </div>
       </div>
     </div>
   );

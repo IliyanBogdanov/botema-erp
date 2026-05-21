@@ -175,7 +175,7 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
                     </td>
                     <td className="table-cell text-center">
                       {items.length > 1 && (
-                        <button type="button" onClick={() => removeItem(i)} className="text-[#71717a] transition-colors hover:text-[#ff453a]">
+                        <button type="button" onClick={() => removeItem(i)} className="text-on-surface-variant/50 transition-colors hover:text-error">
                           <span className="material-symbols-outlined text-[18px]">delete</span>
                         </button>
                       )}
@@ -188,17 +188,17 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
 
           <div className="mt-3 flex justify-end">
             <div className="min-w-[200px] space-y-1 text-sm">
-              <div className="flex justify-between text-[#71717a]">
+              <div className="flex justify-between text-on-surface-variant/60">
                 <span>Нето:</span>
-                <span className="font-semibold text-white">{fmt(net, form.currency)}</span>
+                <span className="font-semibold text-on-surface">{fmt(net, form.currency)}</span>
               </div>
-              <div className="flex justify-between text-[#71717a]">
+              <div className="flex justify-between text-on-surface-variant/60">
                 <span>ДДС:</span>
-                <span className="font-semibold text-white">{fmt(vat, form.currency)}</span>
+                <span className="font-semibold text-on-surface">{fmt(vat, form.currency)}</span>
               </div>
-              <div className="flex justify-between border-t border-[#27272a] pt-1 font-bold">
-                <span className="text-white">Общо:</span>
-                <span className="text-[#0a84ff] text-base">{fmt(total, form.currency)}</span>
+              <div className="flex justify-between border-t border-outline-variant/20 pt-1 font-bold">
+                <span className="text-on-surface">Общо:</span>
+                <span className="text-primary text-base">{fmt(total, form.currency)}</span>
               </div>
             </div>
           </div>
@@ -210,8 +210,8 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
         </div>
 
         {error && (
-          <div className="bg-[rgba(255,69,58,0.1)] border border-[rgba(255,69,58,0.3)] rounded-lg px-3 py-2">
-            <p className="text-[#ff453a] text-sm">{error}</p>
+          <div className="border border-error/30 bg-error/5 px-3 py-2">
+            <p className="text-error text-sm">{error}</p>
           </div>
         )}
 

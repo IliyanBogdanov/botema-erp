@@ -38,7 +38,7 @@ async function generateAlerts(prisma) {
     orderBy: { createdAt: 'asc' },
   });
 
-  // One summary alert for pending documents (instead of per-document noise)
+  // One stable summary alert for pending documents — fixed title for dedup
   if (pendingDocs.length > 0) {
     const critical = pendingDocs.filter(d => Array.isArray(d.riskFlags) && d.riskFlags.includes('DUPLICATE_INVOICE'));
     const severity = critical.length > 0 ? 'CRITICAL' : 'WARNING';
@@ -47,8 +47,8 @@ async function generateAlerts(prisma) {
     created.push(await ensureAlert(prisma, {
       type: 'DOCUMENT',
       severity,
-      title: `${pendingDocs.length} документа чакат решение`,
-      description: `Преглед и класификация необходими: ${typeStr}. Отвори "Документи" за детайли.`,
+      title: 'Чакащи документи за обработка',
+      description: `${pendingDocs.length} документа чакат преглед: ${typeStr}. Отвори "Документи" за детайли.`,
       metadata: { count: pendingDocs.length, byType },
     }));
   }
@@ -66,7 +66,7 @@ async function generateAlerts(prisma) {
         metadata: { flags },
       }));
     }
-    if (flags.includes('MISSING_VAT')) {
+    if (flags.includes('MISSING_VAT') && doc.type === 'INVOICE_IN') {
       created.push(await ensureAlert(prisma, {
         type: 'VAT',
         severity: 'WARNING',
@@ -75,6 +75,22 @@ async function generateAlerts(prisma) {
         documentId: doc.id,
         metadata: { flags },
       }));
+    }
+  }
+
+  // Auto-resolve REVENUE alerts for invoices that are no longer PENDING
+  const activeRevenueAlerts = await prisma.alert.findMany({
+    where: { status: 'ACTIVE', type: 'REVENUE', invoiceId: { not: null } },
+    select: { id: true, invoiceId: true },
+  });
+  if (activeRevenueAlerts.length > 0) {
+    const resolvedIds = [];
+    for (const a of activeRevenueAlerts) {
+      const inv = await prisma.invoice.findUnique({ where: { id: a.invoiceId }, select: { status: true } });
+      if (!inv || inv.status !== 'PENDING') resolvedIds.push(a.id);
+    }
+    if (resolvedIds.length > 0) {
+      await prisma.alert.updateMany({ where: { id: { in: resolvedIds } }, data: { status: 'RESOLVED' } });
     }
   }
 
@@ -138,21 +154,23 @@ async function generateAlerts(prisma) {
 
   const purchasesWithNumbers = await prisma.purchase.findMany({
     where: { invoiceNo: { not: null } },
-    select: { supplierId: true, invoiceNo: true },
+    select: { supplierId: true, invoiceNo: true, amount: true, currency: true },
   });
   const duplicateMap = new Map();
   for (const purchase of purchasesWithNumbers) {
     const invoiceNo = String(purchase.invoiceNo || '').trim();
     if (!invoiceNo) continue;
-    const key = `${purchase.supplierId}:${invoiceNo}`;
-    duplicateMap.set(key, { supplierId: purchase.supplierId, invoiceNo, count: (duplicateMap.get(key)?.count || 0) + 1 });
+    const amt = Math.round(toNumber(purchase.amount) * 100);
+    // Key on supplier + invoiceNo + rounded amount to avoid flagging multi-line orders or net/gross variants
+    const key = `${purchase.supplierId}:${invoiceNo}:${purchase.currency}:${amt}`;
+    duplicateMap.set(key, { supplierId: purchase.supplierId, invoiceNo, amount: purchase.amount, currency: purchase.currency, count: (duplicateMap.get(key)?.count || 0) + 1 });
   }
   for (const duplicate of [...duplicateMap.values()].filter(d => d.count > 1)) {
     created.push(await ensureAlert(prisma, {
       type: 'VAT',
       severity: 'CRITICAL',
       title: `Дублирана входяща фактура ${duplicate.invoiceNo}`,
-      description: 'Има повече от един запис със същия доставчик и номер. Провери преди ДДС отчет.',
+      description: `${duplicate.count}× запис: ${toNumber(duplicate.amount).toFixed(2)} ${duplicate.currency} от доставчик ${duplicate.supplierId}. Провери преди ДДС отчет.`,
       metadata: duplicate,
     }));
   }

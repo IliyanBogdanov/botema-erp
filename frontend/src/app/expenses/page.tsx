@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 import { Modal } from '@/components/Modal';
-import { Plus } from 'lucide-react';
 
 interface Expense {
   id: string;
@@ -139,91 +138,107 @@ export default function ExpensesPage() {
   }, 0);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Разходи</h1>
-          <p className="text-[#71717a] text-sm mt-0.5">{filtered.length} записа</p>
+    <div className="min-h-screen">
+      {/* Header */}
+      <div className="border-b border-outline-variant/10 bg-surface-container-lowest sticky top-0 z-10">
+        <div className="px-8 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="font-label-caps text-label-caps text-primary mb-0.5">ФИНАНСИ</p>
+            <h1 className="font-headline text-headline-lg text-on-surface">Разходи — {year}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 border border-outline-variant/20 p-0.5">
+              {[2024, 2025, 2026].map(y => (
+                <button key={y} onClick={() => setYear(y)}
+                  className={`px-3 py-1.5 font-label-caps text-label-caps transition-colors ${
+                    year === y ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'
+                  }`}>{y}</button>
+              ))}
+            </div>
+            <button onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary font-label-caps text-label-caps hover:bg-primary/90">
+              <span className="material-symbols-outlined text-[16px]">add</span>
+              Нов разход
+            </button>
+          </div>
         </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Нов разход
-        </button>
       </div>
 
-      {/* Year filter */}
-      <div className="flex flex-wrap gap-3 mb-5 items-center">
-        <div className="flex gap-1 bg-[#1d1d1f] p-1 rounded-xl">
-          {[2024, 2025, 2026].map(y => (
-            <button key={y} onClick={() => setYear(y)}
-              className={`px-3 py-1 rounded-lg text-sm font-semibold transition-all ${
-                year === y ? 'bg-[#0a84ff] text-white' : 'text-[#71717a] hover:text-white'
-              }`}>{y}</button>
-          ))}
-        </div>
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <span className="material-symbols-outlined text-[16px] text-[#52525b] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
+      <div className="px-8 py-6 space-y-4">
+        {/* Search */}
+        <div className="relative max-w-sm">
+          <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
           <input
-            className="input pl-9 w-full"
+            className="w-full border border-outline-variant/30 bg-surface-container-low pl-9 pr-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary"
             placeholder="Търси по доставчик, категория..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[560px]">
-          <thead>
-            <tr>
-              <th className="table-header">Дата</th>
-              <th className="table-header">Категория</th>
-              <th className="table-header">Доставчик</th>
-              <th className="table-header">Описание</th>
-              <th className="table-header text-right">Сума</th>
-              <th className="table-header">Валута</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(5)].map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  {[...Array(6)].map((_, j) => (
-                    <td key={j} className="table-cell"><div className="h-4 bg-[#27272a] rounded" /></td>
-                  ))}
+        {/* Table */}
+        <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
+              <thead>
+                <tr className="border-b border-outline-variant/10">
+                  <th className="table-header text-left">ДАТА</th>
+                  <th className="table-header text-left">КАТЕГОРИЯ</th>
+                  <th className="table-header text-left">ДОСТАВЧИК</th>
+                  <th className="table-header text-left">ОПИСАНИЕ</th>
+                  <th className="table-header text-right">СУМА</th>
+                  <th className="table-header text-left">ВАЛ.</th>
                 </tr>
-              ))
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="table-cell text-center text-[#52525b] py-10">Няма разходи</td></tr>
-            ) : (
-              filtered.map(e => (
-                <tr key={e.id} className="hover:bg-[#1d1d1f] transition-colors">
-                  <td className="table-cell text-[#a1a1aa]">{fmtDate(e.date)}</td>
-                  <td className="table-cell">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#27272a] text-[#e4e4e7] text-xs font-medium">
-                      {e.category}
-                    </span>
-                  </td>
-                  <td className="table-cell text-[#a1a1aa]">{e.supplier || '—'}</td>
-                  <td className="table-cell text-[#71717a] truncate max-w-[220px]">{e.description || '—'}</td>
-                  <td className="table-cell text-right font-semibold text-white">{fmt(e.amount, e.currency)}</td>
-                  <td className="table-cell text-[#71717a] text-xs">{e.currency}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-          {!isLoading && filtered.length > 0 && (
-            <tfoot>
-              <tr className="bg-[#1d1d1f]">
-                <td colSpan={4} className="table-cell font-semibold text-[#71717a] text-xs uppercase tracking-wider">Общо (EUR) — {year} г.</td>
-                <td className="table-cell text-right font-bold text-white text-base">
-                  {totalEUR.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
-                </td>
-                <td className="table-cell" />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i} className="animate-pulse border-b border-outline-variant/5">
+                      {[...Array(6)].map((_, j) => (
+                        <td key={j} className="table-cell"><div className="h-4 bg-surface-container-high rounded" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="table-cell text-center text-on-surface-variant/40 py-12">
+                      <span className="material-symbols-outlined text-4xl block mb-2 opacity-30">receipt</span>
+                      Няма разходи за {year} г.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map(e => (
+                    <tr key={e.id} className="border-b border-outline-variant/5 hover:bg-surface-container-high transition-colors">
+                      <td className="table-cell font-label-caps text-[10px] text-on-surface-variant">{fmtDate(e.date)}</td>
+                      <td className="table-cell">
+                        <span className="inline-flex items-center px-2 py-0.5 border border-outline-variant/20 bg-surface-container font-label-caps text-[9px] text-on-surface-variant">
+                          {e.category}
+                        </span>
+                      </td>
+                      <td className="table-cell text-on-surface-variant/70 text-sm">{e.supplier || '—'}</td>
+                      <td className="table-cell text-on-surface-variant/50 text-sm truncate max-w-[220px]">{e.description || '—'}</td>
+                      <td className="table-cell text-right font-data-mono text-data-mono text-on-surface font-semibold">{fmt(e.amount, e.currency)}</td>
+                      <td className="table-cell font-label-caps text-[9px] text-on-surface-variant/60">{e.currency}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {!isLoading && filtered.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-outline-variant/20 bg-surface-container">
+                    <td colSpan={4} className="table-cell font-label-caps text-label-caps text-on-surface-variant">
+                      ОБЩО (EUR) — {year} г. · {filtered.length} записа
+                    </td>
+                    <td className="table-cell text-right font-data-mono text-on-surface font-bold text-base">
+                      {totalEUR.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
+                    </td>
+                    <td className="table-cell" />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
       </div>
 
       <ExpenseModal open={modalOpen} onClose={() => setModalOpen(false)} />

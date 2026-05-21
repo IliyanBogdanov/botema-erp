@@ -443,7 +443,7 @@ function ReviewModal({ doc, onClose }: { doc: Document | null; onClose: () => vo
 }
 
 export default function DocumentsPage() {
-  const [activeStatus, setActiveStatus] = useState('PENDING');
+  const [activeStatus, setActiveStatus] = useState('PROCESSED');
   const [selected, setSelected] = useState<Document | null>(null);
   const [reviewDoc, setReviewDoc] = useState<Document | null>(null);
   const [reparseJobId, setReparseJobId] = useState<string | null>(null);

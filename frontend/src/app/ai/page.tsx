@@ -32,7 +32,7 @@ function TypingIndicator() {
   return (
     <div className="flex gap-3 justify-start">
       <AIAvatar />
-      <div className="bg-[#1d1d1f] border border-[#27272a] rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5">
+      <div className="bg-surface-container-low border border-outline-variant/20 rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5">
         <span className="typing-dot" />
         <span className="typing-dot" />
         <span className="typing-dot" />
@@ -48,14 +48,14 @@ function MessageBubble({ msg }: { msg: Message }) {
       {msg.role === 'assistant' && <AIAvatar />}
       <div className={`max-w-[75%] text-sm leading-relaxed ${
         msg.role === 'user'
-          ? 'bg-[#0a84ff] text-white rounded-2xl rounded-br-md px-4 py-3'
-          : 'bg-[#1d1d1f] text-[#e4e4e7] border border-[#27272a] rounded-2xl rounded-bl-md'
+          ? 'bg-primary text-on-primary rounded-2xl rounded-br-md px-4 py-3'
+          : 'bg-surface-container-low text-on-surface border border-outline-variant/20 rounded-2xl rounded-bl-md'
       }`}>
         {msg.role === 'assistant' ? (
           <div className="px-4 py-3 space-y-2">
             {parts.map((part, i) =>
               part.startsWith('```') ? (
-                <pre key={i} className="bg-[#09090b] border border-[#27272a] rounded-lg p-3 text-xs text-[#30d158] overflow-x-auto font-mono whitespace-pre-wrap">
+                <pre key={i} className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-3 text-xs text-emerald-400 overflow-x-auto font-mono whitespace-pre-wrap">
                   {part.replace(/^```\w*\n?/, '').replace(/```$/, '')}
                 </pre>
               ) : (
@@ -68,8 +68,8 @@ function MessageBubble({ msg }: { msg: Message }) {
         )}
       </div>
       {msg.role === 'user' && (
-        <div className="w-8 h-8 rounded-xl bg-[#27272a] flex items-center justify-center flex-shrink-0 mt-0.5">
-          <User size={15} className="text-[#a1a1aa]" />
+        <div className="w-8 h-8 rounded-xl bg-surface-container-high border border-outline-variant/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <User size={15} className="text-on-surface-variant" />
         </div>
       )}
     </div>
@@ -127,15 +127,15 @@ export default function AIPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-[#27272a] flex items-center gap-3">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-outline-variant/15 flex items-center gap-3">
         <AIAvatar size={36} />
         <div>
-          <h1 className="text-base font-bold text-white">Botema AI</h1>
-          <p className="text-xs text-[#52525b]">Studio Botema ERP · Gemini 2.5 Flash</p>
+          <h1 className="font-label-caps text-label-caps text-on-surface">BOTEMA AI</h1>
+          <p className="font-body-sm text-[10px] text-on-surface-variant/50">Studio Botema ERP · Gemini 2.5 Flash</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse" />
-          <span className="text-xs text-[#52525b]">онлайн</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-label-caps text-[9px] text-on-surface-variant/50">ОНЛАЙН</span>
         </div>
       </div>
 
@@ -147,8 +147,8 @@ export default function AIPage() {
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 px-4 py-4 border-t border-[#27272a]">
-        <div className="flex gap-3 items-end bg-[#1d1d1f] border border-[#27272a] rounded-2xl px-4 py-3 focus-within:border-[rgba(191,90,242,0.5)] transition-colors">
+      <div className="flex-shrink-0 px-4 py-4 border-t border-outline-variant/15">
+        <div className="flex gap-3 items-end bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 focus-within:border-primary/30 transition-colors">
           <textarea
             ref={inputRef}
             value={input}
@@ -156,22 +156,21 @@ export default function AIPage() {
             onKeyDown={handleKeyDown}
             placeholder="Задай въпрос..."
             rows={1}
-            className="flex-1 bg-transparent text-[#e4e4e7] text-sm outline-none resize-none placeholder:text-[#52525b] max-h-32"
+            className="flex-1 bg-transparent text-on-surface text-sm outline-none resize-none placeholder:text-on-surface-variant/40 max-h-32"
             style={{ lineHeight: '1.5' }}
             disabled={loading}
           />
           <button
             onClick={send}
             disabled={!input.trim() || loading}
-            className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center
-              transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'rgba(191,90,242,0.2)', color: '#bf5af2' }}
             title="⌘+↵"
           >
             <Send size={13} />
           </button>
         </div>
-        <p className="text-center text-xs text-[#3f3f46] mt-2">
+        <p className="text-center font-label-caps text-[9px] text-on-surface-variant/30 mt-2">
           ⌘+↵ за изпращане · AI може да прави грешки
         </p>
       </div>

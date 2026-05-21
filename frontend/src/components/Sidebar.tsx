@@ -13,8 +13,6 @@ const navGroups = [
       { key: 'nav.dashboard',  href: '/',          icon: 'dashboard',           exact: true },
       { key: 'nav.purchases',  href: '/purchases', icon: 'shopping_cart' },
       { key: 'nav.documents',  href: '/documents', icon: 'auto_awesome' },
-      { key: 'nav.orders',     href: '/orders',    icon: 'shopping_bag' },
-      { key: 'nav.inventory',  href: '/inventory', icon: 'inventory_2' },
       { key: 'nav.projects',   href: '/projects',  icon: 'folder_open' },
     ],
   },
