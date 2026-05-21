@@ -134,14 +134,14 @@ router.post('/chat', auth, async (req, res) => {
         select: { code: true, name: true, category: true, qtyIn: true, qtyOut: true, location: true },
       }),
       prisma.payment.count({ where: { status: 'UNMATCHED' } }),
-      // All-time invoices for per-year revenue breakdown
+      // All-time invoices for per-year revenue breakdown (company active from 2020)
       prisma.invoice.findMany({
-        where: { status: { not: 'CANCELLED' } },
+        where: { status: { not: 'CANCELLED' }, date: { gte: new Date('2020-01-01') } },
         select: { date: true, amountNet: true, currency: true },
       }),
-      // All-time costs from BizDocument INVOICE_IN (authoritative source)
+      // All-time costs from BizDocument INVOICE_IN (authoritative source, from 2020)
       prisma.bizDocument.findMany({
-        where: { docType: 'INVOICE_IN', status: { notIn: ['REJECTED', 'ARCHIVED'] } },
+        where: { docType: 'INVOICE_IN', status: { notIn: ['REJECTED', 'ARCHIVED'] }, docDate: { gte: new Date('2020-01-01') } },
         select: { docDate: true, amountTotal: true, currency: true },
       }),
     ]);

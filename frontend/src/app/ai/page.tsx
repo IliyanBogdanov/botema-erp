@@ -118,7 +118,7 @@ export default function AIPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send();
     }
@@ -171,7 +171,7 @@ export default function AIPage() {
           </button>
         </div>
         <p className="text-center font-label-caps text-[9px] text-on-surface-variant/30 mt-2">
-          ⌘+↵ за изпращане · AI може да прави грешки
+          ↵ за изпращане · Shift+↵ за нов ред · AI може да прави грешки
         </p>
       </div>
     </div>
