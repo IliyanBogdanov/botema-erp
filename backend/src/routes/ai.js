@@ -95,9 +95,9 @@ router.post('/chat', auth, async (req, res) => {
       recentPayments,
       recentOffers,
       inventory,
-      revenueAgg,
-      costsAgg,
       paymentsUnmatchedCount,
+      allInvoices,
+      allCosts,
     ] = await Promise.all([
       prisma.client.findMany({ select: { id: true, name: true, eik: true, email: true } }),
       prisma.counterparty.findMany({
@@ -133,30 +133,61 @@ router.post('/chat', auth, async (req, res) => {
       prisma.inventoryItem.findMany({
         select: { code: true, name: true, category: true, qtyIn: true, qtyOut: true, location: true },
       }),
-      prisma.invoice.aggregate({
-        where: { date: { gte: new Date(`${currentYear}-01-01`) }, status: { not: 'CANCELLED' } },
-        _sum: { amountNet: true },
-      }),
-      prisma.purchase.aggregate({
-        where: { date: { gte: new Date(`${currentYear}-01-01`) } },
-        _sum: { amount: true },
-      }),
       prisma.payment.count({ where: { status: 'UNMATCHED' } }),
+      // All-time invoices for per-year revenue breakdown
+      prisma.invoice.findMany({
+        where: { status: { not: 'CANCELLED' } },
+        select: { date: true, amountNet: true, currency: true },
+      }),
+      // All-time costs from BizDocument INVOICE_IN (authoritative source)
+      prisma.bizDocument.findMany({
+        where: { docType: 'INVOICE_IN', status: { notIn: ['REJECTED', 'ARCHIVED'] } },
+        select: { docDate: true, amountTotal: true, currency: true },
+      }),
     ]);
 
-    const revenueTotal = Number(revenueAgg._sum.amountNet || 0);
-    const costsTotal = Number(costsAgg._sum.amount || 0);
+    // Build per-year revenue breakdown
+    const BGN_PER_EUR = 1.95583;
+    const revenueByYear = {};
+    for (const inv of allInvoices) {
+      const yr = inv.date ? new Date(inv.date).getFullYear() : null;
+      if (!yr) continue;
+      const eur = inv.currency === 'BGN' ? Number(inv.amountNet || 0) / BGN_PER_EUR : Number(inv.amountNet || 0);
+      revenueByYear[yr] = (revenueByYear[yr] || 0) + eur;
+    }
+
+    // Build per-year costs breakdown (BGN equivalent)
+    const costsByYear = {};
+    for (const doc of allCosts) {
+      const yr = doc.docDate ? new Date(doc.docDate).getFullYear() : null;
+      if (!yr) continue;
+      const bgn = doc.currency === 'EUR' ? Number(doc.amountTotal || 0) * BGN_PER_EUR : Number(doc.amountTotal || 0);
+      costsByYear[yr] = (costsByYear[yr] || 0) + bgn;
+    }
+
+    const revenueTotal = revenueByYear[currentYear] || 0;
+    const costsTotal = costsByYear[currentYear] || 0;
+    const revenueTotalAllTime = Object.values(revenueByYear).reduce((s, v) => s + v, 0);
+    const costsTotalAllTime = Object.values(costsByYear).reduce((s, v) => s + v, 0);
 
     const systemPrompt = `Ти си финансов AI асистент на Studio Botema ЕООД — бутик дизайн студио в Пазарджик, България.
 Отговаряй САМО на БЪЛГАРСКИ. Бъди кратък, точен и практичен. Използвай данните от системата за точни отговори.
 
 === ФИНАНСОВО РЕЗЮМЕ (${now.toLocaleDateString('bg-BG')}) ===
-- Приходи ${currentYear}: ${revenueTotal.toFixed(2)} EUR
-- Разходи ${currentYear}: ${costsTotal.toFixed(2)} BGN
+- Приходи ${currentYear}: ${revenueTotal.toFixed(0)} EUR
+- Разходи ${currentYear}: ${costsTotal.toFixed(0)} BGN
+- Приходи ОТ НАЧАЛО (всички години): ${revenueTotalAllTime.toFixed(0)} EUR
+- Разходи ОТ НАЧАЛО (всички години): ${costsTotalAllTime.toFixed(0)} BGN
 - Активни проекти: ${projects.length}
 - Клиенти: ${clients.length} (CRM) + ${counterparties.length} контрагента (банкови)
 - Неплатени фактури: ${unpaidInvoices.length}
 - Ненасочени банкови плащания: ${paymentsUnmatchedCount}
+
+=== ПРИХОДИ ПО ГОДИНИ (EUR) ===
+${Object.entries(revenueByYear).sort(([a],[b]) => Number(a)-Number(b)).map(([yr, eur]) => `- ${yr}: ${eur.toFixed(0)} EUR`).join('\n')}
+
+=== РАЗХОДИ ПО ГОДИНИ (BGN еквивалент) ===
+${Object.entries(costsByYear).sort(([a],[b]) => Number(a)-Number(b)).map(([yr, bgn]) => `- ${yr}: ${bgn.toFixed(0)} BGN`).join('\n')}
 
 === АКТИВНИ ПРОЕКТИ ===
 ${JSON.stringify(projects.map(p => ({ kod: p.code, proekt: p.name, klient: p.client?.name, status: p.status, godina: p.year, belezhki: p.notes })), null, 2)}
