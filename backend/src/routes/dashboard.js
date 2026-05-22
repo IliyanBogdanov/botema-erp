@@ -85,7 +85,7 @@ router.get('/', auth, async (req, res) => {
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
-          status: { not: 'REJECTED' },
+          status: { notIn: ['REJECTED', 'ARCHIVED'] },
           amountTotal: { gt: 0 },
           docDate: { gte: startDate, lte: endDate },
         },
@@ -230,7 +230,7 @@ router.get('/monthly-pnl', auth, async (req, res) => {
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
-          status: { not: 'REJECTED' },
+          status: { notIn: ['REJECTED', 'ARCHIVED'] },
           amountTotal: { gt: 0 },
           docDate: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
         },
