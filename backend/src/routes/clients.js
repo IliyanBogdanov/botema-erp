@@ -37,7 +37,7 @@ router.get('/:id', auth, async (req, res) => {
   if (!client) return res.status(404).json({ error: 'Not found' });
 
   const invoices = await prisma.invoice.findMany({
-    where: { clientId: req.params.id, status: { not: 'CANCELLED' } },
+    where: { clientId: req.params.id, status: { notIn: ['CANCELLED', 'ARCHIVED'] } },
     include: { project: { select: { id: true, code: true, name: true } } },
     orderBy: { date: 'desc' },
   });
@@ -83,7 +83,7 @@ router.get('/:id', auth, async (req, res) => {
 router.get('/:id/stats', auth, async (req, res) => {
   const [invoices, revenue] = await Promise.all([
     prisma.invoice.findMany({ where: { clientId: req.params.id }, orderBy: { date: 'desc' }, take: 20 }),
-    prisma.invoice.aggregate({ where: { clientId: req.params.id, status: { not: 'CANCELLED' } }, _sum: { amountNet: true } })
+    prisma.invoice.aggregate({ where: { clientId: req.params.id, status: { notIn: ['CANCELLED', 'ARCHIVED'] } }, _sum: { amountNet: true } })
   ]);
   res.json({ invoices, totalRevenue: Number(revenue._sum.amountNet || 0) });
 });
