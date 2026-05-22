@@ -148,7 +148,7 @@ export default function ExpensesPage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1 border border-outline-variant/20 p-0.5">
-              {[2024, 2025, 2026].map(y => (
+              {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear()].map(y => (
                 <button key={y} onClick={() => setYear(y)}
                   className={`px-3 py-1.5 font-label-caps text-label-caps transition-colors ${
                     year === y ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'

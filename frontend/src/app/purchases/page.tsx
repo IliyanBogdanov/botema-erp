@@ -254,7 +254,7 @@ export default function PurchasesPage() {
           <div className="flex items-center gap-3">
             <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Година:</span>
             <div className="flex gap-2">
-              {[2024, 2025, 2026].map(y => (
+              {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear()].map(y => (
                 <button
                   key={y}
                   onClick={() => setYear(y)}

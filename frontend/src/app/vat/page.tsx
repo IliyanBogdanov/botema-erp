@@ -75,7 +75,7 @@ export default function VatPage() {
             <h1 className="font-headline text-headline-lg text-on-surface">ДДС Справка — {year}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {[2024, 2025, 2026].map(y => (
+            {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear()].map(y => (
               <button key={y} onClick={() => setYear(y)}
                 className={`px-4 py-2 font-label-caps text-label-caps transition-colors border ${y === year
                   ? 'bg-primary-container text-on-primary-container border-primary-container'

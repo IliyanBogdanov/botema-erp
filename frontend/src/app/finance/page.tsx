@@ -48,7 +48,7 @@ export default function FinancePage() {
             <h1 className="font-headline text-headline-lg text-on-surface">Приходи & Разходи — {year}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {[2024, 2025, 2026].map(y => (
+            {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear()].map(y => (
               <button key={y} onClick={() => setYear(y)}
                 className={`px-4 py-2 font-label-caps text-label-caps transition-colors border ${y === year
                   ? 'bg-primary-container text-on-primary-container border-primary-container'
@@ -193,7 +193,7 @@ export default function FinancePage() {
         <div className="border border-outline-variant/5 bg-surface-container-lowest p-4 flex items-start gap-2">
           <span className="material-symbols-outlined text-[16px] text-on-surface-variant/40 mt-0.5">info</span>
           <p className="font-body-sm text-body-sm text-on-surface-variant/60">
-            Приходите са от издадени фактури (без отменени). Разходите са от всички регистрирани покупки за периода.
+            Приходите са от издадени фактури (без отменени и архивирани). Разходите са от всички регистрирани покупки за периода.
             Данните са ориентировъчни и не заместват счетоводен отчет.
           </p>
         </div>

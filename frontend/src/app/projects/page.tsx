@@ -36,7 +36,8 @@ function getStatusTabs(t: ReturnType<typeof useT>) {
     { label: t('proj.onHold'), value: 'ON_HOLD' },
   ];
 }
-const yearTabs = [2024, 2025, 2026];
+const CY = new Date().getFullYear();
+const yearTabs = [CY - 2, CY - 1, CY];
 
 function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();

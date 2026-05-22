@@ -154,7 +154,7 @@ export default function DashboardPage() {
         {/* year + export row pinned bottom-right of hero */}
         <div className="absolute bottom-8 right-container-padding flex gap-3">
           <div className="flex gap-1 border border-outline-variant/20 bg-surface/40 backdrop-blur-md rounded-md p-1">
-            {[2024, 2025, 2026].map(y => (
+            {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear()].map(y => (
               <button
                 key={y}
                 onClick={() => setYear(y)}
