@@ -23,7 +23,7 @@ router.get('/monthly-breakdown', auth, async (req, res) => {
 
     const [invoices, purchases] = await Promise.all([
       prisma.invoice.findMany({
-        where: { date: { gte: start, lte: end }, status: { notIn: ['CANCELLED', 'ARCHIVED'] } },
+        where: { date: { gte: start, lte: end }, status: { not: 'CANCELLED' } },
         select: { date: true, currency: true, vatAmount: true, amountNet: true, amountTotal: true },
       }),
       prisma.purchase.findMany({
@@ -80,7 +80,7 @@ router.get('/overview', auth, async (req, res) => {
 
     const [invoices, purchases, documents, vatAlerts] = await Promise.all([
       prisma.invoice.findMany({
-        where: { date: { gte: start, lte: end }, status: { notIn: ['CANCELLED', 'ARCHIVED'] } },
+        where: { date: { gte: start, lte: end }, status: { not: 'CANCELLED' } },
         select: { id: true, number: true, date: true, currency: true, vatAmount: true, amountTotal: true },
       }),
       prisma.purchase.findMany({

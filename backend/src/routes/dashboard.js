@@ -41,7 +41,7 @@ router.get('/', auth, async (req, res) => {
     ] = await Promise.all([
       // Fetch individually so we can do proper currency conversion
       prisma.invoice.findMany({
-        where: { date: { gte: startDate, lte: endDate }, status: { notIn: ['CANCELLED', 'ARCHIVED'] } },
+        where: { date: { gte: startDate, lte: endDate }, status: { not: 'CANCELLED' } },
         select: { amountNet: true, vatAmount: true, amountTotal: true, currency: true },
       }),
       prisma.invoice.findMany({
@@ -60,7 +60,7 @@ router.get('/', auth, async (req, res) => {
           brand
         FROM invoices
         WHERE EXTRACT(YEAR FROM date) = ${yearNum}
-          AND status NOT IN ('CANCELLED', 'ARCHIVED')
+          AND status != 'CANCELLED'
         GROUP BY month, brand
         ORDER BY month
       `,
@@ -70,7 +70,7 @@ router.get('/', auth, async (req, res) => {
           SUM(CASE WHEN currency = 'EUR' THEN "amountNet" ELSE "amountNet" / 1.95583 END) AS revenue_eur
         FROM invoices
         WHERE date >= ${startDate} AND date <= ${endDate}
-          AND status NOT IN ('CANCELLED', 'ARCHIVED')
+          AND status != 'CANCELLED'
           AND "clientId" IS NOT NULL
         GROUP BY "clientId"
         ORDER BY revenue_eur DESC
@@ -101,7 +101,7 @@ router.get('/', auth, async (req, res) => {
         _count: { id: true }
       }),
       prisma.invoice.count({
-        where: { date: { gte: startDate, lte: endDate }, status: { notIn: ['CANCELLED', 'ARCHIVED'] } },
+        where: { date: { gte: startDate, lte: endDate }, status: { not: 'CANCELLED' } },
       }),
       prisma.payment.groupBy({ by: ['status'], _count: true }),
       prisma.invoice.findMany({
@@ -222,7 +222,7 @@ router.get('/monthly-pnl', auth, async (req, res) => {
       prisma.invoice.findMany({
         where: {
           date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
-          status: { notIn: ['CANCELLED', 'ARCHIVED'] },
+          status: { not: 'CANCELLED' },
         },
         select: { date: true, currency: true, amountNet: true, vatAmount: true, amountTotal: true },
       }),

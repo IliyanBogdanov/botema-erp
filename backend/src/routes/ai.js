@@ -136,7 +136,7 @@ router.post('/chat', auth, async (req, res) => {
       prisma.payment.count({ where: { status: 'UNMATCHED' } }),
       // All-time invoices for per-year revenue breakdown (company active from 2020)
       prisma.invoice.findMany({
-        where: { status: { notIn: ['CANCELLED', 'ARCHIVED'] }, date: { gte: new Date('2020-01-01') } },
+        where: { status: { not: 'CANCELLED' }, date: { gte: new Date('2020-01-01') } },
         select: { date: true, amountNet: true, currency: true },
       }),
       // All-time costs from BizDocument INVOICE_IN (authoritative source, from 2020)
