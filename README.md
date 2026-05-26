@@ -4,16 +4,18 @@
 
 ## Функционалности
 
-- 📊 **Дашборд** — KPI, графики по месец, топ клиенти
-- 📤 **Фактури** — издаване, проследяване, статуси (BGN + EUR)
-- 📥 **Доставки** — входящи от доставчици (Lodes, Alphaluce, Karimoku...)
-- 🏷 **Склад** — наличности, движения (постъпване/изписване), мостри
-- 📁 **Проекти** — 1717.xxx номера, клиенти, финанси по проект
-- 👥 **Клиенти** — 40+ партньора от 2024 насам
-- 💸 **Разходи** — наем, счетоводство, транспорт, реклама
-- 📧 **Gmail мониторинг** — автоматично засичане на нови фактури по имейл
-- 🤖 **AI Асистент** — на български, с достъп до всички данни
-- 📱 **PWA** — работи като мобилно приложение
+- **Дашборд** — KPI, месечен P&L, топ клиенти и доставчици, банкова рекон.
+- **Фактури** — издаване, проследяване, aging report (BGN + EUR)
+- **Документи (BizDoc)** — входящи фактури от Gmail и Drive, AI парсване, статуси
+- **Доставки** — входящи покупки от доставчици
+- **Банкова рекон.** — импорт на CSV извлечения, автоматично съпоставяне с фактури
+- **ДДС** — месечна справка, изходящ/входящ ДДС, нет позиция
+- **Склад** — наличности, движения, мостри
+- **Проекти** — кодове, клиенти, P&L по проект
+- **Клиенти** — CRM, история на фактурите, приходи по година
+- **Разходи** — наем, счетоводство, транспорт, реклама
+- **Gmail мониторинг** — автоматично засичане на нови фактури по имейл
+- **AI Асистент** — на български, с достъп до всички данни (Gemini 2.5 Flash)
 
 ## Технологии
 
@@ -22,18 +24,17 @@
 | Frontend | Next.js 14 + TypeScript + Tailwind CSS |
 | Backend | Node.js + Express + Prisma ORM |
 | Database | PostgreSQL (Supabase) |
-| AI | Anthropic Claude API |
+| AI | Gemini 2.5 Flash (fallback: Groq llama-3.3-70b, OpenRouter) |
 | Email | Gmail API + Google Pub/Sub |
 | Storage | Google Drive API |
 | Deploy FE | Vercel |
 | Deploy BE | Railway |
-| CI/CD | GitHub Actions |
 
 ## Бърз старт
 
 ### 1. Клонирай репото
 ```bash
-git clone https://github.com/studiobotema/botema-erp.git
+git clone https://github.com/IliyanBogdanov/botema-erp.git
 cd botema-erp
 ```
 
@@ -71,8 +72,8 @@ Prisma Studio: `cd backend && npm run db:studio`
 ### Backend → Railway
 1. Създай проект на [railway.app](https://railway.app)
 2. Свържи GitHub repo
-3. Добави environment variables
-4. Railway автоматично деплойва от `main` branch
+3. Добави environment variables (виж `.env.example`)
+4. Railway автоматично деплойва от `master` branch
 
 ### Frontend → Vercel
 ```bash
@@ -100,42 +101,50 @@ curl -X POST https://your-backend.railway.app/api/gmail/watch \
 botema-erp/
 ├── backend/
 │   ├── prisma/
-│   │   └── schema.prisma     # Database schema
+│   │   └── schema.prisma        # Database schema
+│   ├── scripts/                 # Utility & migration scripts
 │   └── src/
-│       ├── index.js           # Entry point
+│       ├── index.js             # Entry point
 │       ├── middleware/
-│       │   └── auth.js        # JWT auth
+│       │   └── auth.js          # JWT auth
 │       ├── routes/
 │       │   ├── auth.js
-│       │   ├── dashboard.js
-│       │   ├── invoices.js
+│       │   ├── dashboard.js     # KPIs, monthly P&L
+│       │   ├── invoices.js      # Outgoing invoices
+│       │   ├── bizDocuments.js  # Incoming docs (AI parsed)
+│       │   ├── payments.js      # Bank statement payments
+│       │   ├── reconciliation.js
+│       │   ├── vat.js
 │       │   ├── purchases.js
-│       │   ├── inventory.js
 │       │   ├── projects.js
 │       │   ├── clients.js
 │       │   ├── expenses.js
-│       │   ├── ai.js          # Claude AI integration
-│       │   └── gmail.js       # Gmail monitoring
+│       │   ├── inventory.js
+│       │   ├── ai.js            # Gemini AI chat
+│       │   └── gmail.js         # Gmail monitoring
 │       └── lib/
-│           └── seed.js        # Database seed
+│           ├── aiParser.js      # PDF → structured data
+│           ├── gmailScanner.js
+│           ├── reconciliationEngine.js
+│           └── seed.js
 ├── frontend/
 │   └── src/
-│       ├── app/               # Next.js App Router
-│       ├── components/        # React components
+│       ├── app/                 # Next.js App Router pages
+│       ├── components/          # Shared React components
 │       └── lib/
-│           └── api.ts         # API client
-├── .github/
-│   └── workflows/
-│       └── deploy.yml         # CI/CD
-└── railway.toml               # Railway config
+│           ├── api.ts           # Axios API client
+│           └── i18n.ts          # BG/EN translations
+└── railway.toml                 # Railway config
 ```
 
 ## Акаунти при стартиране
 
-| Email | Role | Парола |
-|-------|------|--------|
-| office@studiobotema.com | ADMIN | (от ADMIN_PASSWORD в .env) |
-| office@luminavera.com | STAFF | temppass123 (смени!) |
+| Email | Role |
+|-------|------|
+| office@studiobotema.com | ADMIN |
+| office@luminavera.com | STAFF |
+
+Паролите се задават чрез `ADMIN_PASSWORD` в `.env` или чрез `scripts/reset-password.js`.
 
 ## Лиценз
 Частен проект — Studio Botema ЕООД © 2026
