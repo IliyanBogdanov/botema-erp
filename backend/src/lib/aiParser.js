@@ -389,6 +389,104 @@ function parseJsonFromAIText(text, label = 'AI') {
   return JSON.parse(jsonMatch[0]);
 }
 
+function parseEuropeanNumber(raw) {
+  if (!raw) return null;
+  let s = String(raw).replace(/\s/g, '').replace(/[^\d,.-]/g, '');
+  if (!s) return null;
+  const comma = s.lastIndexOf(',');
+  const dot = s.lastIndexOf('.');
+  if (comma > dot) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (dot > comma) {
+    s = s.replace(/,/g, '');
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeDate(raw) {
+  if (!raw) return null;
+  const text = String(raw);
+  let m = text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+function inferCurrencyFromText(text, fallback = null) {
+  if (/\bEUR\b|€/i.test(text)) return 'EUR';
+  if (/\bBGN\b|лв\.?|лева/i.test(text)) return 'BGN';
+  if (/\bUSD\b|\$/i.test(text)) return 'USD';
+  if (/\bGBP\b|£/i.test(text)) return 'GBP';
+  return fallback;
+}
+
+function inferDocTypeFromText(text, folder) {
+  const lower = `${folder || ''}\n${text || ''}`.toLowerCase();
+  if (/proforma|проформа/.test(lower)) return 'PROFORMA';
+  if (/offer|оферта/.test(lower)) return 'OFFER';
+  if (/delivery note|стокова|delivery|packing list|товарителница/.test(lower)) return 'DELIVERY_NOTE';
+  if (/изходящи|invoice-\d+-for-operation-sale|студио ботема еоод\s+фактура/i.test(lower)) return 'INVOICE_OUT';
+  if (/invoice|фактура|fattura|rechnung/.test(lower)) return 'INVOICE_IN';
+  return 'OTHER';
+}
+
+function extractLikelyTotal(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const labelled = [];
+  const all = [];
+  const amountRe = /(?:€|\bEUR\b|\bBGN\b|\bUSD\b|лв\.?)?\s*(-?\d{1,3}(?:[ .]\d{3})*(?:[,.]\d{2,4})|-?\d+(?:[,.]\d{2,4}))(?:\s*(?:€|\bEUR\b|\bBGN\b|\bUSD\b|лв\.?))?/gi;
+
+  for (const line of lines) {
+    const isTotalLine = /total|totale|gesamt|общо|сума|amount due|due|grand total|за плащане/i.test(line);
+    let match;
+    while ((match = amountRe.exec(line))) {
+      const value = parseEuropeanNumber(match[1]);
+      if (value == null || value <= 0) continue;
+      all.push(value);
+      if (isTotalLine) labelled.push(value);
+    }
+  }
+
+  const pool = labelled.length ? labelled : all;
+  if (!pool.length) return null;
+  return Math.max(...pool);
+}
+
+function parseStructuredFromMineruText(filename, folder, text) {
+  const body = String(text || '');
+  const docType = inferDocTypeFromText(body, folder);
+  const currency = inferCurrencyFromText(body, parseFromFilename(filename, folder).currency);
+  const amountTotal = extractLikelyTotal(body);
+  const invoiceNo = (
+    body.match(/(?:invoice|фактура|faktura|fattura|rechnung|no\.?|№|number|номер)\s*[:#№-]?\s*([A-ZА-Я0-9][A-ZА-Я0-9./_-]{2,})/i)?.[1]
+    || extractInvoiceNo(filename)
+    || null
+  );
+  const docDate = normalizeDate(
+    body.match(/(?:date|дата|data|datum|invoice date)\s*[:.-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})/i)?.[1]
+    || body.match(/\b(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/)?.[1]
+  );
+
+  const found = [invoiceNo, docDate, amountTotal, currency].filter(Boolean).length;
+  return {
+    docType,
+    invoiceNo,
+    docDate,
+    dueDate: null,
+    currency,
+    amountNet: null,
+    vatAmount: null,
+    amountTotal,
+    description: filename,
+    supplierName: null,
+    supplierVat: null,
+    confidence: found >= 4 ? 80 : found === 3 ? 65 : found === 2 ? 45 : 20,
+    extractionProvider: 'mineru+heuristic',
+  };
+}
+
 async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
   const providers = [];
 
@@ -509,21 +607,33 @@ Return ONLY valid JSON (no markdown, no explanation):
     try {
       const mineru = await runMineru({ filename, buffer: pdfBuffer });
       if (mineru.text) {
-        const { parsed, provider } = await extractJsonFromTextPrompt(`${prompt}
-
-MinerU extracted document content:
-${mineru.text.substring(0, 24000)}
-
-Return ONLY the structured JSON requested above.`, 'MinerU');
-        return {
+        const withMineruMeta = (parsed) => ({
           ...parsed,
-          extractionProvider: `mineru+${provider}`,
           mineru: {
             durationMs: mineru.durationMs,
             digest: mineru.digest,
             files: mineru.files,
           },
-        };
+        });
+
+        try {
+          const { parsed, provider } = await extractJsonFromTextPrompt(`${prompt}
+
+MinerU extracted document content:
+${mineru.text.substring(0, 24000)}
+
+Return ONLY the structured JSON requested above.`, 'MinerU');
+          return withMineruMeta({
+            ...parsed,
+            extractionProvider: `mineru+${provider}`,
+          });
+        } catch (err) {
+          console.warn(`[MinerU] AI extraction failed for ${filename}: ${err.message?.slice(0, 200)}`);
+          const parsed = parseStructuredFromMineruText(filename, folder, mineru.text);
+          if (parsed.amountTotal || parsed.invoiceNo || parsed.docDate) {
+            return withMineruMeta(parsed);
+          }
+        }
       }
     } catch (err) {
       console.warn(`[MinerU] ${filename}: ${err.message?.slice(0, 300)}`);
