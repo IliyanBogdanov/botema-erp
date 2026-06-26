@@ -27,6 +27,8 @@ const CREATE_NEW_BIZDOCS = process.argv.includes('--create-new-bizdocs');
 const ONLY_MISSING = process.argv.includes('--only-missing');
 const INCLUDE_PROCESSED = process.argv.includes('--include-processed');
 const REPARSE_MINERU = process.argv.includes('--reparse-mineru');
+const INCLUDE_FAILED = process.argv.includes('--include-failed');
+const FAILED_MARKER = '[MINERU_FAILED]';
 
 function argValue(name, fallback = null) {
   const i = process.argv.indexOf(name);
@@ -44,7 +46,7 @@ function configureMineruDefaults() {
   process.env.MINERU_ENABLED = process.env.MINERU_ENABLED || 'true';
   process.env.MINERU_BACKEND = process.env.MINERU_BACKEND || 'pipeline';
   process.env.MINERU_METHOD = process.env.MINERU_METHOD || 'auto';
-  process.env.MINERU_TIMEOUT_MS = process.env.MINERU_TIMEOUT_MS || '900000';
+  process.env.MINERU_TIMEOUT_MS = process.env.MINERU_TIMEOUT_MS || '180000';
 
   const localMineru = path.resolve(__dirname, '../../.venv-mineru/Scripts/mineru.exe');
   if (!process.env.MINERU_COMMAND && fs.existsSync(localMineru)) {
@@ -335,6 +337,10 @@ async function getSourceFiles() {
   const downloadable = rows;
   let candidates = downloadable;
 
+  if (!INCLUDE_FAILED) {
+    candidates = candidates.filter(row => !String(row.notes || '').includes(FAILED_MARKER));
+  }
+
   if (!REPARSE_MINERU) {
     const keys = candidates.map(docKeyForSourceFile).filter(Boolean);
     const alreadyParsed = keys.length ? await prisma.document.findMany({
@@ -368,6 +374,7 @@ async function main() {
     limit: EFFECTIVE_LIMIT,
     onlyMissing: ONLY_MISSING,
     includeProcessed: INCLUDE_PROCESSED,
+    includeFailed: INCLUDE_FAILED,
     reparseMineru: REPARSE_MINERU,
     applyBizDocs: APPLY_BIZDOCS,
     createNewBizDocs: CREATE_NEW_BIZDOCS,
@@ -414,6 +421,15 @@ async function main() {
       console.log(`  ${parsed.docType || parsed.type || '?'} #${parsed.invoiceNo || '?'} ${parsed.amountTotal || '?'} ${parsed.currency || ''} conf=${parsed.confidence || '?'} doc=${docAction} biz=${bizAction}`);
     } catch (err) {
       stats.failed++;
+      if (APPLY) {
+        const note = `${FAILED_MARKER} ${new Date().toISOString()}: ${String(err.message || err).slice(0, 300)}`;
+        await prisma.sourceFile.update({
+          where: { id: sf.id },
+          data: {
+            notes: [sf.notes, note].filter(Boolean).join(' | ').slice(0, 2000),
+          },
+        });
+      }
       console.error(`  FAILED ${label}: ${err.message}`);
     }
   }
