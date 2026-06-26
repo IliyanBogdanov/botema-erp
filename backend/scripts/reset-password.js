@@ -3,7 +3,7 @@ const { Client } = require('pg');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 const email = process.argv[2] || 'office@studiobotema.com';
-const newPassword = process.argv[3] || 'Botema2024!';
+const newPassword = process.argv[3] || 'Botema@2024!';
 
 async function run() {
   const c = new Client({ connectionString: process.env.DATABASE_URL });
