@@ -392,7 +392,7 @@ function parseJsonFromAIText(text, label = 'AI') {
 async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
   const providers = [];
 
-  if (process.env.GEMINI_API_KEY) {
+  if (process.env.GEMINI_API_KEY && process.env.DISABLE_GEMINI_EXTRACTION !== 'true') {
     providers.push({
       name: 'gemini',
       run: async () => {
@@ -403,7 +403,7 @@ async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
     });
   }
 
-  if (groq) {
+  if (groq && process.env.DISABLE_GROQ_EXTRACTION !== 'true') {
     providers.push({
       name: 'groq',
       run: async () => {
@@ -417,7 +417,7 @@ async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
     });
   }
 
-  if (openrouter) {
+  if (openrouter && process.env.DISABLE_OPENROUTER_EXTRACTION !== 'true') {
     providers.push({
       name: 'openrouter',
       run: async () => {
@@ -431,7 +431,7 @@ async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
     });
   }
 
-  if (openai) {
+  if (openai && process.env.DISABLE_OPENAI_EXTRACTION !== 'true') {
     providers.push({
       name: 'openai',
       run: async () => {
