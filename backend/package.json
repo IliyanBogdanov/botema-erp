@@ -17,6 +17,7 @@
     "normalize:payments": "node scripts/normalizePaymentCounterparties.js --apply",
     "flag:incomplete-invoices": "node scripts/flagIncompleteInvoiceBizDocs.js --apply",
     "mineru:parse": "node scripts/mineruParseFile.js",
+    "mineru:reparse-sources": "node scripts/mineruReparseSourceFiles.js",
     "import:invoicepro-export": "node scripts/importInvoiceProExport.js --apply",
     "import:microinvest-xml": "node scripts/importMicroinvestDeltaProXml.js --apply",
     "clean:bizdocs": "node scripts/cleanBizDocumentDuplicates.js --apply",

@@ -389,6 +389,76 @@ function parseJsonFromAIText(text, label = 'AI') {
   return JSON.parse(jsonMatch[0]);
 }
 
+async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
+  const providers = [];
+
+  if (process.env.GEMINI_API_KEY) {
+    providers.push({
+      name: 'gemini',
+      run: async () => {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const result = await model.generateContent([{ text: prompt }]);
+        return result.response.text();
+      },
+    });
+  }
+
+  if (groq) {
+    providers.push({
+      name: 'groq',
+      run: async () => {
+        const chat = await groq.chat.completions.create({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        });
+        return chat.choices[0].message.content;
+      },
+    });
+  }
+
+  if (openrouter) {
+    providers.push({
+      name: 'openrouter',
+      run: async () => {
+        const chat = await openrouter.chat.completions.create({
+          model: 'openai/gpt-oss-20b:free',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        });
+        return chat.choices[0].message.content;
+      },
+    });
+  }
+
+  if (openai) {
+    providers.push({
+      name: 'openai',
+      run: async () => {
+        const chat = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        });
+        return chat.choices[0].message.content;
+      },
+    });
+  }
+
+  let lastErr;
+  for (const provider of providers) {
+    try {
+      const text = await provider.run();
+      const parsed = parseJsonFromAIText(text, `${label}/${provider.name}`);
+      return { parsed, provider: provider.name };
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[${label}] ${provider.name} failed: ${err.message?.slice(0, 160)}`);
+    }
+  }
+  throw lastErr || new Error(`No configured provider for ${label}`);
+}
+
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
 
@@ -439,18 +509,15 @@ Return ONLY valid JSON (no markdown, no explanation):
     try {
       const mineru = await runMineru({ filename, buffer: pdfBuffer });
       if (mineru.text) {
-        const result = await model.generateContent([{
-          text: `${prompt}
+        const { parsed, provider } = await extractJsonFromTextPrompt(`${prompt}
 
 MinerU extracted document content:
 ${mineru.text.substring(0, 24000)}
 
-Return ONLY the structured JSON requested above.`,
-        }]);
-        const parsed = parseJsonFromAIText(result.response.text(), 'MinerU+Gemini');
+Return ONLY the structured JSON requested above.`, 'MinerU');
         return {
           ...parsed,
-          extractionProvider: 'mineru+gemini',
+          extractionProvider: `mineru+${provider}`,
           mineru: {
             durationMs: mineru.durationMs,
             digest: mineru.digest,

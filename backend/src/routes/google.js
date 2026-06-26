@@ -1,12 +1,33 @@
 const express = require('express');
 const router = express.Router();
 const { google } = require('googleapis');
+const fs = require('fs');
+const path = require('path');
 
 const getOAuth2Client = () => new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/auth/google/callback'
 );
+
+function saveRefreshTokenToLocalEnv(refreshToken) {
+  if (process.env.NODE_ENV === 'production' && process.env.WRITE_GOOGLE_TOKEN_TO_ENV !== 'true') {
+    return false;
+  }
+
+  const envPath = path.resolve(__dirname, '../../.env');
+  let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+  const line = `GOOGLE_REFRESH_TOKEN="${refreshToken}"`;
+
+  if (/^GOOGLE_REFRESH_TOKEN=.*$/m.test(content)) {
+    content = content.replace(/^GOOGLE_REFRESH_TOKEN=.*$/m, line);
+  } else {
+    content = `${content.trimEnd()}\n${line}\n`;
+  }
+
+  fs.writeFileSync(envPath, content);
+  return true;
+}
 
 // GET /api/google/login — redirect directly to Google OAuth
 router.get('/login', (req, res) => {
@@ -60,12 +81,13 @@ router.get('/callback', async (req, res) => {
 
     // Set in memory for this process lifetime
     process.env.GOOGLE_REFRESH_TOKEN = tokens.refresh_token;
+    const savedToEnv = saveRefreshTokenToLocalEnv(tokens.refresh_token);
 
-    console.log('[Google OAuth] ✅ refresh_token saved');
+    console.log(`[Google OAuth] ✅ refresh_token saved${savedToEnv ? ' to backend/.env' : ' in memory'}`);
     res.send(`
       <html><body style="font-family:sans-serif;padding:40px;background:#111;color:#eee;max-width:700px;margin:0 auto">
         <h2 style="color:#30d158">✅ Google OAuth успешен!</h2>
-        <p style="color:#aaa">Копирай token-а по-долу и го добави в <strong>Railway → Variables → GOOGLE_REFRESH_TOKEN</strong>, после рестартирай service-а.</p>
+        <p style="color:#aaa">${savedToEnv ? 'Token-ът е записан локално в backend/.env.' : 'Копирай token-а по-долу и го добави в Railway → Variables → GOOGLE_REFRESH_TOKEN, после рестартирай service-а.'}</p>
         <div style="background:#1c1c1e;border:1px solid #333;border-radius:8px;padding:16px;margin:20px 0">
           <p style="margin:0 0 8px;font-size:11px;color:#666;letter-spacing:.08em">GOOGLE_REFRESH_TOKEN</p>
           <code style="word-break:break-all;font-size:13px;color:#30d158;user-select:all">${tokens.refresh_token}</code>

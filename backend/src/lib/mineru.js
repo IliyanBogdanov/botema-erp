@@ -38,9 +38,10 @@ async function walk(dir) {
 
 function runCommand(command, args, options, timeoutMs) {
   return new Promise((resolve, reject) => {
+    const useShell = process.platform === 'win32' && !path.isAbsolute(command);
     const child = spawn(command, args, {
       ...options,
-      shell: process.platform === 'win32',
+      shell: useShell,
       windowsHide: true,
     });
 
@@ -126,9 +127,10 @@ async function runMineru({ buffer, filename, inputPath }) {
   const outputDir = path.join(workRoot, 'output');
   await fs.mkdir(outputDir, { recursive: true });
 
-  let sourcePath = inputPath;
-  if (!sourcePath) {
-    sourcePath = path.join(workRoot, safeFilename(filename));
+  const sourcePath = path.join(workRoot, safeFilename(filename || inputPath));
+  if (inputPath) {
+    await fs.copyFile(inputPath, sourcePath);
+  } else {
     await fs.writeFile(sourcePath, buffer);
   }
 
