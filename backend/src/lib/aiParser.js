@@ -628,7 +628,9 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
             extractionProvider: `mineru+${provider}`,
           });
         } catch (err) {
-          console.warn(`[MinerU] AI extraction failed for ${filename}: ${err.message?.slice(0, 200)}`);
+          if (!String(err.message || '').includes('No configured provider')) {
+            console.warn(`[MinerU] AI extraction failed for ${filename}: ${err.message?.slice(0, 200)}`);
+          }
           const parsed = parseStructuredFromMineruText(filename, folder, mineru.text);
           if (parsed.amountTotal || parsed.invoiceNo || parsed.docDate) {
             return withMineruMeta(parsed);
