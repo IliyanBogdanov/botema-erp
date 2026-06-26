@@ -7,6 +7,7 @@ const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const OpenAI = require('openai');
 const pdfParse = require('pdf-parse');
+const { isMineruEnabled, runMineru } = require('./mineru');
 
 const getAuth = () => {
   const oauth2 = new google.auth.OAuth2(
@@ -381,6 +382,13 @@ function inferMimeType(filename, fallback = 'application/pdf') {
   return fallback;
 }
 
+function parseJsonFromAIText(text, label = 'AI') {
+  const cleaned = String(text || '').trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`No JSON in ${label} response: ` + cleaned.substring(0, 200));
+  return JSON.parse(jsonMatch[0]);
+}
+
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
 
@@ -427,6 +435,34 @@ Return ONLY valid JSON (no markdown, no explanation):
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const mimeType = inferMimeType(filename);
 
+  if (isMineruEnabled()) {
+    try {
+      const mineru = await runMineru({ filename, buffer: pdfBuffer });
+      if (mineru.text) {
+        const result = await model.generateContent([{
+          text: `${prompt}
+
+MinerU extracted document content:
+${mineru.text.substring(0, 24000)}
+
+Return ONLY the structured JSON requested above.`,
+        }]);
+        const parsed = parseJsonFromAIText(result.response.text(), 'MinerU+Gemini');
+        return {
+          ...parsed,
+          extractionProvider: 'mineru+gemini',
+          mineru: {
+            durationMs: mineru.durationMs,
+            digest: mineru.digest,
+            files: mineru.files,
+          },
+        };
+      }
+    } catch (err) {
+      console.warn(`[MinerU] ${filename}: ${err.message?.slice(0, 300)}`);
+    }
+  }
+
   const tryGemini = async (retries = 2) => {
     try {
       const result = await model.generateContent([
@@ -434,9 +470,7 @@ Return ONLY valid JSON (no markdown, no explanation):
         { inlineData: { mimeType, data: pdfBuffer.toString('base64') } },
       ]);
       const text = result.response.text().trim();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
-      return JSON.parse(jsonMatch[0]);
+      return parseJsonFromAIText(text, 'AI');
     } catch (err) {
       const msg = (err.message || '').toLowerCase();
       const isRateLimit = err.status === 429 || msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('rate limit') || msg.includes('quota');
