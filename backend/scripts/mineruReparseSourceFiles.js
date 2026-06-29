@@ -239,7 +239,7 @@ async function upsertBizDocument(sourceFile, parsed) {
   const amountTotal = asDecimal(parsed.amountTotal);
   const bizDocType = toBizDocType(parsed, sourceFile);
   if (!['INVOICE_IN', 'INVOICE_OUT', 'PROFORMA_IN', 'PROFORMA_OUT', 'DELIVERY_NOTE'].includes(bizDocType)) return 'not-business';
-  if (confidence < MIN_CONFIDENCE || !amountTotal) return 'low-confidence';
+  const needsReview = confidence < MIN_CONFIDENCE || !amountTotal;
 
   const counterpartyId = await findOrCreateCounterparty(
     parsed.supplierName || parsed.clientName || parsed.counterpartyName,
@@ -272,6 +272,8 @@ async function upsertBizDocument(sourceFile, parsed) {
     }
   }
 
+  if (!existing && needsReview && !CREATE_NEW_BIZDOCS) return 'would-create-blocked';
+
   const baseData = {
     sourceFileId: sourceFile.id,
     counterpartyId,
@@ -288,6 +290,7 @@ async function upsertBizDocument(sourceFile, parsed) {
     notes: [
       existing?.notes,
       `MinerU reparse ${new Date().toISOString()}: ${sourceFile.type} ${sourceFile.filename}`.slice(0, 180),
+      needsReview ? `MinerU review queue: confidence ${confidence.toFixed(2)}${amountTotal ? '' : ', missing amount'}` : null,
     ].filter(Boolean).join(' | ').slice(0, 1000),
   };
 
