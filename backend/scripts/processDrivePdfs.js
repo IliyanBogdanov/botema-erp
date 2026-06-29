@@ -194,7 +194,7 @@ async function main() {
           const expDate = parsed.docDate ? new Date(parsed.docDate) : (sf.receivedAt || new Date());
           const dupExpense = await prisma.expense.findFirst({
             where: {
-              supplier: { contains: 'Facebook', mode: 'insensitive' },
+              supplier: { contains: parsed.supplierName || 'Facebook', mode: 'insensitive' },
               amount: new Prisma.Decimal(parsed.amountTotal),
               date: expDate,
             },

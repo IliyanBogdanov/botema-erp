@@ -133,19 +133,19 @@ function extractDateFromPath(folder, filename) {
   const text = (folder + ' ' + filename).toLowerCase();
 
   // ISO date in filename: 2026-04-15
-  const isoMatch = text.match(/\b(202\d)[_\-. /](\d{1,2})[_\-. /](\d{1,2})\b/);
+  const isoMatch = text.match(/\b(20\d{2})[_\-. /](\d{1,2})[_\-. /](\d{1,2})\b/);
   if (isoMatch) {
     return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
   }
 
   // Date in filename: 15.04.2026 or 03.04.2026
-  const dmyMatch = text.match(/\b(\d{1,2})[._](\d{1,2})[._](202\d)\b/);
+  const dmyMatch = text.match(/\b(\d{1,2})[._](\d{1,2})[._](20\d{2})\b/);
   if (dmyMatch) {
     return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
   }
 
   // Bulgarian month name in folder path
-  const year = (folder.match(/\b(202\d)\b/) || [])[1] || new Date().getFullYear().toString();
+  const year = (folder.match(/\b(20\d{2})\b/) || [])[1] || new Date().getFullYear().toString();
   for (const [bg, mm] of Object.entries(BG_MONTHS)) {
     if (text.includes(bg)) return `${year}-${mm}-01`;
   }
@@ -403,8 +403,8 @@ function inferMimeType(filename, fallback = 'application/pdf') {
 
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
-  const mimeType   = inferMimeType(filename);
-  const t0         = Date.now();
+  const mimeType = inferMimeType(filename);
+  const t0 = Date.now();
 
   log.info('Starting document parse', { filename, folder, mimeType, folderType });
 
@@ -464,12 +464,12 @@ Return ONLY valid JSON (no markdown, no explanation):
       const parsed = JSON.parse(jsonMatch[0]);
       log.info('Gemini parse success', {
         filename,
-        docType:     parsed.docType,
-        invoiceNo:   parsed.invoiceNo,
+        docType: parsed.docType,
+        invoiceNo: parsed.invoiceNo,
         amountTotal: parsed.amountTotal,
-        currency:    parsed.currency,
-        confidence:  parsed.confidence,
-        ms:          Date.now() - tGemini,
+        currency: parsed.currency,
+        confidence: parsed.confidence,
+        ms: Date.now() - tGemini,
       });
       return parsed;
     } catch (err) {

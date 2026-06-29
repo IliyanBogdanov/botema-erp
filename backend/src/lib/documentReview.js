@@ -13,8 +13,8 @@ const normalizeText = value => String(value || '').trim();
 const getSuggestedAction = data => {
   const type = data?.type || data?.docType;
   if (type === 'INVOICE_OUT') return 'CREATE_INVOICE';
-  if (type === 'INVOICE_IN' || type === 'DELIVERY') return 'CREATE_PURCHASE';
-  if (type === 'PROFORMA') return 'ARCHIVE_ONLY';
+  if (type === 'INVOICE_IN' || type === 'DELIVERY' || type === 'DELIVERY_NOTE') return 'CREATE_PURCHASE';
+  if (type === 'PROFORMA' || type === 'PROFORMA_IN' || type === 'PROFORMA_OUT') return 'ARCHIVE_ONLY';
   return 'ARCHIVE_ONLY';
 };
 
@@ -54,13 +54,13 @@ async function analyzeDocument(prisma, extractedData = {}) {
   if (!date || Number.isNaN(new Date(date).getTime())) { flags.push('MISSING_DATE'); log.debug('Flag: MISSING_DATE', { date }); }
   if (!currency) { flags.push('MISSING_CURRENCY'); log.debug('Flag: MISSING_CURRENCY'); }
   if (!amountTotal && !amountNet) { flags.push('MISSING_AMOUNT'); log.debug('Flag: MISSING_AMOUNT'); }
-  if (!vatAmount && type !== 'PROFORMA') { flags.push('MISSING_VAT'); log.debug('Flag: MISSING_VAT'); }
+  if (!vatAmount && type !== 'PROFORMA' && type !== 'PROFORMA_IN' && type !== 'PROFORMA_OUT') { flags.push('MISSING_VAT'); log.debug('Flag: MISSING_VAT'); }
   if (amountNet && vatAmount && amountTotal && Math.abs((amountNet + vatAmount) - amountTotal) > 0.05) {
     flags.push('TOTAL_MISMATCH');
     log.warn('Flag: TOTAL_MISMATCH', { amountNet, vatAmount, amountTotal, diff: Math.abs((amountNet + vatAmount) - amountTotal) });
   }
 
-  if (type === 'INVOICE_IN' || type === 'DELIVERY') {
+  if (type === 'INVOICE_IN' || type === 'DELIVERY' || type === 'DELIVERY_NOTE') {
     const supplier = supplierName
       ? await prisma.supplier.findFirst({ where: { name: { contains: supplierName, mode: 'insensitive' } } })
       : null;
