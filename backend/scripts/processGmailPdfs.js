@@ -12,11 +12,11 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 const { google } = require('googleapis');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { PrismaClient, Prisma } = require('@prisma/client');
+const { parseDocumentWithAI } = require('../src/lib/aiParser');
+const { analyzeDocument } = require('../src/lib/documentReview');
 
 const prisma = new PrismaClient();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const APPLY = process.argv.includes('--apply');
 const ALL_DOMAINS = process.argv.includes('--all-domains');
@@ -122,50 +122,6 @@ function collectParts(payload, result = []) {
   return result;
 }
 
-async function extractWithGemini(pdfBuffer, filename, fromDomain) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  const supplierHint = DOMAIN_SUPPLIER[fromDomain] || '';
-  const isOutgoing = ['studiobotema.com', 'micro.bg', 'invoicepro.bg'].includes(fromDomain);
-  const prompt = `Extract invoice/document data from this PDF for Studio Botema (Bulgarian interior design company).
-${supplierHint ? `Supplier hint: ${supplierHint}` : ''}
-${isOutgoing ? 'Note: This is an OUTGOING document FROM Studio Botema TO a client.' : ''}
-Filename: "${filename}"
-
-Return ONLY valid JSON (no markdown):
-{
-  "docType": "INVOICE_IN" | "INVOICE_OUT" | "PROFORMA" | "DELIVERY_NOTE" | "EXPENSE" | "OTHER",
-  "invoiceNo": string or null,
-  "docDate": "YYYY-MM-DD" or null,
-  "dueDate": "YYYY-MM-DD" or null,
-  "supplierName": string or null,
-  "clientName": string or null,
-  "amountNet": number or null,
-  "vatAmount": number or null,
-  "amountTotal": number or null,
-  "currency": "BGN" | "EUR" | "USD" | "GBP" | null,
-  "confidence": number (0-100),
-  "description": string or null
-}
-
-Rules:
-- European number format: 1.234,56 → 1234.56
-- If amount not found, return null (never 0)
-- INVOICE_IN = Studio Botema is the BUYER (incoming cost)
-- INVOICE_OUT = Studio Botema is the SELLER (outgoing revenue)
-- Salary slips, pay statements → OTHER
-- Waybills, transport docs without amount → DELIVERY_NOTE
-- Proforma offers → PROFORMA`;
-
-  const result = await model.generateContent([
-    { text: prompt },
-    { inlineData: { mimeType: 'application/pdf', data: pdfBuffer.toString('base64') } },
-  ]);
-  const text = result.response.text().trim();
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON from Gemini: ' + text.substring(0, 200));
-  return JSON.parse(match[0]);
-}
-
 async function findOrCreateCounterparty(supplierName) {
   if (!supplierName) return null;
   const existing = await prisma.counterparty.findFirst({
@@ -246,20 +202,39 @@ async function main() {
 
     try {
       const pdfBuffer = await downloadAttachment(gmail, messageId, sf.filename);
-      const parsed = await extractWithGemini(pdfBuffer, sf.filename, domain);
+      // Use the shared parser with full fallback chain (Groq → OpenRouter → heuristic)
+      const folderHint = sf.folder || `Gmail/${domain}`;
+      const parsed = await parseDocumentWithAI(sf.filename, folderHint, pdfBuffer);
 
       console.log(`  → docType=${parsed.docType} invoiceNo=${parsed.invoiceNo} amount=${parsed.amountTotal} ${parsed.currency} conf=${parsed.confidence}`);
 
       const counterpartyId = await findOrCreateCounterparty(supplierName || parsed.supplierName);
       const supplier = await findSupplier(supplierName || parsed.supplierName);
 
-      const riskFlags = [];
-      if (!parsed.invoiceNo) riskFlags.push('MISSING_INVOICE_NO');
-      if (!parsed.docDate) riskFlags.push('MISSING_DATE');
-      if (!parsed.amountTotal) riskFlags.push('MISSING_AMOUNT');
-
       if (APPLY) {
-        // Create Document record
+        // Low-confidence or missing amount: save as NEEDS_REVIEW instead of silently discarding
+        if (!parsed.amountTotal || parsed.confidence < 60) {
+          console.log(`  LOW CONFIDENCE / NO AMOUNT → saving as NEEDS_REVIEW`);
+          await prisma.document.create({
+            data: {
+              driveFileId: gmailDocId,
+              driveUrl: '',
+              filename: sf.filename,
+              type: 'OTHER',
+              status: 'NEEDS_REVIEW',
+              extractedData: { ...parsed, gmailMessageId: messageId, gmailSubject: sf.subject, from: sf.fromEmail },
+              confidence: (parsed.confidence || 0) / 100,
+              suggestedAction: 'ARCHIVE_ONLY',
+              riskFlags: ['LOW_CONFIDENCE', ...(!parsed.amountTotal ? ['MISSING_AMOUNT'] : [])],
+            },
+          });
+          await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
+          skipped++;
+          continue;
+        }
+
+        // Create Document record using analyzeDocument for proper risk flags
+        const review = await analyzeDocument(prisma, { ...parsed, supplierName: supplierName || parsed.supplierName });
         await prisma.document.create({
           data: {
             driveFileId: gmailDocId,
@@ -269,7 +244,7 @@ async function main() {
               : parsed.docType === 'PROFORMA' ? 'PROFORMA'
               : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY'
               : 'OTHER',
-            status: 'PENDING',
+            status: review.riskFlags.length > 0 ? 'NEEDS_REVIEW' : 'PENDING',
             extractedData: {
               ...parsed,
               gmailMessageId: messageId,
@@ -278,11 +253,10 @@ async function main() {
               supplierName: supplierName || parsed.supplierName,
             },
             confidence: (parsed.confidence || 50) / 100,
-            suggestedAction: parsed.docType === 'INVOICE_IN' ? 'CREATE_PURCHASE' : 'ARCHIVE_ONLY',
-            riskFlags: riskFlags.length > 0 ? riskFlags : null,
+            suggestedAction: review.suggestedAction,
+            riskFlags: review.riskFlags.length > 0 ? review.riskFlags : null,
           },
         });
-
         // Expense records for subscription domains (Stripe, GitHub)
         if (EXPENSE_DOMAINS.has(domain) && parsed.amountTotal && parsed.confidence >= 60) {
           const expDate = parsed.docDate ? new Date(parsed.docDate) : (sf.receivedAt || new Date());
@@ -312,16 +286,28 @@ async function main() {
           }
         }
 
-        // Create BizDocument for high-confidence invoices
-        if (!EXPENSE_DOMAINS.has(domain) && parsed.docType === 'INVOICE_IN' && parsed.amountTotal && parsed.confidence >= 70) {
-          const bizExisting = await prisma.bizDocument.findFirst({
-            where: { docType: 'INVOICE_IN', docNumber: parsed.invoiceNo || undefined, counterpartyId },
-            select: { id: true },
-          });
+        // Create BizDocument for financial docs from non-expense domains
+        if (!EXPENSE_DOMAINS.has(domain) && parsed.amountTotal && parsed.confidence >= 70 &&
+          ['INVOICE_IN', 'PROFORMA', 'DELIVERY_NOTE', 'OFFER', 'OTHER'].includes(parsed.docType)) {
+          const bizDocType = parsed.docType === 'INVOICE_IN' ? 'INVOICE_IN'
+            : parsed.docType === 'PROFORMA' ? 'PROFORMA_IN'
+            : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY_NOTE'
+            : parsed.docType === 'OFFER' ? 'OFFER_IN'
+            : 'OTHER';
+
+          // Only check for duplicate when invoiceNo is known — null must NOT match all docs for counterparty
+          const bizExisting = parsed.invoiceNo
+            ? await prisma.bizDocument.findFirst({
+                where: { docNumber: parsed.invoiceNo, counterpartyId: counterpartyId || undefined },
+                select: { id: true },
+              })
+            : null;
+
           if (!bizExisting) {
+            const bizReview = await analyzeDocument(prisma, { ...parsed, docType: bizDocType });
             const bizData = {
               counterpartyId,
-              docType: 'INVOICE_IN',
+              docType: bizDocType,
               docNumber: parsed.invoiceNo || null,
               docDate: parsed.docDate ? new Date(parsed.docDate) : sf.receivedAt || new Date(),
               dueDate: parsed.dueDate ? new Date(parsed.dueDate) : null,
@@ -330,19 +316,19 @@ async function main() {
               vatAmount: parsed.vatAmount != null ? new Prisma.Decimal(parsed.vatAmount) : null,
               amountTotal: new Prisma.Decimal(parsed.amountTotal),
               vatType: 'STANDARD_BG',
-              status: 'IMPORTED',
+              status: bizReview.riskFlags.length > 0 ? 'NEEDS_REVIEW' : 'IMPORTED',
               confidence: new Prisma.Decimal(parsed.confidence || 70),
               notes: `Gmail: ${sf.subject?.substring(0, 100)} | ${sf.fromEmail?.substring(0, 80)}`,
             };
-            await prisma.bizDocument.create({ data: bizData });
+            await prisma.bizDocument.create({ data: { ...bizData, sourceFileId: sf.id } });
 
-            // Create Purchase record if supplier known
-            if (supplier) {
+            // Create Purchase record only for INVOICE_IN with known supplier
+            if (bizDocType === 'INVOICE_IN' && supplier && parsed.invoiceNo) {
               const purchaseExists = await prisma.purchase.findFirst({
-                where: { invoiceNo: parsed.invoiceNo || undefined, supplierId: supplier.id },
+                where: { invoiceNo: parsed.invoiceNo, supplierId: supplier.id },
                 select: { id: true },
               });
-              if (!purchaseExists && parsed.invoiceNo) {
+              if (!purchaseExists) {
                 await prisma.purchase.create({
                   data: {
                     invoiceNo: parsed.invoiceNo,
@@ -359,7 +345,7 @@ async function main() {
               }
             }
 
-            console.log(`  ✅ BizDoc created: ${parsed.invoiceNo || '?'}`);
+            console.log(`  ✅ BizDoc created: ${parsed.invoiceNo || '?'} [${bizDocType}]`);
           } else {
             console.log(`  → BizDoc already exists for ${parsed.invoiceNo}`);
           }

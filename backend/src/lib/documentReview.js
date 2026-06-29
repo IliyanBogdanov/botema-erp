@@ -85,7 +85,8 @@ async function analyzeDocument(prisma, extractedData = {}) {
   }
 
   const confidence = getConfidence(data);
-  if (confidence < 0.75) flags.push('LOW_CONFIDENCE');
+  // AI returns confidence on 0-100 scale; threshold must match that scale
+  if (confidence < 75) flags.push('LOW_CONFIDENCE');
 
   return {
     confidence,

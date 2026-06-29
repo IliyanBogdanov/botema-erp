@@ -152,17 +152,17 @@ function extractDateFromPath(folder, filename) {
 function extractInvoiceNo(filename) {
   const name = filename.replace(/\.[^.]+$/, '');
 
-  // Pattern: Invoice-2604608 or Invoice-2604608-Lodes
-  const invMatch = name.match(/(?:invoice|фактура|faktura|inv)[_\-\s#]+(\d{4,})/i);
+  // Pattern: Invoice-2604608 or Invoice-2604608-Lodes or Фактура №12345
+  const invMatch = name.match(/(?:invoice|фактура|faktura|inv|no|nr|№)[_\-\s#.]+([A-Z0-9]{3,})/i);
   if (invMatch) return invMatch[1];
 
-  // Pattern: pure long number sequences like 2604608
-  const numMatch = name.match(/\b(\d{6,})\b/);
-  if (numMatch) return numMatch[1];
-
-  // Pattern: alphanumeric like AP202602090005
-  const alphaMatch = name.match(/\b([A-Z]{1,4}\d{8,})\b/);
+  // Pattern: alphanumeric like AP202602090005 or INV-2024-001
+  const alphaMatch = name.match(/\b([A-Z]{1,4}[-_]?\d{4,})\b/i);
   if (alphaMatch) return alphaMatch[1];
+
+  // Pattern: pure number sequences — lowered from 6 to 4 digits to catch Bulgarian short invoice numbers
+  const numMatch = name.match(/\b(\d{4,})\b/);
+  if (numMatch) return numMatch[1];
 
   return null;
 }
