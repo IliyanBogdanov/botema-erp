@@ -18,8 +18,10 @@ const { google } = require('googleapis');
 const { PrismaClient, Prisma } = require('@prisma/client');
 const { parseDocumentWithAI } = require('../src/lib/aiParser');
 const { analyzeDocument } = require('../src/lib/documentReview');
+const { createLogger } = require('../src/lib/logger');
 
 const prisma = new PrismaClient();
+const log = createLogger('processDrivePdfs');
 
 const APPLY = process.argv.includes('--apply');
 const LIMIT = (() => {
@@ -83,7 +85,7 @@ async function findOrCreateCounterparty(name, type = 'SUPPLIER') {
 }
 
 async function main() {
-  console.log(`=== PROCESS DRIVE PDFs${APPLY ? ' (APPLY)' : ' (DRY RUN)'} | mode=${MODE_ARG} | limit=${LIMIT} ===`);
+  log.info(`Starting Drive PDF processing`, { apply: APPLY, mode: MODE_ARG, limit: LIMIT });
 
   const auth = getAuth();
   const drive = google.drive({ version: 'v3', auth });
@@ -113,8 +115,7 @@ async function main() {
     take: LIMIT,
   });
 
-  console.log(`Total matching unprocessed Drive PDFs: ${total}`);
-  console.log(`Processing this batch: ${files.length}`);
+  log.info('Batch queried', { total, thisBatch: files.length });
 
   let expensesCreated = 0, bizDocsCreated = 0, skipped = 0, failed = 0;
 
@@ -128,24 +129,24 @@ async function main() {
       select: { id: true },
     });
     if (existing) {
-      console.log(`SKIP (doc exists): ${sf.filename}`);
+      log.debug('Skip — document already exists', { filename: sf.filename, driveFileId: sf.driveFileId });
       if (APPLY) await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
       skipped++;
       continue;
     }
 
-    console.log(`\nProcessing [${mode}/${sf.folder?.split('/').pop()}]: ${sf.filename}`);
+    log.info('Processing file', { filename: sf.filename, folder: sf.folder, mode });
 
     try {
       const pdfBuffer = await downloadDriveFile(drive, sf.driveFileId);
       const folderHint = isFacebook ? 'Facebook invoices' : (sf.folder || '');
       const parsed = await parseDocumentWithAI(sf.filename, folderHint, pdfBuffer);
 
-      console.log(`  → docType=${parsed.docType} amount=${parsed.amountTotal} ${parsed.currency} conf=${parsed.confidence}`);
+      log.info('AI parse result', { filename: sf.filename, docType: parsed.docType, amountTotal: parsed.amountTotal, currency: parsed.currency, confidence: parsed.confidence });
 
       // Low-confidence or missing amount: store as NEEDS_REVIEW instead of silently discarding
       if (!parsed.amountTotal || parsed.confidence < 60) {
-        console.log(`  LOW CONFIDENCE / NO AMOUNT → saving as NEEDS_REVIEW`);
+        log.warn('Low confidence / no amount — saving as NEEDS_REVIEW', { filename: sf.filename, confidence: parsed.confidence, amountTotal: parsed.amountTotal });
         if (APPLY) {
           await prisma.document.create({
             data: {
@@ -176,10 +177,10 @@ async function main() {
             filename: sf.filename,
             type: parsed.docType === 'INVOICE_IN' ? 'INVOICE_IN'
               : parsed.docType === 'INVOICE_OUT' ? 'INVOICE_OUT'
-              : parsed.docType === 'EXPENSE' ? 'OTHER'
-              : parsed.docType === 'PROFORMA' ? 'PROFORMA'
-              : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY'
-              : 'OTHER',
+                : parsed.docType === 'EXPENSE' ? 'OTHER'
+                  : parsed.docType === 'PROFORMA' ? 'PROFORMA'
+                    : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY'
+                      : 'OTHER',
             status: isFacebook ? 'PENDING' : (review.riskFlags.length > 0 ? 'NEEDS_REVIEW' : 'PENDING'),
             extractedData: { ...parsed, driveFolder: sf.folder },
             confidence: (parsed.confidence || 50) / 100,
@@ -211,10 +212,10 @@ async function main() {
                 year: expDate.getFullYear(),
               },
             });
-            console.log(`  ✅ Expense created: ${parsed.amountTotal} ${parsed.currency} (ADVERTISING)`);
+            log.info('Expense created', { filename: sf.filename, amount: parsed.amountTotal, currency: parsed.currency, category: 'ADVERTISING' });
             expensesCreated++;
           } else {
-            console.log(`  → Expense already exists`);
+            log.debug('Expense already exists — skip', { filename: sf.filename });
             skipped++;
           }
         } else if (parsed.amountTotal && parsed.confidence >= 70 &&
@@ -225,17 +226,17 @@ async function main() {
           // Only check for duplicate when invoiceNo is known — null invoiceNo must NOT match all docs
           const bizExisting = parsed.invoiceNo
             ? await prisma.bizDocument.findFirst({
-                where: { docNumber: parsed.invoiceNo, counterpartyId: counterpartyId || undefined },
-                select: { id: true },
-              })
+              where: { docNumber: parsed.invoiceNo, counterpartyId: counterpartyId || undefined },
+              select: { id: true },
+            })
             : null;
 
           if (!bizExisting) {
             const bizDocType = parsed.docType === 'INVOICE_IN' ? 'INVOICE_IN'
               : parsed.docType === 'PROFORMA' ? 'PROFORMA_IN'
-              : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY_NOTE'
-              : parsed.docType === 'OFFER' ? 'OFFER_IN'
-              : 'OTHER';
+                : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY_NOTE'
+                  : parsed.docType === 'OFFER' ? 'OFFER_IN'
+                    : 'OTHER';
             const review = await analyzeDocument(prisma, { ...parsed, docType: bizDocType });
             await prisma.bizDocument.create({
               data: {
@@ -254,10 +255,10 @@ async function main() {
                 notes: `Drive: ${sf.folder?.split('/').slice(-2).join('/')} | ${sf.filename}`.substring(0, 200),
               },
             });
-            console.log(`  ✅ BizDoc created: ${parsed.invoiceNo || '?'} ${parsed.amountTotal} ${parsed.currency} [${bizDocType}]`);
+            log.info('BizDocument created', { filename: sf.filename, invoiceNo: parsed.invoiceNo, amountTotal: parsed.amountTotal, currency: parsed.currency, bizDocType, status: review.riskFlags.length > 0 ? 'NEEDS_REVIEW' : 'IMPORTED' });
             bizDocsCreated++;
           } else {
-            console.log(`  → BizDoc already exists for ${parsed.invoiceNo}`);
+            log.debug('BizDocument already exists — skip', { filename: sf.filename, invoiceNo: parsed.invoiceNo });
             skipped++;
           }
         }
@@ -265,17 +266,16 @@ async function main() {
         await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
       }
     } catch (err) {
-      console.error(`  ❌ ${sf.filename}: ${err.message}`);
+      log.error('Failed to process file', { filename: sf.filename, error: err.message, stack: err.stack?.split('\n')[1]?.trim() });
       failed++;
     }
 
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  console.log(`\n=== DONE ===`);
-  console.log({ expensesCreated, bizDocsCreated, skipped, failed });
+  log.info('Batch complete', { expensesCreated, bizDocsCreated, skipped, failed, total: files.length });
 }
 
 main()
-  .catch(err => { console.error(err); process.exitCode = 1; })
+  .catch(err => { log.error('Fatal error', { error: err.message, stack: err.stack }); process.exitCode = 1; })
   .finally(() => prisma.$disconnect());

@@ -15,8 +15,10 @@ const { google } = require('googleapis');
 const { PrismaClient, Prisma } = require('@prisma/client');
 const { parseDocumentWithAI } = require('../src/lib/aiParser');
 const { analyzeDocument } = require('../src/lib/documentReview');
+const { createLogger } = require('../src/lib/logger');
 
 const prisma = new PrismaClient();
+const log = createLogger('processGmailPdfs');
 
 const APPLY = process.argv.includes('--apply');
 const ALL_DOMAINS = process.argv.includes('--all-domains');
@@ -146,7 +148,7 @@ async function findSupplier(supplierName) {
 }
 
 async function main() {
-  console.log(`=== PROCESS GMAIL PDFs${APPLY ? ' (APPLY)' : ' (DRY RUN)'} | limit=${LIMIT} | allDomains=${ALL_DOMAINS} ===`);
+  log.info('Starting Gmail PDF processing', { apply: APPLY, limit: LIMIT, allDomains: ALL_DOMAINS });
 
   const auth = getAuth();
   const gmail = google.gmail({ version: 'v1', auth });
@@ -168,8 +170,7 @@ async function main() {
   ).slice(0, LIMIT);
 
   const knownCount = allFiles.filter(f => PROCESS_DOMAINS.includes(extractDomain(f.fromEmail))).length;
-  console.log(`Total unprocessed: known-supplier=${knownCount}, all=${allFiles.length}`);
-  console.log(`Processing this batch: ${files.length}`);
+  log.info('Batch queried', { totalUnprocessed: allFiles.length, knownSupplier: knownCount, thisBatch: files.length });
 
   let created = 0, skipped = 0, failed = 0, bankTx = 0;
 
@@ -185,20 +186,20 @@ async function main() {
       select: { id: true },
     });
     if (existing) {
-      console.log(`SKIP (doc exists): ${sf.filename}`);
+      log.debug('Skip — document already exists', { filename: sf.filename, gmailDocId });
       if (APPLY) await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
       skipped++;
       continue;
     }
 
     if (!attachmentId) {
-      console.log(`SKIP (no attachmentId): ${sf.filename}`);
+      log.debug('Skip — no attachmentId in stored gmailMsgId', { filename: sf.filename, gmailMsgId: sf.gmailMsgId });
       if (APPLY) await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
       skipped++;
       continue;
     }
 
-    console.log(`\nProcessing [${domain}]: ${sf.filename}`);
+    log.info('Processing file', { filename: sf.filename, domain, subject: sf.subject });
 
     try {
       const pdfBuffer = await downloadAttachment(gmail, messageId, sf.filename);
@@ -206,7 +207,7 @@ async function main() {
       const folderHint = sf.folder || `Gmail/${domain}`;
       const parsed = await parseDocumentWithAI(sf.filename, folderHint, pdfBuffer);
 
-      console.log(`  → docType=${parsed.docType} invoiceNo=${parsed.invoiceNo} amount=${parsed.amountTotal} ${parsed.currency} conf=${parsed.confidence}`);
+      log.info('AI parse result', { filename: sf.filename, docType: parsed.docType, invoiceNo: parsed.invoiceNo, amountTotal: parsed.amountTotal, currency: parsed.currency, confidence: parsed.confidence });
 
       const counterpartyId = await findOrCreateCounterparty(supplierName || parsed.supplierName);
       const supplier = await findSupplier(supplierName || parsed.supplierName);
@@ -214,7 +215,7 @@ async function main() {
       if (APPLY) {
         // Low-confidence or missing amount: save as NEEDS_REVIEW instead of silently discarding
         if (!parsed.amountTotal || parsed.confidence < 60) {
-          console.log(`  LOW CONFIDENCE / NO AMOUNT → saving as NEEDS_REVIEW`);
+          log.warn('Low confidence / no amount — saving as NEEDS_REVIEW', { filename: sf.filename, confidence: parsed.confidence, amountTotal: parsed.amountTotal });
           await prisma.document.create({
             data: {
               driveFileId: gmailDocId,
@@ -242,8 +243,8 @@ async function main() {
             filename: sf.filename,
             type: parsed.docType === 'INVOICE_IN' ? 'INVOICE_IN'
               : parsed.docType === 'PROFORMA' ? 'PROFORMA'
-              : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY'
-              : 'OTHER',
+                : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY'
+                  : 'OTHER',
             status: review.riskFlags.length > 0 ? 'NEEDS_REVIEW' : 'PENDING',
             extractedData: {
               ...parsed,
@@ -280,9 +281,9 @@ async function main() {
                 year: expDate.getFullYear(),
               },
             });
-            console.log(`  ✅ Expense created: ${parsed.amountTotal} ${parsed.currency} (SOFTWARE)`);
+            log.info('Expense created', { filename: sf.filename, amount: parsed.amountTotal, currency: parsed.currency, category: 'SOFTWARE' });
           } else {
-            console.log(`  → Expense already exists`);
+            log.debug('Expense already exists — skip', { filename: sf.filename });
           }
         }
 
@@ -291,16 +292,16 @@ async function main() {
           ['INVOICE_IN', 'PROFORMA', 'DELIVERY_NOTE', 'OFFER', 'OTHER'].includes(parsed.docType)) {
           const bizDocType = parsed.docType === 'INVOICE_IN' ? 'INVOICE_IN'
             : parsed.docType === 'PROFORMA' ? 'PROFORMA_IN'
-            : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY_NOTE'
-            : parsed.docType === 'OFFER' ? 'OFFER_IN'
-            : 'OTHER';
+              : parsed.docType === 'DELIVERY_NOTE' ? 'DELIVERY_NOTE'
+                : parsed.docType === 'OFFER' ? 'OFFER_IN'
+                  : 'OTHER';
 
           // Only check for duplicate when invoiceNo is known — null must NOT match all docs for counterparty
           const bizExisting = parsed.invoiceNo
             ? await prisma.bizDocument.findFirst({
-                where: { docNumber: parsed.invoiceNo, counterpartyId: counterpartyId || undefined },
-                select: { id: true },
-              })
+              where: { docNumber: parsed.invoiceNo, counterpartyId: counterpartyId || undefined },
+              select: { id: true },
+            })
             : null;
 
           if (!bizExisting) {
@@ -341,13 +342,13 @@ async function main() {
                     year: parsed.docDate ? new Date(parsed.docDate).getFullYear() : new Date().getFullYear(),
                   },
                 });
-                console.log(`  ✅ Purchase created: ${parsed.invoiceNo} ${parsed.amountTotal} ${parsed.currency}`);
+                log.info('Purchase created', { filename: sf.filename, invoiceNo: parsed.invoiceNo, amount: parsed.amountTotal, currency: parsed.currency });
               }
             }
 
-            console.log(`  ✅ BizDoc created: ${parsed.invoiceNo || '?'} [${bizDocType}]`);
+            log.info('BizDocument created', { filename: sf.filename, invoiceNo: parsed.invoiceNo, bizDocType, status: bizReview.riskFlags.length > 0 ? 'NEEDS_REVIEW' : 'IMPORTED' });
           } else {
-            console.log(`  → BizDoc already exists for ${parsed.invoiceNo}`);
+            log.debug('BizDocument already exists — skip', { filename: sf.filename, invoiceNo: parsed.invoiceNo });
           }
         }
 
@@ -356,7 +357,7 @@ async function main() {
 
       created++;
     } catch (err) {
-      console.error(`  ❌ ${sf.filename}: ${err.message}`);
+      log.error('Failed to process file', { filename: sf.filename, domain, error: err.message, stack: err.stack?.split('\n')[1]?.trim() });
       failed++;
     }
 
@@ -364,10 +365,9 @@ async function main() {
     await new Promise(r => setTimeout(r, 3000));
   }
 
-  console.log(`\n=== DONE ===`);
-  console.log({ created, skipped, failed, bankTx });
+  log.info('Batch complete', { created, skipped, failed, bankTx, total: files.length });
 }
 
 main()
-  .catch(err => { console.error(err); process.exitCode = 1; })
+  .catch(err => { log.error('Fatal error', { error: err.message, stack: err.stack }); process.exitCode = 1; })
   .finally(() => prisma.$disconnect());
