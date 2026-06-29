@@ -18,6 +18,7 @@ const path = require('path');
 const { google } = require('googleapis');
 const { Prisma, PrismaClient } = require('@prisma/client');
 const { parseDocumentWithAI, downloadDriveFile } = require('../src/lib/aiParser');
+const { analyzeDocument } = require('../src/lib/documentReview');
 
 const prisma = new PrismaClient();
 
@@ -193,7 +194,12 @@ function sameDay(a, b) {
   return new Date(a).toISOString().slice(0, 10) === new Date(b).toISOString().slice(0, 10);
 }
 
-async function upsertDocument(sourceFile, parsed, docKey) {
+async function upsertDocument(sourceFile, parsed, docKey, bizAction = null) {
+  const analysis = await analyzeDocument(prisma, {
+    ...parsed,
+    type: parsed.docType || parsed.type,
+    date: parsed.docDate || parsed.date,
+  });
   const data = {
     driveFileId: docKey,
     driveUrl: sourceFile.driveUrl || '',
@@ -208,9 +214,12 @@ async function upsertDocument(sourceFile, parsed, docKey) {
       subject: sourceFile.subject,
       fromEmail: sourceFile.fromEmail,
       mineruReparsedAt: new Date().toISOString(),
+      mineruBizStatus: bizAction,
     },
     confidence: new Prisma.Decimal(Math.min(Number(parsed.confidence || 0), 100) / 100),
-    suggestedAction: parsed.docType === 'INVOICE_IN' ? 'CREATE_PURCHASE' : 'ARCHIVE_ONLY',
+    suggestedAction: analysis.suggestedAction || (parsed.docType === 'INVOICE_IN' ? 'CREATE_PURCHASE' : 'ARCHIVE_ONLY'),
+    duplicateOfId: analysis.duplicateOfId,
+    riskFlags: analysis.riskFlags,
   };
 
   const existing = await prisma.document.findUnique({ where: { driveFileId: docKey }, select: { id: true } });
@@ -408,8 +417,8 @@ async function main() {
       }
 
       const parsed = await parseDocumentWithAI(sf.filename, sf.folder || sf.subject || '', buffer);
-      const docAction = await upsertDocument(sf, parsed, docKey);
       const bizAction = await upsertBizDocument(sf, parsed);
+      const docAction = await upsertDocument(sf, parsed, docKey, bizAction);
 
       if (APPLY) {
         await prisma.sourceFile.update({ where: { id: sf.id }, data: { processedAt: new Date() } });
