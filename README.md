@@ -67,6 +67,26 @@ Frontend: http://localhost:3000
 Backend: http://localhost:3001  
 Prisma Studio: `cd backend && npm run db:studio`
 
+### Optional: MinerU документ parsing spike
+MinerU не е npm dependency; инсталира се отделно като Python CLI/FastAPI service.
+
+```bash
+# След локална MinerU инсталация
+cd backend
+npm run mineru:parse -- ../path/to/document.pdf
+```
+
+За да се пробва в ERP document parser-а:
+
+```bash
+MINERU_ENABLED=true
+MINERU_COMMAND=mineru
+# optional, ако ползваш вече стартиран MinerU FastAPI:
+MINERU_API_URL=http://127.0.0.1:8000
+```
+
+Ако MinerU липсва или върне грешка, backend-ът пада обратно към текущия Gemini/Groq/OpenRouter flow.
+
 ## Deployment
 
 ### Backend → Railway

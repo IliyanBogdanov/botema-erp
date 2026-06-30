@@ -49,6 +49,16 @@ const RISK_LABELS: Record<string, string> = {
   TOTAL_MISMATCH: 'Разминаване в сумите',
 };
 
+const MINERU_STATUS_LABELS: Record<string, string> = {
+  conflict: 'Минеру конфликт',
+  ambiguous: 'Минеру неясен',
+  updated: 'Минеру обновен',
+  unchanged: 'Минеру без промяна',
+  'would-create-blocked': 'Минеру блокирано',
+  'low-confidence': 'Минеру ниска увереност',
+  'not-business': 'Минеру не-бизнес',
+};
+
 const DOC_TYPE_LABELS: Record<string, string> = {
   INVOICE_IN: 'Входяща Фактура',
   INVOICE_OUT: 'Изходяща Фактура',
@@ -288,6 +298,7 @@ function ReviewModal({ doc, onClose }: { doc: Document | null; onClose: () => vo
 
   const setField = (key: string, value: string) => setFields(f => ({ ...f, [key]: value }));
   const risks = Array.isArray(doc.riskFlags) ? doc.riskFlags : [];
+  const mineruStatus = doc.extractedData?.mineruBizStatus || '';
 
   return (
     <Modal open={Boolean(doc)} onClose={onClose} title="Преглед на документ" size="xl">
@@ -296,6 +307,14 @@ function ReviewModal({ doc, onClose }: { doc: Document | null; onClose: () => vo
           <div>
             <div className="text-sm font-semibold text-white">{doc.filename}</div>
             <div className="text-xs text-[#71717a] mt-1">Увереност: {Math.round(Number(doc.confidence || 0) * 100)}%</div>
+            {mineruStatus && (
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 text-[10px] border border-outline-variant/20 bg-surface-container-high text-on-surface-variant">
+                <span className="material-symbols-outlined text-[12px]">
+                  {mineruStatus === 'conflict' || mineruStatus === 'ambiguous' ? 'warning' : 'fact_check'}
+                </span>
+                {MINERU_STATUS_LABELS[mineruStatus] || mineruStatus}
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             {doc.driveUrl && (
@@ -643,6 +662,24 @@ export default function DocumentsPage() {
                             {confidence}% Match
                           </span>
                         )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {doc.extractedData?.mineruBizStatus && (
+                          <span
+                            className={`px-2 py-0.5 font-label-caps text-[9px] border ${
+                              doc.extractedData.mineruBizStatus === 'conflict' || doc.extractedData.mineruBizStatus === 'ambiguous'
+                                ? 'border-error/30 bg-error/10 text-error'
+                                : 'border-outline-variant/20 bg-surface-container-high text-on-surface-variant'
+                            }`}
+                          >
+                            {MINERU_STATUS_LABELS[doc.extractedData.mineruBizStatus] || doc.extractedData.mineruBizStatus}
+                          </span>
+                        )}
+                        {Array.isArray(doc.riskFlags) && doc.riskFlags.slice(0, 2).map(r => (
+                          <span key={r} className="px-2 py-0.5 font-label-caps text-[9px] border border-error/20 bg-error/5 text-error">
+                            {RISK_LABELS[r] || r}
+                          </span>
+                        ))}
                       </div>
                       <h4 className="font-body-md font-medium text-on-surface mb-1 truncate">
                         {doc.extractedData?.supplierName || doc.extractedData?.clientName || 'Unknown'}

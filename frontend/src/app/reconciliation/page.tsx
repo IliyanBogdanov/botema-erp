@@ -54,6 +54,12 @@ function SeverityDot({ severity }: { severity: string }) {
   return <span className={`w-2 h-2 rounded-full inline-block ${colors[severity] || 'bg-outline-variant'}`} />;
 }
 
+function normalizeConfidence(value: number | string | null | undefined) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return n > 1 ? Math.round(n) : Math.round(n * 100);
+}
+
 function LinkTypeTab({ type, count, active, onClick }: { type: string; count: number; active: boolean; onClick: () => void }) {
   const cfg = LINK_TYPE_LABELS[type] || { bg: type, icon: 'link', color: 'text-on-surface-variant' };
   return (
@@ -73,7 +79,7 @@ function LinkTypeTab({ type, count, active, onClick }: { type: string; count: nu
 export default function ReconciliationPage() {
   const t = useT();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<'links' | 'missing' | 'coverage' | 'bank'>('links');
+  const [tab, setTab] = useState<'review' | 'links' | 'missing' | 'coverage' | 'bank'>('review');
   const [linkTypeFilter, setLinkTypeFilter] = useState('');
   const [bankYear, setBankYear] = useState(new Date().getFullYear().toString());
   const [bankStatus, setBankStatus] = useState('');
@@ -125,6 +131,12 @@ export default function ReconciliationPage() {
     queryKey: ['payments', bankYear, bankStatus, bankPage],
     queryFn: () => api.get(`/payments?year=${bankYear}&status=${bankStatus}&page=${bankPage}&limit=50`).then(r => r.data),
     enabled: tab === 'bank',
+  });
+
+  const { data: reviewData, isLoading: reviewLoading } = useQuery({
+    queryKey: ['biz-review-queue'],
+    queryFn: () => api.get('/biz-documents/review-queue?limit=75').then(r => r.data),
+    enabled: tab === 'review',
   });
 
   const importCsv = useMutation({
@@ -209,6 +221,17 @@ export default function ReconciliationPage() {
     queryFn: () => api.get('/dashboard/data-health').then(r => r.data),
   });
 
+  const updateBizStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/biz-documents/${id}/status`, { status }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['biz-review-queue'] });
+      qc.invalidateQueries({ queryKey: ['reconciliation-links'] });
+      qc.invalidateQueries({ queryKey: ['recon-stats'] });
+      qc.invalidateQueries({ queryKey: ['data-health'] });
+    },
+  });
+
   // Group links by type for tabs
   const linksByType = (links as any[]).reduce((acc: Record<string, number>, l: any) => {
     acc[l.linkType] = (acc[l.linkType] || 0) + 1;
@@ -251,6 +274,7 @@ export default function ReconciliationPage() {
         {/* main tabs */}
         <div className="px-8 flex gap-0 border-t border-outline-variant/5 overflow-x-auto">
           {[
+            { key: 'review', icon: 'fact_check', label: 'Review queue', count: reviewData?.stats?.needsReview ?? 0 },
             { key: 'links', icon: 'account_tree', label: 'Документни вериги', count: (links as any[]).length },
             { key: 'missing', icon: 'report_problem', label: 'Липсващи документи', count: (missing as any[]).length },
             { key: 'coverage', icon: 'fact_check', label: 'Покритие', count: (coverage as any[]).length },
@@ -296,6 +320,177 @@ export default function ReconciliationPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+        {tab === 'review' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: 'В review опашката', value: reviewData?.stats?.needsReview ?? 0, icon: 'fact_check', tone: 'primary' },
+                { label: 'Дублирани групи', value: reviewData?.stats?.duplicateGroups ?? 0, icon: 'layers', tone: 'warning' },
+                { label: 'Прегледани', value: reviewData?.stats?.byStatus?.REVIEWED ?? 0, icon: 'done', tone: 'secondary' },
+                { label: 'Импортирани', value: reviewData?.stats?.byStatus?.IMPORTED ?? 0, icon: 'inventory_2', tone: 'muted' },
+              ].map(card => (
+                <div key={card.label} className="border border-outline-variant/10 bg-surface-container-low px-4 py-3 flex items-start gap-3">
+                  <div className={`w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 ${
+                    card.tone === 'primary' ? 'bg-primary/10' :
+                    card.tone === 'warning' ? 'bg-warning/10' :
+                    card.tone === 'secondary' ? 'bg-secondary/10' :
+                    'bg-outline-variant/10'
+                  }`}>
+                    <span className={`material-symbols-outlined text-[16px] ${
+                      card.tone === 'primary' ? 'text-primary' :
+                      card.tone === 'warning' ? 'text-warning' :
+                      card.tone === 'secondary' ? 'text-secondary' :
+                      'text-on-surface-variant'
+                    }`}>{card.icon}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-label-caps text-[9px] text-on-surface-variant/60">{card.label.toUpperCase()}</p>
+                    <p className="font-headline text-sm text-on-surface">{card.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-4">
+              <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+                <div className="px-4 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+                  <span className="font-label-caps text-label-caps">Документи за преглед</span>
+                  <span className="font-label-caps text-[9px] text-on-surface-variant/50">{(reviewData?.docs ?? []).length} показани</span>
+                </div>
+                {reviewLoading ? (
+                  <div className="p-4 space-y-2">
+                    {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-surface-container-high animate-pulse" />)}
+                  </div>
+                ) : (reviewData?.docs ?? []).length === 0 ? (
+                  <div className="py-16 text-center">
+                    <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-3">verified</span>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant/60">Няма документи за преглед</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr>
+                          <th className="table-header">ТИП</th>
+                          <th className="table-header">КОНТРАГЕНТ</th>
+                          <th className="table-header">Н/Д</th>
+                          <th className="table-header text-right">СУМА</th>
+                          <th className="table-header">УВЕРЕНОСТ</th>
+                          <th className="table-header">ИЗТОЧНИК</th>
+                          <th className="table-header"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(reviewData?.docs ?? []).map((doc: any) => {
+                          const confidence = normalizeConfidence(doc.confidence);
+                          const isLow = confidence < 75;
+                          return (
+                            <tr key={doc.id} className="hover:bg-surface-container transition-colors">
+                              <td className="table-cell">
+                                <DocTypeChip type={doc.docType} />
+                              </td>
+                              <td className="table-cell">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-on-surface truncate">{doc.counterparty?.name || '—'}</p>
+                                  {doc.notes && <p className="text-[11px] text-on-surface-variant/50 truncate max-w-[260px]">{doc.notes}</p>}
+                                  {Array.isArray(doc.reviewReason) && doc.reviewReason.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {doc.reviewReason.slice(0, 3).map((reason: string) => (
+                                        <span key={reason} className="text-[9px] px-1.5 py-0.5 border border-warning/20 bg-warning/10 text-warning">
+                                          {reason}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="table-cell">
+                                <div className="text-xs text-on-surface-variant">
+                                  <div className="font-mono">{doc.docNumber || '—'}</div>
+                                  <div>{doc.docDate ? fmtDate(doc.docDate) : '—'}</div>
+                                </div>
+                              </td>
+                              <td className="table-cell text-right font-mono text-xs text-on-surface">
+                                {doc.amountTotal ? fmt(doc.amountTotal, doc.currency) : '—'}
+                              </td>
+                              <td className="table-cell">
+                                <span className={`font-label-caps text-[9px] px-2 py-0.5 border ${isLow ? 'border-warning/30 bg-warning/10 text-warning' : 'border-primary/30 bg-primary/10 text-primary'}`}>
+                                  {confidence}%
+                                </span>
+                              </td>
+                              <td className="table-cell text-xs text-on-surface-variant/60">
+                                {doc.sourceFile?.filename || '—'}
+                              </td>
+                              <td className="table-cell">
+                                <div className="flex items-center gap-2 justify-end">
+                                  {doc.sourceFile?.driveUrl && (
+                                    <a
+                                      href={doc.sourceFile.driveUrl}
+                                      target="_blank"
+                                      className="px-2 py-1 text-[9px] font-label-caps border border-outline-variant/20 hover:bg-surface-container-high"
+                                    >
+                                      Drive
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={() => updateBizStatus.mutate({ id: doc.id, status: 'REVIEWED' })}
+                                    disabled={updateBizStatus.isPending}
+                                    className="px-2 py-1 text-[9px] font-label-caps border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-50"
+                                  >
+                                    Прегледан
+                                  </button>
+                                  <button
+                                    onClick={() => updateBizStatus.mutate({ id: doc.id, status: 'ARCHIVED' })}
+                                    disabled={updateBizStatus.isPending}
+                                    className="px-2 py-1 text-[9px] font-label-caps border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
+                                  >
+                                    Архивирай
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+                  <div className="px-4 py-3 border-b border-outline-variant/10">
+                    <span className="font-label-caps text-label-caps">Вероятни дубликати</span>
+                  </div>
+                  {((reviewData?.duplicateGroups ?? []) as any[]).length === 0 ? (
+                    <div className="p-4 text-sm text-on-surface-variant/60">Няма открити групи</div>
+                  ) : (
+                    <div className="divide-y divide-outline-variant/10">
+                      {(reviewData?.duplicateGroups ?? []).slice(0, 12).map((group: any, i: number) => (
+                        <div key={`${group.docType}-${group.docNumber}-${i}`} className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <DocTypeChip type={group.docType} />
+                                <span className="font-mono text-xs text-primary">{group.docNumber || '—'}</span>
+                              </div>
+                              <p className="text-xs text-on-surface-variant/60 mt-1 truncate">
+                                {group.currency || '—'} · {group.counterpartyId ? 'има контрагент' : 'без контрагент'}
+                              </p>
+                            </div>
+                            <span className="font-label-caps text-[9px] px-2 py-0.5 border border-warning/30 bg-warning/10 text-warning">
+                              {group.cnt}x
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
         {tab === 'links' && (
