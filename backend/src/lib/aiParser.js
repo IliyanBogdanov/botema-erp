@@ -35,51 +35,6 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 }) : null;
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function isRetryableDocumentError(err) {
-  const msg = String(err?.message || '').toLowerCase();
-  return Boolean(
-    err?.status === 429 ||
-    err?.status === 503 ||
-    msg.includes('429') ||
-    msg.includes('503') ||
-    msg.includes('rate limit') ||
-    msg.includes('quota') ||
-    msg.includes('resource_exhausted') ||
-    msg.includes('timeout') ||
-    msg.includes('timed out') ||
-    msg.includes('econnreset') ||
-    msg.includes('econnrefused') ||
-    msg.includes('fetch failed') ||
-    msg.includes('socket hang up') ||
-    msg.includes('no json')
-  );
-}
-
-async function withRetry(label, fn, opts = {}) {
-  const attempts = Math.max(1, opts.attempts || 3);
-  const baseDelayMs = opts.baseDelayMs || 1500;
-  const maxDelayMs = opts.maxDelayMs || 10000;
-  let lastErr;
-
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      return await fn(attempt);
-    } catch (err) {
-      lastErr = err;
-      if (attempt >= attempts || !isRetryableDocumentError(err)) throw err;
-      const delay = Math.min(maxDelayMs, baseDelayMs * attempt);
-      console.warn(`[${label}] attempt ${attempt} failed: ${err.message?.slice(0, 160)} — retrying in ${delay}ms`);
-      await sleep(delay);
-    }
-  }
-
-  throw lastErr;
-}
-
 // Bulgarian month names → month number
 const BG_MONTHS = {
   'януари': '01', 'февруари': '02', 'март': '03', 'април': '04',
@@ -243,19 +198,18 @@ function parseFromFilename(filename, folder) {
 
 async function downloadDriveFile(fileId) {
   const drive = google.drive({ version: 'v3', auth: getAuth() });
-  return withRetry(`Drive download ${fileId}`, async () => {
-    const chunks = [];
-    const res = await drive.files.get(
-      { fileId, alt: 'media' },
-      { responseType: 'stream' }
-    );
+  const chunks = [];
 
-    return new Promise((resolve, reject) => {
-      res.data.on('data', chunk => chunks.push(chunk));
-      res.data.on('end', () => resolve(Buffer.concat(chunks)));
-      res.data.on('error', reject);
-    });
-  }, { attempts: 3, baseDelayMs: 1200, maxDelayMs: 5000 });
+  const res = await drive.files.get(
+    { fileId, alt: 'media' },
+    { responseType: 'stream' }
+  );
+
+  return new Promise((resolve, reject) => {
+    res.data.on('data', chunk => chunks.push(chunk));
+    res.data.on('end', () => resolve(Buffer.concat(chunks)));
+    res.data.on('error', reject);
+  });
 }
 
 async function parseDocumentWithGroq(filename, folder, pdfBuffer) {
@@ -604,10 +558,9 @@ async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
 }
 
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
-  return withRetry(`Document parse ${filename}`, async () => {
-    const folderType = guessFolderType(folder);
+  const folderType = guessFolderType(folder);
 
-    const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies that import lighting and furniture from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies that import lighting and furniture from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
@@ -726,7 +679,6 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
 
     throw err;
   }
-  }, { attempts: 2, baseDelayMs: 1800, maxDelayMs: 6000 });
 }
 
 module.exports = {
