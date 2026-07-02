@@ -7,7 +7,10 @@ const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const OpenAI = require('openai');
 const pdfParse = require('pdf-parse');
+const { createLogger } = require('./logger');
 const { isMineruEnabled, runMineru } = require('./mineru');
+
+const log = createLogger('aiParser');
 
 const getAuth = () => {
   const oauth2 = new google.auth.OAuth2(
@@ -44,50 +47,52 @@ const BG_MONTHS = {
 
 // Supplier keyword map — both English and Bulgarian transliterations
 const SUPPLIER_KEYWORDS = [
-  { keys: ['lodes', 'лодес'],                              id: 'sup-lodes' },
-  { keys: ['alphaluce', 'алфалуче', 'alphace',
-           'митническа декларация', 'customs declaration',
-           'митница', 'china import', 'chinese'],      id: 'sup-alpha' },
-  { keys: ['polaris', 'поларис'],                          id: 'sup-pol'   },
-  { keys: ['novaluce', 'новалуче'],                        id: 'sup-nov'   },
-  { keys: ['aca lighting', 'aca', 'ака'],                  id: 'sup-aca'   },
-  { keys: ['ambientec', 'амбиентек'],                      id: 'sup-amb'   },
-  { keys: ['antrax', 'антракс'],                           id: 'sup-ant'   },
-  { keys: ['sedap', 'ателие седап', 'atelier sedap'],      id: 'sup-sed'   },
-  { keys: ['braga', 'брага', 'fratelli braga'],            id: 'sup-bra'   },
-  { keys: ['formani', 'формани'],                          id: 'sup-form'  },
-  { keys: ['karimoku', 'каримоку'],                        id: 'sup-kari'  },
-  { keys: ['kraab', 'краб', 'кра аб'],                     id: 'sup-kra'   },
-  { keys: ['sovet', 'совет итали'],                        id: 'sup-sov'   },
-  { keys: ['dhl'],                                         id: 'sup-dhl'   },
-  { keys: ['omega light', 'омега лайт', 'omega'],          id: 'sup-omega' },
-  { keys: ['speedy', 'спиди'],                             id: 'sup-speedy'},
-  { keys: ['zieta', 'зиета'],                              id: 'sup-zieta' },
-  { keys: ['macro', 'макро'],                              id: 'sup-macro' },
-  { keys: ['chatgpt', 'чатгпт', 'чат гпт', 'openai'],     id: 'sup-openai'},
-  { keys: ['microinvest', 'микроинвест'],                  id: 'sup-micro' },
-  { keys: ['зира дизайн', 'zira design'],                  id: 'sup-zira'  },
-  { keys: ['sunfoods', 'сънфуудс', 'сън фудс'],            id: 'sup-sunf'  },
-  { keys: ['ambicio', 'амбицио'],                          id: 'sup-ambic' },
-  { keys: ['alfa light', 'алфа лайт'],                     id: 'sup-alfal' },
-  { keys: ['ват ', 'watt ', 'ватт'],                       id: 'sup-watt'  },
-  { keys: ['румен романов', 'rumen romanov'],               id: 'sup-rrom'  },
-  { keys: ['наем', 'rent', 'шоурум', 'showroom'],          id: 'sup-rent'  },
-  { keys: ['счетоводн', 'accounting', 'accountancy'],      id: 'sup-acct'  },
+  { keys: ['lodes', 'лодес'], id: 'sup-lodes' },
+  {
+    keys: ['alphaluce', 'алфалуче', 'alphace',
+      'митническа декларация', 'customs declaration',
+      'митница', 'china import', 'chinese'], id: 'sup-alpha'
+  },
+  { keys: ['polaris', 'поларис'], id: 'sup-pol' },
+  { keys: ['novaluce', 'новалуче'], id: 'sup-nov' },
+  { keys: ['aca lighting', 'aca', 'ака'], id: 'sup-aca' },
+  { keys: ['ambientec', 'амбиентек'], id: 'sup-amb' },
+  { keys: ['antrax', 'антракс'], id: 'sup-ant' },
+  { keys: ['sedap', 'ателие седап', 'atelier sedap'], id: 'sup-sed' },
+  { keys: ['braga', 'брага', 'fratelli braga'], id: 'sup-bra' },
+  { keys: ['formani', 'формани'], id: 'sup-form' },
+  { keys: ['karimoku', 'каримоку'], id: 'sup-kari' },
+  { keys: ['kraab', 'краб', 'кра аб'], id: 'sup-kra' },
+  { keys: ['sovet', 'совет итали'], id: 'sup-sov' },
+  { keys: ['dhl'], id: 'sup-dhl' },
+  { keys: ['omega light', 'омега лайт', 'omega'], id: 'sup-omega' },
+  { keys: ['speedy', 'спиди'], id: 'sup-speedy' },
+  { keys: ['zieta', 'зиета'], id: 'sup-zieta' },
+  { keys: ['macro', 'макро'], id: 'sup-macro' },
+  { keys: ['chatgpt', 'чатгпт', 'чат гпт', 'openai'], id: 'sup-openai' },
+  { keys: ['microinvest', 'микроинвест'], id: 'sup-micro' },
+  { keys: ['зира дизайн', 'zira design'], id: 'sup-zira' },
+  { keys: ['sunfoods', 'сънфуудс', 'сън фудс'], id: 'sup-sunf' },
+  { keys: ['ambicio', 'амбицио'], id: 'sup-ambic' },
+  { keys: ['alfa light', 'алфа лайт'], id: 'sup-alfal' },
+  { keys: ['ват ', 'watt ', 'ватт'], id: 'sup-watt' },
+  { keys: ['румен романов', 'rumen romanov'], id: 'sup-rrom' },
+  { keys: ['наем', 'rent', 'шоурум', 'showroom'], id: 'sup-rent' },
+  { keys: ['счетоводн', 'accounting', 'accountancy'], id: 'sup-acct' },
   // 2024/2025 suppliers
-  { keys: ['bonaldo', 'боналдо'],                          id: 'sup-bonaldo' },
-  { keys: ['топ диджитал', 'top digital', 'топдиджитал'],  id: 'sup-topdig'  },
-  { keys: ['facebook', 'фейсбук', 'meta ads', 'meta/fac'], id: 'sup-fb'      },
-  { keys: ['google ads', 'гугъл', 'google платеж'],        id: 'sup-google'  },
-  { keys: ['superhosting', 'супърхостинг'],                id: 'sup-sh'      },
-  { keys: ['nest studio', 'нест студио', 'nest '],         id: 'sup-nest'    },
-  { keys: ['rashev', 'рашев', 'ultralight'],               id: 'sup-rashev'  },
-  { keys: ['econt', 'еконт'],                              id: 'sup-econt'   },
-  { keys: ['exenza', 'ексенза'],                           id: 'sup-exenza'  },
-  { keys: ['fercam', 'феркам'],                            id: 'sup-fercam'  },
-  { keys: ['siltem', 'силтем'],                            id: 'sup-siltem'  },
-  { keys: ['tridonic', 'тридоник'],                        id: 'sup-tridonic'},
-  { keys: ['sielte', 'сиелте'],                            id: 'sup-sielte'  },
+  { keys: ['bonaldo', 'боналдо'], id: 'sup-bonaldo' },
+  { keys: ['топ диджитал', 'top digital', 'топдиджитал'], id: 'sup-topdig' },
+  { keys: ['facebook', 'фейсбук', 'meta ads', 'meta/fac'], id: 'sup-fb' },
+  { keys: ['google ads', 'гугъл', 'google платеж'], id: 'sup-google' },
+  { keys: ['superhosting', 'супърхостинг'], id: 'sup-sh' },
+  { keys: ['nest studio', 'нест студио', 'nest '], id: 'sup-nest' },
+  { keys: ['rashev', 'рашев', 'ultralight'], id: 'sup-rashev' },
+  { keys: ['econt', 'еконт'], id: 'sup-econt' },
+  { keys: ['exenza', 'ексенза'], id: 'sup-exenza' },
+  { keys: ['fercam', 'феркам'], id: 'sup-fercam' },
+  { keys: ['siltem', 'силтем'], id: 'sup-siltem' },
+  { keys: ['tridonic', 'тридоник'], id: 'sup-tridonic' },
+  { keys: ['sielte', 'сиелте'], id: 'sup-sielte' },
 ];
 
 // Folders that indicate OUTGOING documents — skip these
@@ -129,19 +134,19 @@ function extractDateFromPath(folder, filename) {
   const text = (folder + ' ' + filename).toLowerCase();
 
   // ISO date in filename: 2026-04-15
-  const isoMatch = text.match(/\b(202\d)[_\-. /](\d{1,2})[_\-. /](\d{1,2})\b/);
+  const isoMatch = text.match(/\b(20\d{2})[_\-. /](\d{1,2})[_\-. /](\d{1,2})\b/);
   if (isoMatch) {
-    return `${isoMatch[1]}-${isoMatch[2].padStart(2,'0')}-${isoMatch[3].padStart(2,'0')}`;
+    return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
   }
 
   // Date in filename: 15.04.2026 or 03.04.2026
-  const dmyMatch = text.match(/\b(\d{1,2})[._](\d{1,2})[._](202\d)\b/);
+  const dmyMatch = text.match(/\b(\d{1,2})[._](\d{1,2})[._](20\d{2})\b/);
   if (dmyMatch) {
-    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`;
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
   }
 
   // Bulgarian month name in folder path
-  const year = (folder.match(/\b(202\d)\b/) || [])[1] || new Date().getFullYear().toString();
+  const year = (folder.match(/\b(20\d{2})\b/) || [])[1] || new Date().getFullYear().toString();
   for (const [bg, mm] of Object.entries(BG_MONTHS)) {
     if (text.includes(bg)) return `${year}-${mm}-01`;
   }
@@ -153,29 +158,30 @@ function extractDateFromPath(folder, filename) {
 function extractInvoiceNo(filename) {
   const name = filename.replace(/\.[^.]+$/, '');
 
-  // Pattern: Invoice-2604608 or Invoice-2604608-Lodes
-  const invMatch = name.match(/(?:invoice|фактура|faktura|inv)[_\-\s#]+(\d{4,})/i);
+  // Pattern: Invoice-2604608 or Invoice-2604608-Lodes or Фактура №12345
+  const invMatch = name.match(/(?:invoice|фактура|faktura|inv|no|nr|№)[_\-\s#.]+([A-Z0-9]{3,})/i);
   if (invMatch) return invMatch[1];
 
-  // Pattern: pure long number sequences like 2604608
-  const numMatch = name.match(/\b(\d{6,})\b/);
-  if (numMatch) return numMatch[1];
-
-  // Pattern: alphanumeric like AP202602090005
-  const alphaMatch = name.match(/\b([A-Z]{1,4}\d{8,})\b/);
+  // Pattern: alphanumeric like AP202602090005 or INV-2024-001
+  const alphaMatch = name.match(/\b([A-Z]{1,4}[-_]?\d{4,})\b/i);
   if (alphaMatch) return alphaMatch[1];
+
+  // Pattern: pure number sequences — lowered from 6 to 4 digits to catch Bulgarian short invoice numbers
+  const numMatch = name.match(/\b(\d{4,})\b/);
+  if (numMatch) return numMatch[1];
 
   return null;
 }
 
 function parseFromFilename(filename, folder) {
+  log.warn('Using filename heuristic (no AI available)', { filename, folder });
   const docDate = extractDateFromPath(folder, filename);
   const invoiceNo = extractInvoiceNo(filename);
   const name = filename.replace(/\.[^.]+$/, '');
   const docType = guessFolderType(folder) === 'INVOICE_OUT' ? 'INVOICE_OUT'
     : guessFolderType(folder) === 'DELIVERY' ? 'DELIVERY_NOTE'
-    : guessFolderType(folder) === 'OFFER' ? 'OFFER'
-    : 'INVOICE_IN';
+      : guessFolderType(folder) === 'OFFER' ? 'OFFER'
+        : 'INVOICE_IN';
 
   // Guess currency from supplier/folder — Bulgarian suppliers use BGN, international use EUR
   const text = (folder + '/' + filename).toLowerCase();
@@ -214,6 +220,9 @@ async function downloadDriveFile(fileId) {
 
 async function parseDocumentWithGroq(filename, folder, pdfBuffer) {
   if (!groq) throw new Error('GROQ_API_KEY is not configured');
+
+  log.info('Trying Groq llama-3.3-70b', { filename });
+  const t0 = Date.now();
 
   const folderType = guessFolderType(folder);
   const pdfData = await pdfParse(pdfBuffer);
@@ -263,11 +272,16 @@ Return ONLY valid JSON (no markdown):
   const content = chat.choices[0].message.content.trim();
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON in Groq response: ' + content.substring(0, 200));
-  return JSON.parse(jsonMatch[0]);
+  const result = JSON.parse(jsonMatch[0]);
+  log.info('Groq parse success', { filename, docType: result.docType, confidence: result.confidence, ms: Date.now() - t0 });
+  return result;
 }
 
 async function parseDocumentWithOpenRouter(filename, folder, pdfBuffer) {
   if (!openrouter) throw new Error('OPENROUTER_API_KEY is not configured');
+
+  log.info('Trying OpenRouter gpt-oss-20b', { filename });
+  const t0 = Date.now();
   const folderType = guessFolderType(folder);
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000);
@@ -307,21 +321,25 @@ Return ONLY valid JSON (no markdown):
   "confidence": number
 }`;
 
-  const chat = await openrouter.chat.completions.create({
+  const chat2 = await openrouter.chat.completions.create({
     model: 'openai/gpt-oss-20b:free',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.1,
   });
 
-  const content = chat.choices[0].message.content.trim();
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in OpenRouter response: ' + content.substring(0, 200));
-  return JSON.parse(jsonMatch[0]);
+  const content2 = chat2.choices[0].message.content.trim();
+  const jsonMatch2 = content2.match(/\{[\s\S]*\}/);
+  if (!jsonMatch2) throw new Error('No JSON in OpenRouter response: ' + content2.substring(0, 200));
+  const result2 = JSON.parse(jsonMatch2[0]);
+  log.info('OpenRouter parse success', { filename, docType: result2.docType, confidence: result2.confidence, ms: Date.now() - t0 });
+  return result2;
 }
 
 async function parseDocumentWithOpenAI(filename, folder, pdfBuffer) {
   if (!openai) throw new Error('OPENAI_API_KEY is not configured');
 
+  log.info('Trying OpenAI gpt-4o-mini', { filename });
+  const t0 = Date.now();
   const folderType = guessFolderType(folder);
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 12000);
@@ -370,7 +388,9 @@ Return ONLY valid JSON (no markdown):
   const content = chat.choices[0].message.content.trim();
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON in OpenAI response: ' + content.substring(0, 200));
-  return JSON.parse(jsonMatch[0]);
+  const resultOai = JSON.parse(jsonMatch[0]);
+  log.info('OpenAI parse success', { filename, docType: resultOai.docType, confidence: resultOai.confidence, ms: Date.now() - t0 });
+  return resultOai;
 }
 
 function inferMimeType(filename, fallback = 'application/pdf') {
@@ -559,6 +579,10 @@ async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
 
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
+  const mimeType = inferMimeType(filename);
+  const t0 = Date.now();
+
+  log.info('Starting document parse', { filename, folder, mimeType, folderType });
 
   const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies that import lighting and furniture from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
@@ -601,7 +625,6 @@ Return ONLY valid JSON (no markdown, no explanation):
 }`;
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  const mimeType = inferMimeType(filename);
 
   if (isMineruEnabled()) {
     try {
@@ -643,20 +666,34 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
   }
 
   const tryGemini = async (retries = 2) => {
+    log.info(`Trying Gemini 2.5 Flash`, { filename, retriesLeft: retries });
+    const tGemini = Date.now();
     try {
       const result = await model.generateContent([
         { text: prompt },
         { inlineData: { mimeType, data: pdfBuffer.toString('base64') } },
       ]);
       const text = result.response.text().trim();
-      return parseJsonFromAIText(text, 'AI');
+      const parsed = parseJsonFromAIText(text, 'AI');
+      log.info('Gemini parse success', {
+        filename,
+        docType: parsed.docType,
+        invoiceNo: parsed.invoiceNo,
+        amountTotal: parsed.amountTotal,
+        currency: parsed.currency,
+        confidence: parsed.confidence,
+        ms: Date.now() - tGemini,
+      });
+      return parsed;
     } catch (err) {
       const msg = (err.message || '').toLowerCase();
       const isRateLimit = err.status === 429 || msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('rate limit') || msg.includes('quota');
       if (isRateLimit && retries > 0) {
+        log.warn('Gemini rate limit hit — waiting 65s before retry', { filename, retriesLeft: retries - 1 });
         await new Promise(r => setTimeout(r, 65000));
         return tryGemini(retries - 1);
       }
+      log.warn('Gemini failed', { filename, error: err.message, isRateLimit });
       throw err;
     }
   };
@@ -668,16 +705,30 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
       ...(mimeType === 'application/pdf' ? [parseDocumentWithGroq, parseDocumentWithOpenRouter, parseDocumentWithOpenAI] : []),
     ];
 
+    if (fallbackParsers.length === 0) {
+      log.warn('No fallback parsers available for non-PDF, using heuristic', { filename, mimeType });
+      return parseFromFilename(filename, folder);
+    }
+
+    log.warn('Gemini unavailable — starting fallback chain', { filename, error: err.message, fallbacks: fallbackParsers.map(f => f.name) });
+
     for (const parser of fallbackParsers) {
       try {
-        return await parser(filename, folder, pdfBuffer);
+        const result = await parser(filename, folder, pdfBuffer);
+        log.info('Fallback parse success', { filename, parser: parser.name, docType: result.docType, confidence: result.confidence, totalMs: Date.now() - t0 });
+        return result;
       } catch (fallbackErr) {
-        if (fallbackErr.message?.includes('not configured')) continue;
+        if (fallbackErr.message?.includes('not configured')) {
+          log.debug(`Skipping ${parser.name} — not configured`, { filename });
+          continue;
+        }
+        log.warn(`Fallback ${parser.name} failed`, { filename, error: fallbackErr.message });
         err = fallbackErr;
       }
     }
 
-    throw err;
+    log.error('All AI parsers failed — falling back to filename heuristic', { filename, folder, error: err.message });
+    return parseFromFilename(filename, folder);
   }
 }
 

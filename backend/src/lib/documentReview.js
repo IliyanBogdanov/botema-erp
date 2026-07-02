@@ -1,3 +1,7 @@
+const { createLogger } = require('./logger');
+
+const log = createLogger('documentReview');
+
 const toNumber = value => {
   if (value == null || value === '') return 0;
   const n = Number(value);
@@ -9,8 +13,8 @@ const normalizeText = value => String(value || '').trim();
 const getSuggestedAction = data => {
   const type = data?.type || data?.docType;
   if (type === 'INVOICE_OUT') return 'CREATE_INVOICE';
-  if (type === 'INVOICE_IN' || type === 'DELIVERY') return 'CREATE_PURCHASE';
-  if (type === 'PROFORMA') return 'ARCHIVE_ONLY';
+  if (type === 'INVOICE_IN' || type === 'DELIVERY' || type === 'DELIVERY_NOTE') return 'CREATE_PURCHASE';
+  if (type === 'PROFORMA' || type === 'PROFORMA_IN' || type === 'PROFORMA_OUT') return 'ARCHIVE_ONLY';
   return 'ARCHIVE_ONLY';
 };
 
@@ -44,20 +48,26 @@ async function analyzeDocument(prisma, extractedData = {}) {
   const { amountNet, vatAmount, amountTotal } = calculateTotals(data);
   let duplicateOfId = null;
 
-  if (!invoiceNo) flags.push('MISSING_INVOICE_NO');
-  if (!date || Number.isNaN(new Date(date).getTime())) flags.push('MISSING_DATE');
-  if (!currency) flags.push('MISSING_CURRENCY');
-  if (!amountTotal && !amountNet) flags.push('MISSING_AMOUNT');
-  if (!vatAmount && type !== 'PROFORMA') flags.push('MISSING_VAT');
+  log.debug('Analyzing document', { type, invoiceNo, currency, date, amountTotal, supplierName });
+
+  if (!invoiceNo) { flags.push('MISSING_INVOICE_NO'); log.debug('Flag: MISSING_INVOICE_NO'); }
+  if (!date || Number.isNaN(new Date(date).getTime())) { flags.push('MISSING_DATE'); log.debug('Flag: MISSING_DATE', { date }); }
+  if (!currency) { flags.push('MISSING_CURRENCY'); log.debug('Flag: MISSING_CURRENCY'); }
+  if (!amountTotal && !amountNet) { flags.push('MISSING_AMOUNT'); log.debug('Flag: MISSING_AMOUNT'); }
+  if (!vatAmount && type !== 'PROFORMA' && type !== 'PROFORMA_IN' && type !== 'PROFORMA_OUT') { flags.push('MISSING_VAT'); log.debug('Flag: MISSING_VAT'); }
   if (amountNet && vatAmount && amountTotal && Math.abs((amountNet + vatAmount) - amountTotal) > 0.05) {
     flags.push('TOTAL_MISMATCH');
+    log.warn('Flag: TOTAL_MISMATCH', { amountNet, vatAmount, amountTotal, diff: Math.abs((amountNet + vatAmount) - amountTotal) });
   }
 
-  if (type === 'INVOICE_IN' || type === 'DELIVERY') {
+  if (type === 'INVOICE_IN' || type === 'DELIVERY' || type === 'DELIVERY_NOTE') {
     const supplier = supplierName
       ? await prisma.supplier.findFirst({ where: { name: { contains: supplierName, mode: 'insensitive' } } })
       : null;
-    if (!supplier) flags.push('UNKNOWN_COUNTERPARTY');
+    if (!supplier) {
+      flags.push('UNKNOWN_COUNTERPARTY');
+      log.debug('Flag: UNKNOWN_COUNTERPARTY', { supplierName });
+    }
     if (invoiceNo && supplier) {
       const duplicate = await prisma.purchase.findFirst({
         where: { invoiceNo, supplierId: supplier.id },
@@ -66,6 +76,7 @@ async function analyzeDocument(prisma, extractedData = {}) {
       if (duplicate) {
         duplicateOfId = duplicate.id;
         flags.push('DUPLICATE_INVOICE');
+        log.warn('Flag: DUPLICATE_INVOICE', { invoiceNo, supplierId: supplier.id, duplicateId: duplicate.id });
       }
     }
   }
@@ -74,24 +85,35 @@ async function analyzeDocument(prisma, extractedData = {}) {
     const client = clientName
       ? await prisma.client.findFirst({ where: { name: { contains: clientName, mode: 'insensitive' } } })
       : null;
-    if (!client) flags.push('UNKNOWN_COUNTERPARTY');
+    if (!client) {
+      flags.push('UNKNOWN_COUNTERPARTY');
+      log.debug('Flag: UNKNOWN_COUNTERPARTY', { clientName });
+    }
     if (invoiceNo) {
       const duplicate = await prisma.invoice.findFirst({ where: { number: invoiceNo }, select: { id: true } });
       if (duplicate) {
         duplicateOfId = duplicate.id;
         flags.push('DUPLICATE_INVOICE');
+        log.warn('Flag: DUPLICATE_INVOICE', { invoiceNo, duplicateId: duplicate.id });
       }
     }
   }
 
   const confidence = getConfidence(data);
-  if (confidence < 0.75) flags.push('LOW_CONFIDENCE');
+  // AI returns confidence on 0-100 scale; threshold must match that scale
+  if (confidence < 75) {
+    flags.push('LOW_CONFIDENCE');
+    log.debug('Flag: LOW_CONFIDENCE', { confidence });
+  }
+
+  const uniqueFlags = [...new Set(flags)];
+  log.info('Analysis complete', { type, invoiceNo, confidence, flags: uniqueFlags, suggestedAction: getSuggestedAction(data) });
 
   return {
     confidence,
     suggestedAction: getSuggestedAction(data),
     duplicateOfId,
-    riskFlags: [...new Set(flags)],
+    riskFlags: uniqueFlags,
   };
 }
 
