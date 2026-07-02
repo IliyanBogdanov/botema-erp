@@ -677,12 +677,12 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
       const parsed = parseJsonFromAIText(text, 'AI');
       log.info('Gemini parse success', {
         filename,
-        docType:     parsed.docType,
-        invoiceNo:   parsed.invoiceNo,
+        docType: parsed.docType,
+        invoiceNo: parsed.invoiceNo,
         amountTotal: parsed.amountTotal,
-        currency:    parsed.currency,
-        confidence:  parsed.confidence,
-        ms:          Date.now() - tGemini,
+        currency: parsed.currency,
+        confidence: parsed.confidence,
+        ms: Date.now() - tGemini,
       });
       return parsed;
     } catch (err) {
