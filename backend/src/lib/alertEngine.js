@@ -194,6 +194,13 @@ const encodeMail = value => Buffer.from(value)
   .replace(/\//g, '_')
   .replace(/=+$/, '');
 
+const encodeMimeWord = value => `=?UTF-8?B?${Buffer.from(String(value), 'utf8').toString('base64')}?=`;
+
+async function getAuthenticatedMailbox(gmail) {
+  const profile = await gmail.users.getProfile({ userId: 'me' });
+  return profile.data.emailAddress || null;
+}
+
 function buildDigestHtml(alerts) {
   const SEV_COLOR = { CRITICAL: '#ff453a', WARNING: '#ff9f0a', INFO: '#0a84ff' };
   const SEV_BG    = { CRITICAL: '#ff453a22', WARNING: '#ff9f0a22', INFO: '#0a84ff22' };
@@ -255,6 +262,12 @@ async function sendDailyDigest(prisma) {
   const recipient = process.env.ALERT_EMAIL_TO || process.env.ADMIN_EMAIL || process.env.GMAIL_ALERT_TO;
   if (!recipient) return { skipped: true, reason: 'Missing ALERT_EMAIL_TO/ADMIN_EMAIL' };
 
+  const gmail = getGmailClient();
+  const sender = await getAuthenticatedMailbox(gmail);
+  if (!process.env.ALLOW_SELF_DIGEST && sender && sender.toLowerCase() === String(recipient).toLowerCase()) {
+    return { skipped: true, reason: 'Recipient matches authenticated Gmail mailbox', sender, recipient };
+  }
+
   await generateAlerts(prisma);
   const alerts = await prisma.alert.findMany({
     where: {
@@ -268,9 +281,10 @@ async function sendDailyDigest(prisma) {
 
   const html = buildDigestHtml(alerts);
   const boundary = `botema_${Date.now()}`;
+  const subject = encodeMimeWord(`Studio Botema ERP - ${alerts.length} активни сигнала`);
   const mimeMsg = [
     `To: ${recipient}`,
-    `Subject: Studio Botema ERP — ${alerts.length} активни сигнала`,
+    `Subject: ${subject}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     '',
@@ -287,12 +301,11 @@ async function sendDailyDigest(prisma) {
     `--${boundary}--`,
   ].join('\r\n');
 
-  const gmail = getGmailClient();
   await gmail.users.messages.send({
     userId: 'me',
     requestBody: { raw: encodeMail(mimeMsg) },
   });
-  return { sent: true, count: alerts.length, recipient };
+  return { sent: true, count: alerts.length, recipient, sender };
 }
 
 function startAlertJobs(prisma) {

@@ -8,6 +8,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const OpenAI = require('openai');
 const pdfParse = require('pdf-parse');
 const { createLogger } = require('./logger');
+const { isMineruEnabled, runMineru } = require('./mineru');
 
 const log = createLogger('aiParser');
 
@@ -401,6 +402,181 @@ function inferMimeType(filename, fallback = 'application/pdf') {
   return fallback;
 }
 
+function parseJsonFromAIText(text, label = 'AI') {
+  const cleaned = String(text || '').trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`No JSON in ${label} response: ` + cleaned.substring(0, 200));
+  return JSON.parse(jsonMatch[0]);
+}
+
+function parseEuropeanNumber(raw) {
+  if (!raw) return null;
+  let s = String(raw).replace(/\s/g, '').replace(/[^\d,.-]/g, '');
+  if (!s) return null;
+  const comma = s.lastIndexOf(',');
+  const dot = s.lastIndexOf('.');
+  if (comma > dot) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (dot > comma) {
+    s = s.replace(/,/g, '');
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeDate(raw) {
+  if (!raw) return null;
+  const text = String(raw);
+  let m = text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+function inferCurrencyFromText(text, fallback = null) {
+  if (/\bEUR\b|€/i.test(text)) return 'EUR';
+  if (/\bBGN\b|лв\.?|лева/i.test(text)) return 'BGN';
+  if (/\bUSD\b|\$/i.test(text)) return 'USD';
+  if (/\bGBP\b|£/i.test(text)) return 'GBP';
+  return fallback;
+}
+
+function inferDocTypeFromText(text, folder) {
+  const lower = `${folder || ''}\n${text || ''}`.toLowerCase();
+  if (/proforma|проформа/.test(lower)) return 'PROFORMA';
+  if (/offer|оферта/.test(lower)) return 'OFFER';
+  if (/delivery note|стокова|delivery|packing list|товарителница/.test(lower)) return 'DELIVERY_NOTE';
+  if (/изходящи|invoice-\d+-for-operation-sale|студио ботема еоод\s+фактура/i.test(lower)) return 'INVOICE_OUT';
+  if (/invoice|фактура|fattura|rechnung/.test(lower)) return 'INVOICE_IN';
+  return 'OTHER';
+}
+
+function extractLikelyTotal(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const labelled = [];
+  const all = [];
+  const amountRe = /(?:€|\bEUR\b|\bBGN\b|\bUSD\b|лв\.?)?\s*(-?\d{1,3}(?:[ .]\d{3})*(?:[,.]\d{2,4})|-?\d+(?:[,.]\d{2,4}))(?:\s*(?:€|\bEUR\b|\bBGN\b|\bUSD\b|лв\.?))?/gi;
+
+  for (const line of lines) {
+    const isTotalLine = /total|totale|gesamt|общо|сума|amount due|due|grand total|за плащане/i.test(line);
+    let match;
+    while ((match = amountRe.exec(line))) {
+      const value = parseEuropeanNumber(match[1]);
+      if (value == null || value <= 0) continue;
+      all.push(value);
+      if (isTotalLine) labelled.push(value);
+    }
+  }
+
+  const pool = labelled.length ? labelled : all;
+  if (!pool.length) return null;
+  return Math.max(...pool);
+}
+
+function parseStructuredFromMineruText(filename, folder, text) {
+  const body = String(text || '');
+  const docType = inferDocTypeFromText(body, folder);
+  const currency = inferCurrencyFromText(body, parseFromFilename(filename, folder).currency);
+  const amountTotal = extractLikelyTotal(body);
+  const invoiceNo = (
+    body.match(/(?:invoice|фактура|faktura|fattura|rechnung|no\.?|№|number|номер)\s*[:#№-]?\s*([A-ZА-Я0-9][A-ZА-Я0-9./_-]{2,})/i)?.[1]
+    || extractInvoiceNo(filename)
+    || null
+  );
+  const docDate = normalizeDate(
+    body.match(/(?:date|дата|data|datum|invoice date)\s*[:.-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})/i)?.[1]
+    || body.match(/\b(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/)?.[1]
+  );
+
+  const found = [invoiceNo, docDate, amountTotal, currency].filter(Boolean).length;
+  return {
+    docType,
+    invoiceNo,
+    docDate,
+    dueDate: null,
+    currency,
+    amountNet: null,
+    vatAmount: null,
+    amountTotal,
+    description: filename,
+    supplierName: null,
+    supplierVat: null,
+    confidence: found >= 4 ? 80 : found === 3 ? 65 : found === 2 ? 45 : 20,
+    extractionProvider: 'mineru+heuristic',
+  };
+}
+
+async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
+  const providers = [];
+
+  if (process.env.GEMINI_API_KEY && process.env.DISABLE_GEMINI_EXTRACTION !== 'true') {
+    providers.push({
+      name: 'gemini',
+      run: async () => {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const result = await model.generateContent([{ text: prompt }]);
+        return result.response.text();
+      },
+    });
+  }
+
+  if (groq && process.env.DISABLE_GROQ_EXTRACTION !== 'true') {
+    providers.push({
+      name: 'groq',
+      run: async () => {
+        const chat = await groq.chat.completions.create({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        });
+        return chat.choices[0].message.content;
+      },
+    });
+  }
+
+  if (openrouter && process.env.DISABLE_OPENROUTER_EXTRACTION !== 'true') {
+    providers.push({
+      name: 'openrouter',
+      run: async () => {
+        const chat = await openrouter.chat.completions.create({
+          model: 'openai/gpt-oss-20b:free',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        });
+        return chat.choices[0].message.content;
+      },
+    });
+  }
+
+  if (openai && process.env.DISABLE_OPENAI_EXTRACTION !== 'true') {
+    providers.push({
+      name: 'openai',
+      run: async () => {
+        const chat = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        });
+        return chat.choices[0].message.content;
+      },
+    });
+  }
+
+  let lastErr;
+  for (const provider of providers) {
+    try {
+      const text = await provider.run();
+      const parsed = parseJsonFromAIText(text, `${label}/${provider.name}`);
+      return { parsed, provider: provider.name };
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[${label}] ${provider.name} failed: ${err.message?.slice(0, 160)}`);
+    }
+  }
+  throw lastErr || new Error(`No configured provider for ${label}`);
+}
+
 async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
   const mimeType = inferMimeType(filename);
@@ -450,6 +626,45 @@ Return ONLY valid JSON (no markdown, no explanation):
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
+  if (isMineruEnabled()) {
+    try {
+      const mineru = await runMineru({ filename, buffer: pdfBuffer });
+      if (mineru.text) {
+        const withMineruMeta = (parsed) => ({
+          ...parsed,
+          mineru: {
+            durationMs: mineru.durationMs,
+            digest: mineru.digest,
+            files: mineru.files,
+          },
+        });
+
+        try {
+          const { parsed, provider } = await extractJsonFromTextPrompt(`${prompt}
+
+MinerU extracted document content:
+${mineru.text.substring(0, 24000)}
+
+Return ONLY the structured JSON requested above.`, 'MinerU');
+          return withMineruMeta({
+            ...parsed,
+            extractionProvider: `mineru+${provider}`,
+          });
+        } catch (err) {
+          if (!String(err.message || '').includes('No configured provider')) {
+            console.warn(`[MinerU] AI extraction failed for ${filename}: ${err.message?.slice(0, 200)}`);
+          }
+          const parsed = parseStructuredFromMineruText(filename, folder, mineru.text);
+          if (parsed.amountTotal || parsed.invoiceNo || parsed.docDate) {
+            return withMineruMeta(parsed);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[MinerU] ${filename}: ${err.message?.slice(0, 300)}`);
+    }
+  }
+
   const tryGemini = async (retries = 2) => {
     log.info(`Trying Gemini 2.5 Flash`, { filename, retriesLeft: retries });
     const tGemini = Date.now();
@@ -459,17 +674,15 @@ Return ONLY valid JSON (no markdown, no explanation):
         { inlineData: { mimeType, data: pdfBuffer.toString('base64') } },
       ]);
       const text = result.response.text().trim();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON in AI response: ' + text.substring(0, 200));
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = parseJsonFromAIText(text, 'AI');
       log.info('Gemini parse success', {
         filename,
-        docType: parsed.docType,
-        invoiceNo: parsed.invoiceNo,
+        docType:     parsed.docType,
+        invoiceNo:   parsed.invoiceNo,
         amountTotal: parsed.amountTotal,
-        currency: parsed.currency,
-        confidence: parsed.confidence,
-        ms: Date.now() - tGemini,
+        currency:    parsed.currency,
+        confidence:  parsed.confidence,
+        ms:          Date.now() - tGemini,
       });
       return parsed;
     } catch (err) {

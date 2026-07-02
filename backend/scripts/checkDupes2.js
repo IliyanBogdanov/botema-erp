@@ -8,7 +8,7 @@ async function main() {
   
   // Also check gmail_messages for dupes
   const dupGmail = await p.$queryRawUnsafe(
-    `SELECT "gmailId", COUNT(*) as cnt FROM gmail_messages WHERE "gmailId" IS NOT NULL GROUP BY "gmailId" HAVING COUNT(*) > 1 LIMIT 10`
+    `SELECT "messageId", COUNT(*) as cnt FROM gmail_messages WHERE "messageId" IS NOT NULL GROUP BY "messageId" HAVING COUNT(*) > 1 LIMIT 10`
   );
   console.log('Gmail message duplicates:', dupGmail.length ? dupGmail : 'None found');
 }

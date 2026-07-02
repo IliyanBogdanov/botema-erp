@@ -1,9 +1,11 @@
 node_modules/
+.venv-mineru/
 .env
 .env.local
 .next/
 dist/
 build/
+output/
 *.log
 .codex-logs/
 .DS_Store

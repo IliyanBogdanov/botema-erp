@@ -66,6 +66,14 @@ app.use('/api/search',  require('./routes/search'));
 app.use('/api/rates',   require('./routes/rates'));
 
 // ─── Health ───────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Studio Botema ERP API',
+    health: '/health',
+  });
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // ─── Error Handler ───────────────────────────────────────────────────────────
@@ -86,4 +94,3 @@ const { startNightlyImportJob } = require('./jobs/nightlyImportJob');
 startNightlyImportJob();
 
 module.exports = app;
-
