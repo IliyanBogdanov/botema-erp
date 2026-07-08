@@ -64,8 +64,9 @@ router.get('/aging', auth, async (req, res) => {
       orderBy: { dueDate: 'asc' },
     });
 
-    const BGN_PER_EUR = 1.95583;
-    const toEur = (amount, currency) => currency === 'BGN' ? Number(amount) / BGN_PER_EUR : Number(amount);
+    const fx = require('../lib/fx');
+    await fx.loadRates();
+    const toEur = fx.toEur;
 
     const result = invoices.map(inv => {
       const due = inv.dueDate ? new Date(inv.dueDate) : null;

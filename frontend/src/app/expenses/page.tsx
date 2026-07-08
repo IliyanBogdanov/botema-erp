@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, fmt, fmtDate } from '@/lib/api';
+import { api, fmt, fmtDate, amountToEur } from '@/lib/api';
 import { Modal } from '@/components/Modal';
 
 interface Expense {
@@ -130,12 +130,7 @@ export default function ExpensesPage() {
       )
     : expenses;
 
-  const totalEUR = filtered.reduce((s, e) => {
-    const amt = Number(e.amount);
-    if (e.currency === 'BGN') return s + amt / 1.95583;
-    if (e.currency === 'EUR') return s + amt;
-    return s + amt;
-  }, 0);
+  const totalEUR = filtered.reduce((s, e) => s + amountToEur(e.amount, e.currency), 0);
 
   return (
     <div className="min-h-screen">

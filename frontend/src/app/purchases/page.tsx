@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, fmt, fmtDate } from '@/lib/api';
+import { api, fmt, fmtDate, amountToEur } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { Modal } from '@/components/Modal';
 
@@ -228,7 +228,7 @@ export default function PurchasesPage() {
       )
     : purchases;
 
-  const total = filtered.reduce((s, p) => s + (p.currency === 'BGN' ? Number(p.amount) / 1.95583 : Number(p.amount)), 0);
+  const total = filtered.reduce((s, p) => s + amountToEur(p.amount, p.currency), 0);
 
   return (
     <div className="p-container-padding">

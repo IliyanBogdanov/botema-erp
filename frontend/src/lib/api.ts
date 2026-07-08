@@ -29,6 +29,17 @@ api.interceptors.response.use(
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 export const BGN_PER_EUR = 1.95583;
+// Fallback market rate; matches the backend fallback in lib/fx.js
+export const USD_PER_EUR = 1.14;
+
+/** Convert an amount in the given currency to EUR (BGN by the fixed peg, USD by fallback rate) */
+export const amountToEur = (n: number | string | null | undefined, currency?: string | null) => {
+  const amt = Number(n) || 0;
+  const cur = String(currency || 'EUR').toUpperCase();
+  if (cur === 'BGN') return amt / BGN_PER_EUR;
+  if (cur === 'USD') return amt / USD_PER_EUR;
+  return amt;
+};
 
 /** Format a number as EUR currency */
 export const fmt = (n: number | string | null | undefined, currency = 'EUR') =>

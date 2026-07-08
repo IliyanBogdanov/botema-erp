@@ -186,10 +186,7 @@ export function PendingDocuments({ docs }: { docs: any[] }) {
               {doc.extractedData?.supplierName || doc.extractedData?.clientName || '—'} · {doc.extractedData?.amount != null ? Number(doc.extractedData.amount).toLocaleString('bg-BG', { minimumFractionDigits: 2 }) : '—'} {doc.extractedData?.currency}
             </div>
           </div>
-          <div className="flex gap-2">
-            <button className="btn-primary text-xs py-1 px-3">✓ Одобри</button>
-            <button className="btn-secondary text-xs py-1 px-3">✗</button>
-          </div>
+          <a href="/documents" className="btn-secondary text-xs py-1 px-3">Преглед</a>
         </div>
       ))}
     </div>

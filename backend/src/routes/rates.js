@@ -1,62 +1,34 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
+const fx = require('../lib/fx');
 
-// In-memory cache: { rates: {...}, fetchedAt: Date }
-let ratesCache = null;
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-// EUR/BGN is fixed by currency board — always 1.95583
-const EUR_BGN_FIXED = 1.95583;
-
-async function fetchRates() {
-  // open.er-api.com — free, no key required, EUR as base
-  const res = await fetch('https://open.er-api.com/v6/latest/EUR');
-  if (!res.ok) throw new Error(`Rate fetch failed: ${res.status}`);
-  const json = await res.json();
-  if (json.result !== 'success') throw new Error('Rate API returned error');
-
-  const rates = json.rates || {};
-  // Override EUR/BGN with the legally fixed rate
-  rates.BGN = EUR_BGN_FIXED;
-
-  ratesCache = { rates, fetchedAt: new Date() };
-  return ratesCache;
-}
-
-// GET /api/rates
+// GET /api/rates — live FX snapshot (shared cache with all KPI aggregations)
 router.get('/', auth, async (req, res) => {
   try {
-    const now = Date.now();
-    if (!ratesCache || now - new Date(ratesCache.fetchedAt).getTime() > CACHE_TTL_MS) {
-      await fetchRates();
-    }
-
-    const { rates, fetchedAt } = ratesCache;
-    const bgnPerEur = rates.BGN || EUR_BGN_FIXED;
-    const usdPerEur = rates.USD || null;
-    const gbpPerEur = rates.GBP || null;
-    const chfPerEur = rates.CHF || null;
+    const { perEur, fetchedAt, live } = await fx.loadRates();
+    const bgnPerEur = perEur.BGN;
 
     res.json({
       base: 'EUR',
-      fetchedAt,
+      fetchedAt: live ? fetchedAt : null,
       eurBgn: bgnPerEur,
-      usdBgn: usdPerEur ? usdPerEur / bgnPerEur : null,  // not used but available
-      gbpBgn: gbpPerEur ? bgnPerEur / gbpPerEur : null,
-      chfBgn: chfPerEur ? bgnPerEur / chfPerEur : null,
-      usdEur: usdPerEur,
-      gbpEur: gbpPerEur,
-      chfEur: chfPerEur,
-      note: 'EUR/BGN is fixed by Bulgarian currency board at 1.95583',
+      usdBgn: perEur.USD ? perEur.USD / bgnPerEur : null,
+      gbpBgn: perEur.GBP ? bgnPerEur / perEur.GBP : null,
+      chfBgn: perEur.CHF ? bgnPerEur / perEur.CHF : null,
+      usdEur: perEur.USD || null,
+      gbpEur: perEur.GBP || null,
+      chfEur: perEur.CHF || null,
+      note: live
+        ? 'EUR/BGN is fixed by Bulgarian currency board at 1.95583'
+        : 'Using fallback rates — live fetch failed',
     });
   } catch (e) {
-    // Fallback to hardcoded if API is unreachable
     res.json({
       base: 'EUR',
       fetchedAt: null,
-      eurBgn: EUR_BGN_FIXED,
-      usdEur: null,
+      eurBgn: fx.BGN_PER_EUR,
+      usdEur: fx.FALLBACK_PER_EUR.USD,
       gbpEur: null,
       chfEur: null,
       note: 'Using fallback rate — live fetch failed',

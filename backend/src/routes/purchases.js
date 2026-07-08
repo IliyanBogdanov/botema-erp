@@ -17,10 +17,37 @@ router.get('/', auth, async (req, res) => {
 });
 
 router.post('/', auth, async (req, res) => {
-  const purchase = await prisma.purchase.create({
-    data: { ...req.body, date: new Date(req.body.date), year: new Date(req.body.date).getFullYear() }
-  });
-  res.status(201).json(purchase);
+  try {
+    const { supplierId, projectId, ...rest } = req.body;
+    // /api/suppliers now serves Counterparty rows, but Purchase.supplierId still
+    // points at the legacy Supplier table — resolve counterparty ids to a Supplier.
+    let resolvedSupplierId = supplierId || null;
+    if (resolvedSupplierId) {
+      const existing = await prisma.supplier.findUnique({ where: { id: resolvedSupplierId } });
+      if (!existing) {
+        const cp = await prisma.counterparty.findUnique({ where: { id: resolvedSupplierId } });
+        if (!cp) return res.status(400).json({ error: 'Unknown supplier id' });
+        const byName = await prisma.supplier.findFirst({ where: { name: { equals: cp.name, mode: 'insensitive' } } });
+        resolvedSupplierId = byName
+          ? byName.id
+          : (await prisma.supplier.create({
+              data: { name: cp.name, country: cp.country || 'BG', currency: cp.currency || 'EUR', email: cp.email || null },
+            })).id;
+      }
+    }
+    const purchase = await prisma.purchase.create({
+      data: {
+        ...rest,
+        supplierId: resolvedSupplierId,
+        projectId: projectId || null,
+        date: new Date(req.body.date),
+        year: new Date(req.body.date).getFullYear(),
+      },
+    });
+    res.status(201).json(purchase);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.get('/:id', auth, async (req, res) => {

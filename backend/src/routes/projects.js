@@ -3,11 +3,24 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
 
-const EUR_RATE = 1.95583;
+const fx = require('../lib/fx');
+const { AUTHORITATIVE_BIZ_DOC_STATUSES, netCostAmount } = require('../lib/costs');
+
+const EUR_RATE = fx.BGN_PER_EUR;
 
 function toBGN(amount, currency) {
-  return currency === 'EUR' ? Number(amount) * EUR_RATE : Number(amount);
+  return fx.toBgn(amount, currency);
 }
+
+// Project costs come from BizDocument INVOICE_IN (authoritative statuses, net of
+// VAT) — the same source as the dashboard. The legacy Purchase relation had no
+// status filter and is no longer linked to projects.
+const PROJECT_COST_DOCS = {
+  where: { docType: 'INVOICE_IN', status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES } },
+  select: { amountNet: true, vatAmount: true, amountTotal: true, currency: true },
+};
+
+const projectCostsBGN = docs => (docs || []).reduce((s, d) => s + toBGN(netCostAmount(d), d.currency), 0);
 
 router.get('/', auth, async (req, res) => {
   const { status, year } = req.query;
@@ -20,18 +33,18 @@ router.get('/', auth, async (req, res) => {
     include: {
       client: { select: { id: true, name: true } },
       invoices: { select: { amountNet: true, amountTotal: true, currency: true, status: true } },
-      purchases: { select: { amount: true, currency: true } },
+      bizDocuments: PROJECT_COST_DOCS,
     },
     orderBy: { year: 'desc' },
   });
+  await fx.loadRates();
 
   const enriched = projects.map(p => {
     const revenueBGN = p.invoices
       .filter(i => i.status !== 'CANCELLED')
       .reduce((s, i) => s + toBGN(i.amountNet, i.currency || 'BGN'), 0);
 
-    const costsBGN = p.purchases
-      .reduce((s, i) => s + toBGN(i.amount, i.currency || 'EUR'), 0);
+    const costsBGN = projectCostsBGN(p.bizDocuments);
 
     const profitBGN = revenueBGN - costsBGN;
     const marginPct = revenueBGN > 0 ? Math.round((profitBGN / revenueBGN) * 100) : null;
@@ -43,7 +56,7 @@ router.get('/', auth, async (req, res) => {
       profitBGN: Math.round(profitBGN),
       marginPct,
       invoiceCount: p.invoices.filter(i => i.status !== 'CANCELLED').length,
-      purchaseCount: p.purchases.length,
+      purchaseCount: p.bizDocuments.length,
       // Legacy aliases (keep for compatibility)
       totalRevenue: Math.round(revenueBGN),
       totalCosts: Math.round(costsBGN),
@@ -64,18 +77,18 @@ router.get('/pnl', auth, async (req, res) => {
     include: {
       client: { select: { id: true, name: true } },
       invoices: { select: { amountNet: true, currency: true, status: true, date: true } },
-      purchases: { select: { amount: true, currency: true, date: true } },
+      bizDocuments: PROJECT_COST_DOCS,
     },
     orderBy: [{ status: 'asc' }, { year: 'desc' }],
   });
+  await fx.loadRates();
 
   const result = projects.map(p => {
     const revenueBGN = p.invoices
       .filter(i => i.status !== 'CANCELLED')
       .reduce((s, i) => s + toBGN(i.amountNet, i.currency || 'BGN'), 0);
 
-    const costsBGN = p.purchases
-      .reduce((s, i) => s + toBGN(i.amount, i.currency || 'EUR'), 0);
+    const costsBGN = projectCostsBGN(p.bizDocuments);
 
     const profitBGN = revenueBGN - costsBGN;
 
@@ -91,7 +104,7 @@ router.get('/pnl', auth, async (req, res) => {
       profitBGN: Math.round(profitBGN),
       marginPct: revenueBGN > 0 ? Math.round((profitBGN / revenueBGN) * 100) : null,
       invoiceCount: p.invoices.filter(i => i.status !== 'CANCELLED').length,
-      purchaseCount: p.purchases.length,
+      purchaseCount: p.bizDocuments.length,
     };
   });
 
@@ -147,17 +160,15 @@ router.get('/:id', auth, async (req, res) => {
     },
   });
   if (!project) return res.status(404).json({ error: 'Not found' });
+  await fx.loadRates();
 
-  const EUR_RATE = 1.95583;
   // Net (без ДДС) — consistent with the list view and dashboard P&L
-  const totalRevenueBGN = project.invoices.reduce((s, inv) => {
-    const total = Number(inv.amountNet ?? inv.amountTotal);
-    return s + (inv.currency === 'EUR' ? total * EUR_RATE : total);
-  }, 0);
-  const totalCostsBGN = project.purchases.reduce((s, p) => {
-    const amt = Number(p.amount);
-    return s + (p.currency === 'EUR' ? amt * EUR_RATE : amt);
-  }, 0);
+  const totalRevenueBGN = project.invoices
+    .filter(inv => inv.status !== 'CANCELLED')
+    .reduce((s, inv) => s + toBGN(Number(inv.amountNet ?? inv.amountTotal), inv.currency), 0);
+  const totalCostsBGN = projectCostsBGN(
+    project.bizDocuments.filter(d => d.docType === 'INVOICE_IN' && AUTHORITATIVE_BIZ_DOC_STATUSES.includes(d.status))
+  );
 
   res.json({
     ...project,

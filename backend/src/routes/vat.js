@@ -3,9 +3,11 @@ const { auth } = require('../middleware/auth');
 const prisma = require('../lib/prisma');
 const { resolveDuplicateActiveAlerts } = require('../lib/alertEngine');
 
+const fx = require('../lib/fx');
+const { AUTHORITATIVE_BIZ_DOC_STATUSES, inputVatAmount } = require('../lib/costs');
+
 const router = express.Router();
-const BGN_PER_EUR = 1.95583;
-const AUTHORITATIVE_BIZ_DOC_STATUSES = ['REVIEWED', 'IMPORTED', 'MATCHED'];
+const BGN_PER_EUR = fx.BGN_PER_EUR;
 
 const toNumber = value => {
   if (value == null || value === '') return 0;
@@ -13,8 +15,8 @@ const toNumber = value => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const asBgn = (amount, currency) => currency === 'EUR' ? toNumber(amount) * BGN_PER_EUR : toNumber(amount);
-const asEur = (amount, currency) => currency === 'BGN' ? toNumber(amount) / BGN_PER_EUR : toNumber(amount);
+const asBgn = (amount, currency) => fx.toBgn(amount, currency);
+const asEur = (amount, currency) => fx.toEur(amount, currency);
 
 function isLikelyNonVatPendingDocument(doc) {
   const data = doc.extractedData || {};
@@ -62,18 +64,14 @@ function pendingDocumentVatBgn(doc) {
 }
 
 function bizDocumentInputVatBgn(doc) {
-  const explicitVat = toNumber(doc.vatAmount);
-  if (explicitVat > 0) return asBgn(explicitVat, doc.currency);
-
-  // For BGN supplier invoices, estimate VAT from gross only when explicit VAT
-  // is missing. EUR supplier invoices are usually intra-EU/reverse-charge.
-  if (String(doc.currency || '').toUpperCase() !== 'BGN') return 0;
-  return asBgn(doc.amountTotal, doc.currency) / 6;
+  // Shared logic (lib/costs.js): explicit vatAmount wins, BGN invoices estimate
+  // gross/6, non-BGN are reverse-charge (0). Works for credit notes (negative).
+  return asBgn(inputVatAmount(doc), doc.currency);
 }
 
 function bizDocumentInputNetBgn(doc) {
   const gross = asBgn(doc.amountTotal, doc.currency);
-  return Math.max(gross - bizDocumentInputVatBgn(doc), 0);
+  return gross - bizDocumentInputVatBgn(doc);
 }
 
 // GET /api/vat/monthly-breakdown?year=2025
@@ -83,6 +81,7 @@ router.get('/monthly-breakdown', auth, async (req, res) => {
     const year = parseInt(req.query.year || new Date().getFullYear());
     const start = new Date(Date.UTC(year, 0, 1));
     const end   = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+    await fx.loadRates();
 
     const [invoices, incomingDocs] = await Promise.all([
       prisma.invoice.findMany({
@@ -93,7 +92,7 @@ router.get('/monthly-breakdown', auth, async (req, res) => {
         where: {
           docType: 'INVOICE_IN',
           status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
-          amountTotal: { gt: 0 },
+          amountTotal: { not: null },
           docDate: { gte: start, lte: end },
         },
         select: { docDate: true, currency: true, vatAmount: true, amountTotal: true },
@@ -128,6 +127,12 @@ router.get('/monthly-breakdown', auth, async (req, res) => {
       m.inputVat  = Number(m.inputVat.toFixed(2));
       m.inputNet  = Number(m.inputNet.toFixed(2));
       m.netVat    = Number((m.outputVat - m.inputVat).toFixed(2));
+      // EUR mirrors (BGN/EUR is fixed) so the frontend never converts on its own
+      m.outputVatEur = Number((m.outputVat / BGN_PER_EUR).toFixed(2));
+      m.outputNetEur = Number((m.outputNet / BGN_PER_EUR).toFixed(2));
+      m.inputVatEur  = Number((m.inputVat / BGN_PER_EUR).toFixed(2));
+      m.inputNetEur  = Number((m.inputNet / BGN_PER_EUR).toFixed(2));
+      m.netVatEur    = Number((m.netVat / BGN_PER_EUR).toFixed(2));
     }
 
     res.json({ year, months });
@@ -146,6 +151,7 @@ router.get('/overview', auth, async (req, res) => {
       : new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
     await resolveDuplicateActiveAlerts(prisma);
+    await fx.loadRates();
 
     const [invoices, incomingDocs, documents, vatAlerts] = await Promise.all([
       prisma.invoice.findMany({
@@ -156,7 +162,7 @@ router.get('/overview', auth, async (req, res) => {
         where: {
           docType: 'INVOICE_IN',
           status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
-          amountTotal: { gt: 0 },
+          amountTotal: { not: null },
           docDate: { gte: start, lte: end },
         },
         select: { currency: true, vatAmount: true, amountTotal: true },
@@ -193,6 +199,12 @@ router.get('/overview', auth, async (req, res) => {
       pendingCredit: Number(pendingCredit.toFixed(2)),
       netVat: Number((outputVat - estimatedInputVat).toFixed(2)),
       afterPendingCredit: Number((outputVat - estimatedInputVat - pendingCredit).toFixed(2)),
+      // EUR mirrors — frontend must not convert on its own
+      outputVatEur: Number((outputVat / BGN_PER_EUR).toFixed(2)),
+      outputNetEur: Number((outputNet / BGN_PER_EUR).toFixed(2)),
+      estimatedInputVatEur: Number((estimatedInputVat / BGN_PER_EUR).toFixed(2)),
+      pendingCreditEur: Number((pendingCredit / BGN_PER_EUR).toFixed(2)),
+      netVatEur: Number(((outputVat - estimatedInputVat) / BGN_PER_EUR).toFixed(2)),
       counts: {
         outgoingInvoices: invoices.length,
         incomingPurchases: incomingDocs.length,

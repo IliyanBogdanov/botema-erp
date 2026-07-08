@@ -178,15 +178,23 @@ async function generateAlerts(prisma) {
     }));
   }
 
+  // Project costs from BizDocument INVOICE_IN (authoritative, net) — same as projects.js
+  const { AUTHORITATIVE_BIZ_DOC_STATUSES, netCostAmount } = require('./costs');
   const projects = await prisma.project.findMany({
     where: { status: 'ACTIVE' },
-    include: { invoices: true, purchases: true },
+    include: {
+      invoices: true,
+      bizDocuments: {
+        where: { docType: 'INVOICE_IN', status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES } },
+        select: { amountNet: true, vatAmount: true, amountTotal: true, currency: true },
+      },
+    },
   });
   for (const project of projects) {
     const revenue = project.invoices
       .filter(i => i.status !== 'CANCELLED')
       .reduce((s, i) => s + asBgn(i.amountNet, i.currency), 0);
-    const costs = project.purchases.reduce((s, p) => s + asBgn(p.amount, p.currency), 0);
+    const costs = project.bizDocuments.reduce((s, d) => s + asBgn(netCostAmount(d), d.currency), 0);
     if (revenue > 0 && costs / revenue > 0.8) {
       created.push(await ensureAlert(prisma, {
         type: 'PROJECT',

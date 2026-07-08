@@ -3,21 +3,12 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
 
-const BGN_PER_EUR = 1.95583;
-// Approximate market rate — only a handful of USD documents exist, but
-// counting USD 1:1 as EUR overstated them by ~14%.
-const USD_PER_EUR = 1.14;
+const fx = require('../lib/fx');
+const { AUTHORITATIVE_BIZ_DOC_STATUSES, netCostAmount } = require('../lib/costs');
 
 const toNumber = value => Number(value || 0);
-const toEur = (amount, currency) => {
-  const numericAmount = toNumber(amount);
-  if (currency === 'BGN') return numericAmount / BGN_PER_EUR;
-  if (currency === 'USD') return numericAmount / USD_PER_EUR;
-  return numericAmount;
-};
-const toBgn = (amount, currency) =>
-  currency === 'BGN' ? toNumber(amount) : toEur(amount, currency) * BGN_PER_EUR;
-const AUTHORITATIVE_BIZ_DOC_STATUSES = ['REVIEWED', 'IMPORTED', 'MATCHED'];
+const toEur = fx.toEur;
+const toBgn = fx.toBgn;
 
 // GET /api/dashboard — Main KPIs
 router.get('/', auth, async (req, res) => {
@@ -26,6 +17,8 @@ router.get('/', auth, async (req, res) => {
     const yearNum = parseInt(year, 10);
     const startDate = new Date(`${yearNum}-01-01T00:00:00.000Z`);
     const endDate = new Date(`${yearNum}-12-31T23:59:59.999Z`);
+    await fx.loadRates();
+    const usdPerEur = fx.ratesPerEur().USD || 1.14;
 
     const [
       revenueInvoices,
@@ -56,9 +49,11 @@ router.get('/', auth, async (req, res) => {
         _sum: { qtyIn: true, qtyOut: true }
       }),
       prisma.$queryRaw`
-        SELECT 
+        SELECT
           EXTRACT(MONTH FROM date) as month,
-          SUM(CASE WHEN currency = 'EUR' THEN "amountNet" ELSE "amountNet" / 1.95583 END) as revenue,
+          SUM(CASE WHEN currency = 'EUR' THEN "amountNet"
+                   WHEN currency = 'USD' THEN "amountNet" / ${usdPerEur}
+                   ELSE "amountNet" / 1.95583 END) as revenue,
           brand
         FROM invoices
         WHERE EXTRACT(YEAR FROM date) = ${yearNum}
@@ -69,7 +64,9 @@ router.get('/', auth, async (req, res) => {
       // Currency-aware top clients via raw SQL
       prisma.$queryRaw`
         SELECT "clientId",
-          SUM(CASE WHEN currency = 'EUR' THEN "amountNet" ELSE "amountNet" / 1.95583 END) AS revenue_eur
+          SUM(CASE WHEN currency = 'EUR' THEN "amountNet"
+                   WHEN currency = 'USD' THEN "amountNet" / ${usdPerEur}
+                   ELSE "amountNet" / 1.95583 END) AS revenue_eur
         FROM invoices
         WHERE date >= ${startDate} AND date <= ${endDate}
           AND status != 'CANCELLED'
@@ -83,15 +80,16 @@ router.get('/', auth, async (req, res) => {
         where: { date: { gte: startDate, lte: endDate } },
         select: { amount: true, currency: true },
       }),
-      // Use BizDocument INVOICE_IN as the authoritative cost source (more complete than Purchase)
+      // Use BizDocument INVOICE_IN as the authoritative cost source (more complete than Purchase).
+      // `not: null` (not `gt: 0`): credit notes are negative and must reduce costs.
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
           status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
-          amountTotal: { gt: 0 },
+          amountTotal: { not: null },
           docDate: { gte: startDate, lte: endDate },
         },
-        select: { amountTotal: true, currency: true, counterpartyId: true },
+        select: { amountTotal: true, amountNet: true, vatAmount: true, currency: true, counterpartyId: true },
       }),
       prisma.invoice.findMany({
         include: { client: { select: { name: true } } },
@@ -119,10 +117,9 @@ router.get('/', auth, async (req, res) => {
     }) : [];
     const clientMap = Object.fromEntries(clientNames.map(c => [c.id, c.name]));
 
-    // Build cost totals from BizDocument INVOICE_IN
+    // Build cost totals from BizDocument INVOICE_IN — NET of recoverable VAT
     const purchaseTotalsByCurrency = bizCostRows.reduce((acc, row) => {
-      const amount = toNumber(row.amountTotal);
-      acc[row.currency] = (acc[row.currency] || 0) + amount;
+      acc[row.currency] = (acc[row.currency] || 0) + netCostAmount(row);
       return acc;
     }, {});
 
@@ -135,7 +132,7 @@ router.get('/', auth, async (req, res) => {
 
     const supplierTotals = bizCostRows.reduce((acc, row) => {
       if (!row.counterpartyId) return acc;
-      const amountEur = toEur(toNumber(row.amountTotal), row.currency);
+      const amountEur = toEur(netCostAmount(row), row.currency);
       acc[row.counterpartyId] = (acc[row.counterpartyId] || 0) + amountEur;
       return acc;
     }, {});
@@ -229,27 +226,30 @@ router.get('/', auth, async (req, res) => {
 router.get('/monthly-pnl', auth, async (req, res) => {
   try {
     const year = parseInt(req.query.year || new Date().getFullYear());
+    await fx.loadRates();
+    const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+    const yearEnd = new Date(`${year}-12-31T23:59:59.999Z`);
 
     const [invoices, bizCosts, expenses] = await Promise.all([
       prisma.invoice.findMany({
         where: {
-          date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) },
+          date: { gte: yearStart, lte: yearEnd },
           status: { not: 'CANCELLED' },
         },
         select: { date: true, currency: true, amountNet: true, vatAmount: true, amountTotal: true },
       }),
-      // BizDocument INVOICE_IN is the authoritative cost source
+      // BizDocument INVOICE_IN is the authoritative cost source (net; credit notes reduce costs)
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
           status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
-          amountTotal: { gt: 0 },
-          docDate: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) },
+          amountTotal: { not: null },
+          docDate: { gte: yearStart, lte: yearEnd },
         },
-        select: { docDate: true, currency: true, amountTotal: true },
+        select: { docDate: true, currency: true, amountTotal: true, amountNet: true, vatAmount: true },
       }),
       prisma.expense.findMany({
-        where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) } },
+        where: { date: { gte: yearStart, lte: yearEnd } },
         select: { date: true, currency: true, amount: true },
       }),
     ]);
@@ -265,17 +265,17 @@ router.get('/monthly-pnl', auth, async (req, res) => {
     }));
 
     for (const inv of invoices) {
-      const m = new Date(inv.date).getMonth();
+      const m = new Date(inv.date).getUTCMonth();
       months[m].revenue += toEur(inv.amountNet, inv.currency);
     }
 
     for (const biz of bizCosts) {
-      const m = new Date(biz.docDate).getMonth();
-      months[m].costs += toEur(toNumber(biz.amountTotal), biz.currency);
+      const m = new Date(biz.docDate).getUTCMonth();
+      months[m].costs += toEur(netCostAmount(biz), biz.currency);
     }
 
     for (const exp of expenses) {
-      const m = new Date(exp.date).getMonth();
+      const m = new Date(exp.date).getUTCMonth();
       months[m].costs += toEur(exp.amount, exp.currency);
     }
 

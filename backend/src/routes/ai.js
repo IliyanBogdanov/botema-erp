@@ -140,15 +140,16 @@ router.post('/chat', auth, async (req, res) => {
         select: { date: true, amountNet: true, currency: true },
       }),
       // All-time costs from BizDocument INVOICE_IN (authoritative source, from 2020)
-      // Same statuses as the dashboard — NEEDS_REVIEW docs must not count as costs
+      // Same statuses as the dashboard — NEEDS_REVIEW docs must not count as costs;
+      // credit notes are negative and must reduce costs
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
           status: { in: ['REVIEWED', 'IMPORTED', 'MATCHED'] },
-          amountTotal: { gt: 0 },
+          amountTotal: { not: null },
           docDate: { gte: new Date('2020-01-01') },
         },
-        select: { docDate: true, amountTotal: true, currency: true },
+        select: { docDate: true, amountTotal: true, amountNet: true, vatAmount: true, currency: true },
       }),
     ]);
 
@@ -162,13 +163,14 @@ router.post('/chat', auth, async (req, res) => {
       revenueByYear[yr] = (revenueByYear[yr] || 0) + eur;
     }
 
-    // Build per-year costs breakdown (BGN equivalent)
+    // Build per-year costs breakdown (EUR, net of VAT — same units as revenue)
+    const { netCostAmount } = require('../lib/costs');
+    const fx = require('../lib/fx');
     const costsByYear = {};
     for (const doc of allCosts) {
       const yr = doc.docDate ? new Date(doc.docDate).getFullYear() : null;
       if (!yr) continue;
-      const bgn = doc.currency === 'EUR' ? Number(doc.amountTotal || 0) * BGN_PER_EUR : Number(doc.amountTotal || 0);
-      costsByYear[yr] = (costsByYear[yr] || 0) + bgn;
+      costsByYear[yr] = (costsByYear[yr] || 0) + fx.toEur(netCostAmount(doc), doc.currency);
     }
 
     const revenueTotal = revenueByYear[currentYear] || 0;
@@ -180,10 +182,10 @@ router.post('/chat', auth, async (req, res) => {
 Отговаряй САМО на БЪЛГАРСКИ. Бъди кратък, точен и практичен. Използвай данните от системата за точни отговори.
 
 === ФИНАНСОВО РЕЗЮМЕ (${now.toLocaleDateString('bg-BG')}) ===
-- Приходи ${currentYear}: ${revenueTotal.toFixed(0)} EUR
-- Разходи ${currentYear}: ${costsTotal.toFixed(0)} BGN
+- Приходи ${currentYear}: ${revenueTotal.toFixed(0)} EUR (нето, без ДДС)
+- Разходи ${currentYear}: ${costsTotal.toFixed(0)} EUR (нето, без възстановим ДДС)
 - Приходи ОТ НАЧАЛО (всички години): ${revenueTotalAllTime.toFixed(0)} EUR
-- Разходи ОТ НАЧАЛО (всички години): ${costsTotalAllTime.toFixed(0)} BGN
+- Разходи ОТ НАЧАЛО (всички години): ${costsTotalAllTime.toFixed(0)} EUR
 - Активни проекти: ${projects.length}
 - Клиенти: ${clients.length} (CRM) + ${counterparties.length} контрагента (банкови)
 - Неплатени фактури: ${unpaidInvoices.length}
@@ -192,8 +194,8 @@ router.post('/chat', auth, async (req, res) => {
 === ПРИХОДИ ПО ГОДИНИ (EUR) ===
 ${Object.entries(revenueByYear).sort(([a],[b]) => Number(a)-Number(b)).map(([yr, eur]) => `- ${yr}: ${eur.toFixed(0)} EUR`).join('\n')}
 
-=== РАЗХОДИ ПО ГОДИНИ (BGN еквивалент) ===
-${Object.entries(costsByYear).sort(([a],[b]) => Number(a)-Number(b)).map(([yr, bgn]) => `- ${yr}: ${bgn.toFixed(0)} BGN`).join('\n')}
+=== РАЗХОДИ ПО ГОДИНИ (EUR, нето) ===
+${Object.entries(costsByYear).sort(([a],[b]) => Number(a)-Number(b)).map(([yr, eur]) => `- ${yr}: ${eur.toFixed(0)} EUR`).join('\n')}
 
 === АКТИВНИ ПРОЕКТИ ===
 ${JSON.stringify(projects.map(p => ({ kod: p.code, proekt: p.name, klient: p.client?.name, status: p.status, godina: p.year, belezhki: p.notes })), null, 2)}

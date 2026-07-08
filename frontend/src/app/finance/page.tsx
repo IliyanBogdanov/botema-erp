@@ -78,9 +78,9 @@ export default function FinancePage() {
             <div className="col-span-4 p-6 text-center text-on-surface-variant font-body-sm">Грешка при зареждане на данните. Опитайте отново.</div>
           ) : (
             <>
-              <KpiCard icon="trending_up" label={`ПРИХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmtBgn(totals.revenue)} sub={`Нет от ${year} г.`} />
-              <KpiCard icon="shopping_cart" label={`РАЗХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmtBgn(totals.costs)} sub={`Покупки за ${year} г. (вкл. авансови)`} />
-              <KpiCard icon="savings" label={`БРУТНА ПЕЧАЛБА ${year}`} value={fmtBgn(totals.profit)}
+              <KpiCard icon="trending_up" label={`ПРИХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmt(totals.revenue)} sub={`Нет от ${year} г.`} />
+              <KpiCard icon="shopping_cart" label={`РАЗХОДИ ${year === new Date().getFullYear() ? 'ЯНУ–' + MONTH_SHORT[new Date().getMonth()] + ' ' + year : year}`} value={fmt(totals.costs)} sub={`Покупки за ${year} г. (вкл. авансови)`} />
+              <KpiCard icon="savings" label={`БРУТНА ПЕЧАЛБА ${year}`} value={fmt(totals.profit)}
                 sub={`Марж ${totals.margin}%`} positive={totals.profit > 0} />
               <KpiCard icon="percent" label="БРУТЕН МАРЖ" value={`${totals.margin}%`} positive={totals.margin > 20} />
             </>
@@ -130,16 +130,16 @@ export default function FinancePage() {
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
-                              : <span className="font-data-mono text-data-mono text-on-surface">{fmtBgn(m.revenue)}</span>}
+                              : <span className="font-data-mono text-data-mono text-on-surface">{fmt(m.revenue)}</span>}
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
-                              : <span className="font-data-mono text-data-mono text-error/80">{fmtBgn(m.costs)}</span>}
+                              : <span className="font-data-mono text-data-mono text-error/80">{fmt(m.costs)}</span>}
                           </td>
                           <td className="table-cell text-right">
                             {isEmpty ? <span className="text-on-surface-variant/30">—</span>
                               : <span className={`font-data-mono text-data-mono font-semibold ${m.profit >= 0 ? 'text-emerald-400' : 'text-error'}`}>
-                                  {m.profit >= 0 ? '+' : ''}{fmtBgn(m.profit)}
+                                  {m.profit >= 0 ? '+' : ''}{fmt(m.profit)}
                                 </span>}
                           </td>
                           <td className="table-cell text-right">
@@ -156,11 +156,11 @@ export default function FinancePage() {
                 <tfoot>
                   <tr className="border-t-2 border-outline-variant/20 bg-surface-container">
                     <td className="table-cell font-semibold text-on-surface">ОБЩО {year}</td>
-                    <td className="table-cell text-right font-semibold font-data-mono text-on-surface">{fmtBgn(totals.revenue)}</td>
-                    <td className="table-cell text-right font-semibold font-data-mono text-error/80">{fmtBgn(totals.costs)}</td>
+                    <td className="table-cell text-right font-semibold font-data-mono text-on-surface">{fmt(totals.revenue)}</td>
+                    <td className="table-cell text-right font-semibold font-data-mono text-error/80">{fmt(totals.costs)}</td>
                     <td className="table-cell text-right font-semibold font-data-mono">
                       <span className={totals.profit >= 0 ? 'text-emerald-400' : 'text-error'}>
-                        {totals.profit >= 0 ? '+' : ''}{fmtBgn(totals.profit)}
+                        {totals.profit >= 0 ? '+' : ''}{fmt(totals.profit)}
                       </span>
                     </td>
                     <td className="table-cell text-right font-semibold">

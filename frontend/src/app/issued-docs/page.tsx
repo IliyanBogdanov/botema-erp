@@ -28,7 +28,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function IssuedDocsPage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [yearFilter, setYearFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
 
   const params = new URLSearchParams();
   if (typeFilter) params.set('type', typeFilter);

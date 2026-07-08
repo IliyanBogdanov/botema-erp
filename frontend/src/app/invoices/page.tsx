@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, fmt, fmtBgn, fmtDate, statusConfig } from '@/lib/api';
+import { api, fmt, fmtDate, statusConfig, BGN_PER_EUR } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
@@ -329,7 +329,8 @@ function AgingView() {
     </div>
   );
 
-  const summary: Record<string, number> = data?.summary || {};
+  // summaryEur is currency-converted by the backend; the raw `summary` mixes BGN+EUR
+  const summary: Record<string, number> = data?.summaryEur || {};
   const invoices: any[] = data?.invoices || [];
   const total = Object.values(summary).reduce((s, v) => s + v, 0);
 
@@ -352,7 +353,7 @@ function AgingView() {
             <div key={b.key} className="bg-surface-container-low border border-outline-variant/10 p-4">
               <p className="font-label-caps text-[9px] text-on-surface-variant mb-2">{b.label}</p>
               <p className={`font-headline text-headline-sm ${b.color}`}>
-                {(amt / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
+                {amt.toLocaleString('bg-BG', { maximumFractionDigits: 0 })} €
               </p>
               <div className="mt-2 h-1 bg-surface-container-high overflow-hidden">
                 <div className={`h-full ${b.bar} transition-all duration-700`} style={{ width: `${pct}%` }} />
@@ -432,10 +433,13 @@ export default function InvoicesPage() {
   const statusTabs = getStatusTabs(t);
 
   const invoices: Invoice[] = Array.isArray(data) ? data : (data as any).data || [];
-  const totalAmount = invoices
+  // Convert per-invoice (invoices mix BGN and EUR) — a blanket sum would be meaningless
+  const toEur = (inv: Invoice) =>
+    inv.currency === 'BGN' ? Number(inv.amountTotal) / BGN_PER_EUR : Number(inv.amountTotal);
+  const totalAmountEur = invoices
     .filter(inv => !['CANCELLED', 'ARCHIVED'].includes(inv.status))
-    .reduce((sum, invoice) => sum + Number(invoice.amountTotal), 0);
-  const outstanding = invoices.filter(invoice => !['PAID', 'CANCELLED'].includes(invoice.status)).reduce((sum, invoice) => sum + Number(invoice.amountTotal), 0);
+    .reduce((sum, invoice) => sum + toEur(invoice), 0);
+  const outstandingEur = invoices.filter(invoice => !['PAID', 'CANCELLED'].includes(invoice.status)).reduce((sum, invoice) => sum + toEur(invoice), 0);
   const paidCount = invoices.filter(invoice => invoice.status === 'PAID').length;
 
   return (
@@ -463,8 +467,8 @@ export default function InvoicesPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label={t('inv.totalInvoices')} value={String(invoices.length)} sub={`${year} година`} />
-          <MetricCard label={t('inv.totalBgn')} value={fmtBgn(totalAmount)} sub="фактурирана стойност" />
-          <MetricCard label={t('inv.outstanding')} value={fmtBgn(outstanding)} sub="неприключени фактури" />
+          <MetricCard label={t('inv.totalBgn')} value={fmt(totalAmountEur)} sub="фактурирана стойност" />
+          <MetricCard label={t('inv.outstanding')} value={fmt(outstandingEur)} sub="неприключени фактури" />
           <MetricCard label={t('inv.paid')} value={String(paidCount)} sub="приключени плащания" />
         </div>
 

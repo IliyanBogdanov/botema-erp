@@ -439,25 +439,25 @@ export default function DashboardPage() {
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.outVat')}</p>
               <p className="font-display text-[36px] leading-none italic text-on-surface">
-                {(vat.outputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
+                {(vat.outputVatEur ?? vat.outputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
               <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Изходящ ДДС · {periodLabel}</p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.inVat')}</p>
               <p className="font-display text-[36px] leading-none italic text-on-surface">
-                {(vat.estimatedInputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
+                {(vat.estimatedInputVatEur ?? vat.estimatedInputVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
               <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-3">Входящ ДДС · {periodLabel}</p>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border border-outline-variant/8">
               <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-4 tracking-[0.14em]">{t('dash.netVat')}</p>
               <p className={`font-display text-[36px] leading-none italic ${vat.netVat >= 0 ? 'text-error' : 'text-primary'}`}>
-                {(vat.netVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
+                {(vat.netVatEur ?? vat.netVat / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} <span className="text-[16px] text-on-surface-variant/40">EUR</span>
               </p>
               {vat.pendingCredit > 0 && (
                 <p className="font-label-caps text-[9px] text-on-surface-variant/50 mt-3">
-                  {t('dash.potentialCredit')}: {(vat.pendingCredit / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} EUR
+                  {t('dash.potentialCredit')}: {(vat.pendingCreditEur ?? vat.pendingCredit / 1.95583).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} EUR
                 </p>
               )}
               <p className="font-label-caps text-[9px] text-on-surface-variant/40 mt-1">Нет ДДС позиция · {periodLabel}</p>
@@ -504,8 +504,13 @@ export default function DashboardPage() {
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </a>
           </div>
+          {projList.length === 0 && (
+            <div className="border border-outline-variant/10 bg-surface-container-low p-8 text-center">
+              <p className="font-body-sm text-on-surface-variant">Няма активни проекти. <a href="/projects" className="text-primary hover:underline">Създай проект</a></p>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-gutter">
-            {(projList.length > 0 ? projList : [{code:'—', name:'Sofia Penthouse'},{code:'—', name:'Luminavera Showroom'},{code:'—', name:'Coastal Villa'}]).map((proj: any, i: number) => (
+            {projList.map((proj: any, i: number) => (
               <a key={proj.id || i} href={proj.id ? `/projects/${proj.id}` : '/projects'} className="group relative overflow-hidden rounded-xl border border-outline-variant/8 hover:border-primary-container/20 hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 cursor-pointer block">
                 <img
                   src={PROJ_IMG_POOL[i % PROJ_IMG_POOL.length]}

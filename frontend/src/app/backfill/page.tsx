@@ -12,8 +12,8 @@ const STATUS_COLORS: Record<string, { label: string; dot: string }> = {
 
 export default function BackfillPage() {
   const qc = useQueryClient();
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [driveFolder, setDriveFolder] = useState({ id: '', path: '', year: 2026 });
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [driveFolder, setDriveFolder] = useState({ id: '', path: '', year: new Date().getFullYear() });
   const [log, setLog] = useState<string[]>([]);
 
   const addLog = (msg: string) =>
@@ -231,7 +231,7 @@ export default function BackfillPage() {
                 onChange={e => setSelectedYear(+e.target.value)}
                 className="w-full border border-outline-variant/30 bg-surface-container px-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary"
               >
-                {[2026, 2025, 2024].map(y => <option key={y} value={y}>{y}</option>)}
+                {[0, 1, 2].map(i => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
             <button
@@ -272,7 +272,7 @@ export default function BackfillPage() {
                 onChange={e => setDriveFolder(prev => ({ ...prev, year: +e.target.value }))}
                 className="w-full border border-outline-variant/30 bg-surface-container px-3 py-2 font-label-caps text-label-caps text-on-surface text-sm focus:outline-none focus:border-primary"
               >
-                {[2026, 2025, 2024].map(y => <option key={y} value={y}>{y}</option>)}
+                {[0, 1, 2].map(i => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
             <button

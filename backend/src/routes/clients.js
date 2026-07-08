@@ -81,11 +81,22 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 router.get('/:id/stats', auth, async (req, res) => {
-  const [invoices, revenue] = await Promise.all([
+  const [invoices, revenueRows] = await Promise.all([
     prisma.invoice.findMany({ where: { clientId: req.params.id }, orderBy: { date: 'desc' }, take: 20 }),
-    prisma.invoice.aggregate({ where: { clientId: req.params.id, status: { not: 'CANCELLED' } }, _sum: { amountNet: true } })
+    prisma.invoice.findMany({
+      where: { clientId: req.params.id, status: { not: 'CANCELLED' } },
+      select: { amountNet: true, currency: true },
+    }),
   ]);
-  res.json({ invoices, totalRevenue: Number(revenue._sum.amountNet || 0) });
+  // Currency-aware: raw _sum across BGN+EUR mixed rows was meaningless
+  const BGN_PER_EUR = 1.95583;
+  const totalRevenueBGN = revenueRows.reduce((s, inv) =>
+    s + (inv.currency === 'EUR' ? Number(inv.amountNet || 0) * BGN_PER_EUR : Number(inv.amountNet || 0)), 0);
+  res.json({
+    invoices,
+    totalRevenue: Number(totalRevenueBGN.toFixed(2)),
+    totalRevenueEur: Number((totalRevenueBGN / BGN_PER_EUR).toFixed(2)),
+  });
 });
 
 module.exports = router;
