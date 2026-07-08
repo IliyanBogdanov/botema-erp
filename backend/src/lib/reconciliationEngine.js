@@ -16,13 +16,11 @@ const prisma = require('./prisma');
 
 // Patterns that look like Bulgarian invoice numbers
 const INVOICE_NUMBER_PATTERNS = [
-  /фактура\s*(?:номер)?\s*[№#]?\s*(\d+)/i,  // "фактура 1234" or "фактура номер 1234"
-  /проформа\s*[№#]?\s*(\d+)/i,              // "проформа 1234"
-  /invoice\s*[№#]?\s*(\d+)/i,               // "invoice 1234"
-  /inv[.\-\s]?(\d+)/i,                       // "inv-1234"
-  /[№#]\s*(\d{4,})/,                         // "№ 1234"
-  /\b(\d{10})\b/,                             // 10-digit number (common BG format)
-  /\b(\d{7,})\b/,                             // 7+ digit number (other BG formats)
+  /(?:фактура|faktura|invoice|inv)\s*(?:номер|no\.?|nr\.?|#|№)?\s*([a-zа-я0-9./_-]{2,})/i,
+  /(?:проформа|proforma|пф|проф\.?\s*ф-?ра|проф\.?|оферта|offer|quote|order confirmation|order)\s*(?:№|no\.?|nr\.?|#|номер|factura|фактура)?\s*([a-zа-я0-9./_-]{2,})/i,
+  /(?:пр|pr)\s*(?:№|no\.?|nr\.?|#|номер)?\s*([a-zа-я0-9./_-]{2,})/i,
+  /[№#]\s*([a-zа-я0-9./_-]{3,})/i,
+  /\b(\d{4,})\b/,
 ];
 
 // Keywords indicating bank charges / fees — not invoice payments
@@ -47,20 +45,63 @@ function extractDocNumber(description) {
   if (!description) return null;
   for (const pattern of INVOICE_NUMBER_PATTERNS) {
     const m = description.match(pattern);
-    if (m) return m[1];
+    if (m) {
+      const raw = String(m[1] || '').trim();
+      if (!raw) continue;
+      return /^\d+$/.test(raw) ? raw.replace(/^0+/, '') || '0' : raw;
+    }
   }
   return null;
+}
+
+function extractDocNumbers(description) {
+  if (!description) return [];
+  const text = String(description);
+  const matches = new Set();
+  for (const pattern of INVOICE_NUMBER_PATTERNS) {
+    let m;
+    const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+    while ((m = re.exec(text))) {
+      const raw = String(m[1] || '').trim();
+      if (!raw) continue;
+      matches.add(/^\d+$/.test(raw) ? raw.replace(/^0+/, '') || '0' : raw);
+    }
+  }
+  return [...matches];
 }
 
 /**
  * Returns true if the payment notes indicate it's a bank fee / charge / ATM.
  */
 function isBankCharge(payment) {
-  if (payment.paymentType === 'OTHER') {
-    const notes = (payment.notes || '') + ' ' + (payment.reference || '');
-    return BANK_CHARGE_KEYWORDS.some(p => p.test(notes));
+  const notes = (payment.notes || '') + ' ' + (payment.reference || '');
+  return BANK_CHARGE_KEYWORDS.some(p => p.test(notes));
+}
+
+function classifySystemPayment(payment) {
+  const notes = (payment.notes || '') + ' ' + (payment.reference || '');
+  const classifiers = [
+    { category: 'BANK_FEE', re: /такса|fee|commission|комисион|maintenance fee|account maintenance/i },
+    { category: 'TAX', re: /ддс|nap|td nap|данък|tax|ministry of e-governance|e-governance|revenue agency/i },
+    { category: 'SALARY', re: /заплата|salary|payroll|основна заплата/i },
+    { category: 'ATM', re: /\batm\b|withdrawal|cash withdrawal/i },
+    { category: 'CARD_SUBSCRIPTION', re: /openai|chatgpt|anthropic|claude|subscription|subscr|kiwi|parko|alloggi|laptop\.bg|google ads|facebook|meta ads|stripe/i },
+    { category: 'COD', re: /наложен платеж|cash on delivery|cod/i },
+    { category: 'CORRECTION', re: /грешно преведена сума|wrong transfer|incorrect transfer/i },
+  ];
+
+  for (const item of classifiers) {
+    if (item.re.test(notes)) return item.category;
   }
-  return false;
+  return null;
+}
+
+function inferMissingType(payment) {
+  const text = `${payment.notes || ''} ${payment.reference || ''}`;
+  if (/delivery|доставк|товарителница|cmr|awb/i.test(text)) return 'DELIVERY_NOTE';
+  if (/аванс|advance/i.test(text)) return 'ADVANCE_INVOICE';
+  if (/invoice|фактура|proforma|проформа|оферта|offer|quote|order confirmation|order/i.test(text)) return 'PAYMENT_PROOF';
+  return 'OTHER';
 }
 
 /**
@@ -100,14 +141,17 @@ async function autoMatch({ year } = {}) {
 
   // ── Step 0: auto-dismiss bank charges (fees, ATM, card charges) ──────────
   let bankChargeCount = 0;
+  let systemResolvedCount = 0;
   const realPayments = [];
   for (const payment of payments) {
-    if (isBankCharge(payment)) {
+    const systemCategory = classifySystemPayment(payment);
+    if (systemCategory) {
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { status: 'MATCHED', notes: (payment.notes || '') + ' [auto:bank_charge]' },
+        data: { status: 'MATCHED', notes: `${payment.notes || ''} [auto:${systemCategory.toLowerCase()}]`.trim() },
       });
-      bankChargeCount++;
+      systemResolvedCount++;
+      if (systemCategory === 'BANK_FEE') bankChargeCount++;
     } else {
       realPayments.push(payment);
     }
@@ -116,8 +160,8 @@ async function autoMatch({ year } = {}) {
   // Load all invoices/proformas in the same currency once
   const docs = await prisma.bizDocument.findMany({
     where: {
-      docType: { in: ['INVOICE_IN', 'INVOICE_OUT', 'PROFORMA_IN', 'PROFORMA_OUT'] },
-      status: { notIn: ['MATCHED'] },
+      docType: { in: ['INVOICE_IN', 'INVOICE_OUT', 'PROFORMA_IN', 'PROFORMA_OUT', 'OFFER_IN', 'OFFER_OUT', 'DELIVERY_NOTE', 'PROTOCOL'] },
+      status: { not: 'REJECTED' },
     },
     select: {
       id: true,
@@ -154,17 +198,46 @@ async function autoMatch({ year } = {}) {
   }
 
   let matched = 0, partial = 0, unmatched = 0;
+  const openItems = [];
 
   for (const payment of realPayments) {
     let bestMatch = null;
     let confidence = 0;
 
     // ── Step 1: regex extract doc number ────────────────────────────────────
-    const extractedNum = extractDocNumber(payment.notes);
-    const docMatch = findDocByNum(extractedNum);
-    if (docMatch) {
-      bestMatch = docMatch;
-      confidence = amountsMatch(payment.amount, bestMatch.amountTotal) ? 1.0 : 0.8;
+    const extractedNums = extractDocNumbers(`${payment.notes || ''} ${payment.reference || ''}`);
+    const exactMatches = extractedNums
+      .map(num => findDocByNum(num))
+      .filter(Boolean);
+
+    if (exactMatches.length > 0) {
+      const preferOutgoing = /\[OUT\]/.test(payment.notes || '');
+      const docTypeRank = doc => {
+        if (preferOutgoing) {
+          if (doc.docType === 'INVOICE_OUT') return 3;
+          if (doc.docType === 'PROFORMA_OUT') return 2;
+          if (doc.docType === 'INVOICE_IN') return 1;
+          if (doc.docType === 'PROFORMA_IN') return 1;
+        } else {
+          if (doc.docType === 'INVOICE_IN') return 3;
+          if (doc.docType === 'PROFORMA_IN') return 2;
+          if (doc.docType === 'INVOICE_OUT') return 1;
+          if (doc.docType === 'PROFORMA_OUT') return 1;
+        }
+        return 0;
+      };
+      bestMatch = [...exactMatches].sort((a, b) => {
+        const ra = docTypeRank(a);
+        const rb = docTypeRank(b);
+        if (rb !== ra) return rb - ra;
+        const amtA = Math.abs(Number(payment.amount) - Number(a.amountTotal));
+        const amtB = Math.abs(Number(payment.amount) - Number(b.amountTotal));
+        if (amtA !== amtB) return amtA - amtB;
+        const dateA = a.docDate ? Math.abs(new Date(a.docDate).getTime() - new Date(payment.paymentDate).getTime()) : Number.MAX_SAFE_INTEGER;
+        const dateB = b.docDate ? Math.abs(new Date(b.docDate).getTime() - new Date(payment.paymentDate).getTime()) : Number.MAX_SAFE_INTEGER;
+        return dateA - dateB;
+      })[0];
+      confidence = amountsMatch(payment.amount, bestMatch.amountTotal) ? 1.0 : 0.82;
     }
 
     // ── Step 2: fallback – counterparty + amount + date window ──────────────
@@ -222,7 +295,7 @@ async function autoMatch({ year } = {}) {
     }
 
     if (!bestMatch) {
-      unmatched++;
+      openItems.push(payment);
       continue;
     }
 
@@ -247,7 +320,45 @@ async function autoMatch({ year } = {}) {
     else partial++;
   }
 
-  return { matched, partial, unmatched, bankCharges: bankChargeCount, totalProcessed: payments.length };
+  let missingDocsCreated = 0;
+  for (const payment of openItems) {
+    const description = (payment.notes || payment.reference || 'Unmatched payment').slice(0, 240);
+    const missingType = inferMissingType(payment);
+    const existingMissing = await prisma.missingDocument.findFirst({
+      where: {
+        status: 'OPEN',
+        counterpartyId: payment.counterpartyId || null,
+        description,
+        expectedAmount: payment.amount,
+        currency: payment.currency,
+      },
+      select: { id: true },
+    });
+    if (!existingMissing) {
+      await prisma.missingDocument.create({
+        data: {
+          counterpartyId: payment.counterpartyId || null,
+          description,
+          expectedAmount: payment.amount,
+          currency: payment.currency,
+          status: 'OPEN',
+          notes: `Auto-created from unmatched payment ${payment.id}`,
+          missingType,
+        },
+      });
+      missingDocsCreated++;
+    }
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: 'PARTIAL',
+        notes: `${payment.notes || ''} [auto:missing_document]`.trim(),
+      },
+    });
+    partial++;
+  }
+
+  return { matched, partial, unmatched: 0, bankCharges: bankChargeCount, systemResolved: systemResolvedCount, missingDocsCreated, totalProcessed: payments.length };
 }
 
 /**
@@ -289,4 +400,4 @@ async function getStats(year) {
   };
 }
 
-module.exports = { autoMatch, getStats, extractDocNumber, isBankCharge, stripLeadingZeros };
+module.exports = { autoMatch, getStats, extractDocNumber, extractDocNumbers, isBankCharge, classifySystemPayment, stripLeadingZeros };

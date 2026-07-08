@@ -112,8 +112,8 @@ export default function DashboardPage() {
   const totalPurchasesCount = Number(kpis.totalPurchasesCount || 0);
   const topSuppliers: [string, number][] = (data?.topSuppliers || []).map((supplier: any) => [supplier.name, Number(supplier.amount || 0)]);
   const maxSupplier = topSuppliers[0]?.[1] || 1;
-  const bankRecon = data?.bankReconciliation || { total: 0, matched: 0, partial: 0, unmatched: 0 };
-  const matchRate = bankRecon.total > 0 ? Math.round((bankRecon.matched / bankRecon.total) * 100) : 0;
+  const bankRecon = data?.bankReconciliation || { total: 0, matched: 0, partial: 0, unmatched: 0, processed: 0 };
+  const processedRate = bankRecon.total > 0 ? Math.round(((bankRecon.processed || (bankRecon.matched + bankRecon.partial)) / bankRecon.total) * 100) : 0;
   const barOpacity = [1, 0.8, 0.6, 0.4, 0.25];
 
   // Period context
@@ -409,22 +409,22 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3 shrink-0">
             <span className="material-symbols-outlined text-primary">account_balance</span>
             <div>
-              <p className="font-label-caps text-label-caps text-on-surface-variant">БАНКОВА РЕКОН.</p>
-              <p className="font-headline text-headline-md text-on-surface mt-0.5">{matchRate}%</p>
+              <p className="font-label-caps text-label-caps text-on-surface-variant">БАНКОВА ОБРАБОТКА</p>
+              <p className="font-headline text-headline-md text-on-surface mt-0.5">{processedRate}%</p>
             </div>
           </div>
           <div className="flex-1">
             <div className="h-2 bg-surface-container-highest overflow-hidden mb-2">
               <div
-                className={`h-full transition-all duration-1000 ${matchRate >= 80 ? 'bg-primary-container' : matchRate >= 50 ? 'bg-secondary-container' : 'bg-error'}`}
-                style={{ width: `${matchRate}%` }}
+                className={`h-full transition-all duration-1000 ${processedRate >= 80 ? 'bg-primary-container' : processedRate >= 50 ? 'bg-secondary-container' : 'bg-error'}`}
+                style={{ width: `${processedRate}%` }}
               />
             </div>
             <div className="flex gap-6 font-label-caps text-[10px] text-on-surface-variant">
               <span><span className="text-primary font-data-mono">{bankRecon.matched}</span> Съвпад.</span>
               <span><span className="text-on-surface font-data-mono">{bankRecon.partial}</span> Частично</span>
               <span><span className="text-error font-data-mono">{bankRecon.unmatched}</span> Несъвп.</span>
-              <span className="ml-auto"><span className="font-data-mono text-on-surface">{bankRecon.total}</span> Общо</span>
+              <span className="ml-auto"><span className="font-data-mono text-on-surface">{bankRecon.processed || (bankRecon.matched + bankRecon.partial)}</span> Обработени</span>
             </div>
           </div>
           <a href="/reconciliation" className="btn-ghost shrink-0 font-label-caps text-label-caps flex items-center gap-2">

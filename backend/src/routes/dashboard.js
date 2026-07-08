@@ -214,6 +214,7 @@ router.get('/', auth, async (req, res) => {
         matched: paymentStats.find(p => p.status === 'MATCHED')?._count || 0,
         partial: paymentStats.find(p => p.status === 'PARTIAL')?._count || 0,
         unmatched: paymentStats.find(p => p.status === 'UNMATCHED')?._count || 0,
+        processed: paymentStats.reduce((s, p) => s + (p.status === 'MATCHED' || p.status === 'PARTIAL' ? (p._count || 0) : 0), 0),
       },
     });
   } catch (err) {
