@@ -211,13 +211,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 account_balance_wallet
               </button>
-              <button
-                onClick={() => router.push('/ai')}
-                className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors"
-                title="AI Асистент"
-              >
-                help_outline
-              </button>
             </div>
 
             {/* Language toggle */}

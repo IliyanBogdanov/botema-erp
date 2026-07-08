@@ -357,7 +357,9 @@ async function sendDailyDigest(prisma) {
 }
 
 function startAlertJobs(prisma) {
-  if (process.env.ENABLE_ALERT_DIGEST === 'false') return;
+  // Daily email digests are opt-in now. Keep the route/manual trigger available,
+  // but do not schedule the 08:30 job unless explicitly enabled.
+  if (process.env.ENABLE_ALERT_DIGEST !== 'true') return;
   cron.schedule('30 8 * * *', () => {
     sendDailyDigest(prisma).catch(err => console.error('Alert digest error:', err));
   }, { timezone: process.env.TZ || 'Europe/Sofia' });

@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -6,45 +7,45 @@ import { useAuthStore } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { api } from '@/lib/api';
 
-const navGroups = [
+const primaryGroups = [
   {
     label: 'Operations',
     items: [
-      { key: 'nav.dashboard',  href: '/',          icon: 'dashboard',           exact: true },
-      { key: 'nav.purchases',  href: '/purchases', icon: 'shopping_cart' },
-      { key: 'nav.documents',  href: '/documents', icon: 'auto_awesome' },
-      { key: 'nav.projects',   href: '/projects',  icon: 'folder_open' },
+      { key: 'nav.dashboard', href: '/', icon: 'dashboard', exact: true },
+      { key: 'nav.purchases', href: '/purchases', icon: 'shopping_cart' },
+      { key: 'nav.documents', href: '/documents', icon: 'auto_awesome' },
+      { key: 'nav.projects', href: '/projects', icon: 'folder_open' },
     ],
   },
   {
     label: 'Finance',
     items: [
-      { key: 'nav.invoices',   href: '/invoices',  icon: 'receipt_long' },
-      { key: 'nav.issuedDocs', href: '/issued-docs',  icon: 'edit_document' },
-      { key: 'nav.expenses',   href: '/expenses',  icon: 'receipt' },
-      { key: 'nav.vat',        href: '/vat',          icon: 'account_balance' },
-      { key: 'nav.finance',    href: '/finance',      icon: 'bar_chart' },
-      { key: 'nav.aged',       href: '/aged-debtors', icon: 'pending_actions' },
+      { key: 'nav.invoices', href: '/invoices', icon: 'receipt_long' },
+      { key: 'nav.vat', href: '/vat', icon: 'account_balance' },
+      { key: 'nav.finance', href: '/finance', icon: 'bar_chart' },
       { key: 'nav.reconciliation', href: '/reconciliation', icon: 'account_tree' },
     ],
   },
   {
     label: 'Studio',
     items: [
-      { key: 'nav.clients',        href: '/clients',          icon: 'groups' },
-      { key: 'nav.counterparties', href: '/counterparties',   icon: 'corporate_fare' },
-      { key: 'nav.suppliers',  href: '/suppliers', icon: 'local_shipping' },
-      { key: 'nav.inbox',      href: '/inbox',     icon: 'inbox' },
-      { key: 'nav.alerts',     href: '/alerts',    icon: 'notifications_active' },
-      { key: 'nav.ai',         href: '/ai',        icon: 'smart_toy' },
-      { key: 'nav.backfill',   href: '/backfill',  icon: 'cloud_sync' },
-      { key: 'nav.settings',   href: '/settings',  icon: 'settings' },
+      { key: 'nav.clients', href: '/clients', icon: 'groups' },
+      { key: 'nav.counterparties', href: '/counterparties', icon: 'corporate_fare' },
+      { key: 'nav.suppliers', href: '/suppliers', icon: 'local_shipping' },
     ],
   },
 ];
 
-// Keep flat navItems for any code that might still reference it
-const navItems = navGroups.flatMap(g => g.items);
+const advancedItems = [
+  { key: 'nav.issuedDocs', href: '/issued-docs', icon: 'edit_document' },
+  { key: 'nav.expenses', href: '/expenses', icon: 'receipt' },
+  { key: 'nav.aged', href: '/aged-debtors', icon: 'pending_actions' },
+  { key: 'nav.inbox', href: '/inbox', icon: 'inbox' },
+  { key: 'nav.alerts', href: '/alerts', icon: 'notifications_active' },
+  { key: 'nav.ai', href: '/ai', icon: 'smart_toy' },
+  { key: 'nav.backfill', href: '/backfill', icon: 'cloud_sync' },
+  { key: 'nav.settings', href: '/settings', icon: 'settings' },
+];
 
 interface SidebarProps {
   open?: boolean;
@@ -53,9 +54,10 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
   const { user, clearUser } = useAuthStore();
   const t = useT();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const { data: alerts = [] } = useQuery({
     queryKey: ['alerts-sidebar'],
@@ -77,9 +79,34 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     onClose?.();
   };
 
+  const renderLink = ({ key, href, icon, exact }: { key: string; href: string; icon: string; exact?: boolean }) => {
+    const active = isActive(href, exact);
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={handleNavClick}
+        className={`flex items-center gap-3 px-3 py-2 rounded-md font-label-caps text-label-caps transition-all duration-150 ${
+          active
+            ? 'bg-primary-container/15 text-primary'
+            : 'text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-high'
+        }`}
+      >
+        <span className={`material-symbols-outlined text-[18px] flex-shrink-0 ${active ? 'text-primary' : ''}`}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{t(key)}</span>
+        {href === '/alerts' && alertCount > 0 && (
+          <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
+            {alertCount > 9 ? '9+' : alertCount}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
   return (
     <>
-      {/* Mobile backdrop */}
       {open !== undefined && (
         <div
           className={`fixed inset-0 bg-black/60 z-40 md:hidden transition-opacity duration-300 ${
@@ -98,13 +125,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           }
         `}
       >
-        {/* Brand */}
         <div className="mb-8 px-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* BotemaMark SVG */}
             <svg width="28" height="28" viewBox="0 0 32 32" fill="none" className="flex-shrink-0 opacity-90">
-              <rect x="1" y="1" width="30" height="30" rx="7" stroke="#aac7ff" strokeWidth="1.5" opacity="0.9"/>
-              <path d="M10 9h8a4 4 0 0 1 0 8h-8V9z M10 15h9a4 4 0 0 1 0 8h-9v-8z" stroke="#aac7ff" strokeWidth="1.5" fill="none" strokeLinejoin="round"/>
+              <rect x="1" y="1" width="30" height="30" rx="7" stroke="#aac7ff" strokeWidth="1.5" opacity="0.9" />
+              <path d="M10 9h8a4 4 0 0 1 0 8h-8V9z M10 15h9a4 4 0 0 1 0 8h-9v-8z" stroke="#aac7ff" strokeWidth="1.5" fill="none" strokeLinejoin="round" />
             </svg>
             <div>
               <h1 className="font-display text-[16px] font-semibold text-on-surface tracking-tight leading-none">
@@ -115,7 +140,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               </p>
             </div>
           </div>
-          {/* Close button — mobile only */}
           {onClose && (
             <button
               onClick={onClose}
@@ -126,43 +150,35 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           )}
         </div>
 
-        {/* Nav — grouped */}
         <nav className="flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
-          {navGroups.map((group) => (
+          {primaryGroups.map((group) => (
             <div key={group.label}>
               <p className="font-label-caps text-[9px] tracking-[0.18em] text-on-surface-variant/35 uppercase px-3 mb-1">
                 {group.label}
               </p>
-              {group.items.map(({ key, href, icon, exact }) => {
-                const active = isActive(href, exact);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={handleNavClick}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-md font-label-caps text-label-caps transition-all duration-150 ${
-                      active
-                        ? 'bg-primary-container/15 text-primary'
-                        : 'text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-high'
-                    }`}
-                  >
-                    <span className={`material-symbols-outlined text-[18px] flex-shrink-0 ${active ? 'text-primary' : ''}`}>
-                      {icon}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{t(key)}</span>
-                    {href === '/alerts' && alertCount > 0 && (
-                      <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
-                        {alertCount > 9 ? '9+' : alertCount}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+              {group.items.map(renderLink)}
             </div>
           ))}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md font-label-caps text-[10px] tracking-[0.18em] uppercase text-on-surface-variant/45 hover:text-on-surface hover:bg-surface-container-high transition-colors"
+            >
+              <span>Advanced</span>
+              <span className="material-symbols-outlined text-[18px]">
+                {advancedOpen ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+            {advancedOpen && (
+              <div className="mt-1 space-y-1">
+                {advancedItems.map(renderLink)}
+              </div>
+            )}
+          </div>
         </nav>
 
-        {/* New Project CTA + Logout */}
         <div className="mt-auto space-y-2 px-0 pt-4 border-t border-outline-variant/10">
           <Link
             href="/projects"

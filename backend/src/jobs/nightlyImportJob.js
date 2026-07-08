@@ -8,7 +8,7 @@ const PURCHASE_KEYWORDS = ['фактура', 'invoice', 'purchase', 'доста�
 const SKIP_KEYWORDS = ['оферт', 'offer', 'изходящ', 'outgoing', 'issued', 'invoice-0000'];
 
 async function runNightlyImport() {
-  console.log('[nightly-import] Starting full pipeline...');
+  console.log('[nightly-import] Starting daily sync pipeline...');
   const year = new Date().getFullYear();
 
   // Step 1: Gmail scan (previous + current year)
@@ -20,11 +20,11 @@ async function runNightlyImport() {
     }
   }
 
-  // Step 2: Drive scan
+  // Step 2: Drive invoice sync
   const folderId = process.env.DRIVE_INVOICES_FOLDER_ID;
   if (folderId) {
     try {
-      await driveBackfill(folderId, 'Drive', year, msg => console.log('[nightly-import]', msg));
+      await driveBackfill(folderId, 'Drive', year, msg => console.log('[nightly-import][drive-sync]', msg));
     } catch (e) {
       console.error('[nightly-import] Drive error:', e.message);
     }
@@ -138,8 +138,9 @@ async function runNightlyImport() {
 }
 
 function startNightlyImportJob() {
-  cron.schedule('0 2 * * *', runNightlyImport, { timezone: 'Europe/Sofia' });
-  console.log('[nightly-import] Scheduled daily at 02:00 Europe/Sofia');
+  const cronExpr = process.env.DAILY_SYNC_CRON || '0 2 * * *';
+  cron.schedule(cronExpr, runNightlyImport, { timezone: 'Europe/Sofia' });
+  console.log(`[nightly-import] Scheduled daily sync at "${cronExpr}" Europe/Sofia`);
 }
 
 module.exports = { startNightlyImportJob, runNightlyImport };

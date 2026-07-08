@@ -167,6 +167,15 @@ router.get('/', auth, async (req, res) => {
     const available = Number(totalInventory._sum.qtyIn || 0) - Number(totalInventory._sum.qtyOut || 0);
 
     res.json({
+      generatedAt: new Date().toISOString(),
+      feed: {
+        sources: ['invoices', 'purchases', 'bank-payments', 'documents'],
+        period: {
+          year: yearNum,
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+        },
+      },
       kpis: {
         revenue: Number(revenueNum.toFixed(2)),
         revenueEur: Number(revenueEur.toFixed(2)),

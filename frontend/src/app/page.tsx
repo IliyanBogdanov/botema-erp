@@ -124,6 +124,10 @@ export default function DashboardPage() {
     ? `${today.getDate()} ${BG_MONTHS[today.getMonth()]} ${year}`
     : `31 Дек ${year}`;
   const periodLabel = `01 Яну ${year} — ${periodEnd}`;
+  const feedUpdatedAt = data?.generatedAt ? new Date(data.generatedAt) : null;
+  const feedUpdatedLabel = feedUpdatedAt
+    ? new Intl.DateTimeFormat('bg-BG', { dateStyle: 'medium', timeStyle: 'short' }).format(feedUpdatedAt)
+    : '—';
 
   return (
     <div className="min-h-screen">
@@ -197,6 +201,19 @@ export default function DashboardPage() {
       )}
 
       <div className="p-container-padding space-y-section-gap">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant/8 bg-surface-container-low px-4 py-3">
+          <span className="material-symbols-outlined text-primary text-[18px]">data_thresholding</span>
+          <div className="min-w-0">
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.14em]">DATA FEED</p>
+            <p className="text-body-sm text-on-surface-variant truncate">
+              {Array.isArray(data?.feed?.sources) ? data.feed.sources.join(' · ') : 'invoices · purchases · bank-payments · documents'}
+            </p>
+          </div>
+          <div className="ml-auto text-right">
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.14em]">{t('dash.lastUpdated')}</p>
+            <p className="text-body-sm text-on-surface">{feedUpdatedLabel}</p>
+          </div>
+        </div>
 
         {/* ── ALERT BANNERS ──────────────────────────────────────────────────── */}
         {(Array.isArray(alertsList) ? alertsList : []).length > 0 && (
