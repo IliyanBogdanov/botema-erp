@@ -31,7 +31,7 @@ const EUR_RATE = 1.95583;
 suppliersRouter.get('/', auth, async (req, res) => {
   const { year } = req.query;
   const dateFilter = year
-    ? { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) } }
+    ? { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) } }
     : {};
 
   const [suppliers, purchaseTotals] = await Promise.all([

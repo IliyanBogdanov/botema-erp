@@ -63,12 +63,15 @@ export default function AgedDebtorsPage() {
   }
 
   const invoices: any[] = data?.invoices || [];
-  const rawSummary: Record<string, number> = data?.summary || {};
 
-  // Convert summary to EUR
-  const summaryEur: Record<string, number> = Object.fromEntries(
-    Object.entries(rawSummary).map(([k, v]) => [k, v / BGN_PER_EUR])
-  );
+  // Prefer the backend's currency-converted summary; otherwise rebuild it from
+  // the invoices themselves (each has its own currency — a blanket /1.95583
+  // would halve EUR invoices)
+  const summaryEur: Record<string, number> = data?.summaryEur
+    || invoices.reduce((acc: Record<string, number>, inv: any) => {
+      acc[inv.bucket] = (acc[inv.bucket] || 0) + toEur(Number(inv.amountTotal), inv.currency);
+      return acc;
+    }, {});
 
   const totalEur = Object.values(summaryEur).reduce((s, v) => s + v, 0);
   const overdueEur = (summaryEur['1-30_DAYS'] || 0) + (summaryEur['31-60_DAYS'] || 0) +

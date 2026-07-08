@@ -4,18 +4,19 @@ const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
 
 const BGN_PER_EUR = 1.95583;
+// Approximate market rate — only a handful of USD documents exist, but
+// counting USD 1:1 as EUR overstated them by ~14%.
+const USD_PER_EUR = 1.14;
 
 const toNumber = value => Number(value || 0);
 const toEur = (amount, currency) => {
   const numericAmount = toNumber(amount);
   if (currency === 'BGN') return numericAmount / BGN_PER_EUR;
+  if (currency === 'USD') return numericAmount / USD_PER_EUR;
   return numericAmount;
 };
-const toBgn = (amount, currency) => {
-  const numericAmount = toNumber(amount);
-  if (currency === 'EUR') return numericAmount * BGN_PER_EUR;
-  return numericAmount;
-};
+const toBgn = (amount, currency) =>
+  currency === 'BGN' ? toNumber(amount) : toEur(amount, currency) * BGN_PER_EUR;
 const AUTHORITATIVE_BIZ_DOC_STATUSES = ['REVIEWED', 'IMPORTED', 'MATCHED'];
 
 // GET /api/dashboard — Main KPIs
@@ -232,7 +233,7 @@ router.get('/monthly-pnl', auth, async (req, res) => {
     const [invoices, bizCosts, expenses] = await Promise.all([
       prisma.invoice.findMany({
         where: {
-          date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
+          date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) },
           status: { not: 'CANCELLED' },
         },
         select: { date: true, currency: true, amountNet: true, vatAmount: true, amountTotal: true },
@@ -243,12 +244,12 @@ router.get('/monthly-pnl', auth, async (req, res) => {
           docType: 'INVOICE_IN',
           status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
           amountTotal: { gt: 0 },
-          docDate: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
+          docDate: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) },
         },
         select: { docDate: true, currency: true, amountTotal: true },
       }),
       prisma.expense.findMany({
-        where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) } },
+        where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) } },
         select: { date: true, currency: true, amount: true },
       }),
     ]);

@@ -12,7 +12,7 @@ router.get('/', auth, async (req, res) => {
   try {
     const { year, brand, status, clientId, search, page = 1, limit = 50 } = req.query;
     const where = {};
-    if (year)     where.date = { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) };
+    if (year)     where.date = { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) };
     if (brand)    where.brand = brand;
     if (status)   where.status = status;
     if (clientId) where.clientId = clientId;
@@ -64,6 +64,9 @@ router.get('/aging', auth, async (req, res) => {
       orderBy: { dueDate: 'asc' },
     });
 
+    const BGN_PER_EUR = 1.95583;
+    const toEur = (amount, currency) => currency === 'BGN' ? Number(amount) / BGN_PER_EUR : Number(amount);
+
     const result = invoices.map(inv => {
       const due = inv.dueDate ? new Date(inv.dueDate) : null;
       const daysOverdue = due ? Math.floor((today.getTime() - due.getTime()) / 86400000) : null;
@@ -74,6 +77,7 @@ router.get('/aging', auth, async (req, res) => {
         dueDate: inv.dueDate,
         status: inv.status,
         amountTotal: Number(inv.amountTotal),
+        amountEur: Number(toEur(inv.amountTotal, inv.currency).toFixed(2)),
         currency: inv.currency,
         clientName: inv.client?.name || null,
         daysOverdue,
@@ -86,12 +90,16 @@ router.get('/aging', auth, async (req, res) => {
       };
     });
 
-    const summary = result.reduce((acc, inv) => {
-      acc[inv.bucket] = (acc[inv.bucket] || 0) + inv.amountTotal;
-      return acc;
-    }, {});
+    // summary mixes currencies (raw amounts) — kept for backward compat;
+    // summaryEur is the currency-converted version clients should use
+    const summary = {};
+    const summaryEur = {};
+    for (const inv of result) {
+      summary[inv.bucket] = (summary[inv.bucket] || 0) + inv.amountTotal;
+      summaryEur[inv.bucket] = Number(((summaryEur[inv.bucket] || 0) + inv.amountEur).toFixed(2));
+    }
 
-    res.json({ invoices: result, summary });
+    res.json({ invoices: result, summary, summaryEur });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

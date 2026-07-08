@@ -166,24 +166,34 @@ router.get('/candidates/:paymentId', auth, async (req, res) => {
     if (!payment) return res.status(404).json({ error: 'Payment not found' });
 
     const { search } = req.query;
+    const BGN_PER_EUR = 1.95583;
     const amount = Number(payment.amount);
-    const margin = amount * 0.15; // ±15%
     const dateFrom = new Date(payment.paymentDate);
     dateFrom.setDate(dateFrom.getDate() - 90);
     const dateTo = new Date(payment.paymentDate);
     dateTo.setDate(dateTo.getDate() + 90);
 
+    // Search in the payment's currency AND the converted BGN/EUR equivalent —
+    // a 2026 EUR payment often settles a 2025 BGN invoice (euro switchover)
+    const amountWindows = [{ currency: payment.currency, amount }];
+    if (payment.currency === 'EUR') amountWindows.push({ currency: 'BGN', amount: amount * BGN_PER_EUR });
+    if (payment.currency === 'BGN') amountWindows.push({ currency: 'EUR', amount: amount / BGN_PER_EUR });
+
     const where = {
       status: { notIn: ['MATCHED', 'ARCHIVED', 'REJECTED'] },
-      currency: payment.currency,
-      amountTotal: { gte: amount - margin, lte: amount + margin },
+      OR: amountWindows.map(w => ({
+        currency: w.currency,
+        amountTotal: { gte: w.amount * 0.85, lte: w.amount * 1.15 }, // ±15%
+      })),
     };
 
     if (search) {
-      where.OR = [
-        { docNumber: { contains: search, mode: 'insensitive' } },
-        { counterparty: { name: { contains: search, mode: 'insensitive' } } },
-      ];
+      where.AND = [{
+        OR: [
+          { docNumber: { contains: search, mode: 'insensitive' } },
+          { counterparty: { name: { contains: search, mode: 'insensitive' } } },
+        ],
+      }];
     } else {
       where.docDate = { gte: dateFrom, lte: dateTo };
     }
@@ -196,9 +206,11 @@ router.get('/candidates/:paymentId', auth, async (req, res) => {
     });
 
     // Score each candidate
+    const toEur = (a, c) => (c === 'BGN' ? Number(a) / BGN_PER_EUR : Number(a));
+    const amountEur = toEur(amount, payment.currency);
     const scored = docs.map(doc => {
       let confidence = 0.5;
-      const amtDiff = Math.abs(Number(doc.amountTotal) - amount) / (amount || 1);
+      const amtDiff = Math.abs(toEur(doc.amountTotal, doc.currency) - amountEur) / (amountEur || 1);
       if (amtDiff < 0.005) confidence += 0.3;
       else if (amtDiff < 0.05) confidence += 0.15;
       if (doc.counterpartyId && doc.counterpartyId === payment.counterpartyId) confidence += 0.2;

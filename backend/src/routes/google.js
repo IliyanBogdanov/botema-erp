@@ -3,6 +3,7 @@ const router = express.Router();
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
+const { auth } = require('../middleware/auth');
 
 const getOAuth2Client = () => new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -45,7 +46,7 @@ router.get('/login', (req, res) => {
 });
 
 // GET /api/google/auth-url — returns the URL to open in browser
-router.get('/auth-url', async (req, res) => {
+router.get('/auth-url', auth, async (req, res) => {
   const oauth2 = getOAuth2Client();
   const url = oauth2.generateAuthUrl({
     access_type: 'offline',
@@ -102,7 +103,7 @@ router.get('/callback', async (req, res) => {
 });
 
 // GET /api/google/status — check if credentials are working
-router.get('/status', async (req, res) => {
+router.get('/status', auth, async (req, res) => {
   const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
   const hasSecret = !!process.env.GOOGLE_CLIENT_SECRET;
   const hasRefreshToken = !!process.env.GOOGLE_REFRESH_TOKEN;

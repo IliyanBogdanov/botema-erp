@@ -140,8 +140,14 @@ router.post('/chat', auth, async (req, res) => {
         select: { date: true, amountNet: true, currency: true },
       }),
       // All-time costs from BizDocument INVOICE_IN (authoritative source, from 2020)
+      // Same statuses as the dashboard — NEEDS_REVIEW docs must not count as costs
       prisma.bizDocument.findMany({
-        where: { docType: 'INVOICE_IN', status: { notIn: ['REJECTED', 'ARCHIVED'] }, docDate: { gte: new Date('2020-01-01') } },
+        where: {
+          docType: 'INVOICE_IN',
+          status: { in: ['REVIEWED', 'IMPORTED', 'MATCHED'] },
+          amountTotal: { gt: 0 },
+          docDate: { gte: new Date('2020-01-01') },
+        },
         select: { docDate: true, amountTotal: true, currency: true },
       }),
     ]);

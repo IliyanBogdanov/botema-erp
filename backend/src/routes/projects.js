@@ -149,8 +149,9 @@ router.get('/:id', auth, async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Not found' });
 
   const EUR_RATE = 1.95583;
+  // Net (без ДДС) — consistent with the list view and dashboard P&L
   const totalRevenueBGN = project.invoices.reduce((s, inv) => {
-    const total = Number(inv.amountTotal);
+    const total = Number(inv.amountNet ?? inv.amountTotal);
     return s + (inv.currency === 'EUR' ? total * EUR_RATE : total);
   }, 0);
   const totalCostsBGN = project.purchases.reduce((s, p) => {

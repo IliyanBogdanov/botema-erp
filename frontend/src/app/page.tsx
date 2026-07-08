@@ -25,7 +25,7 @@ function exportDashboardCsv(data: any, year: number) {
     [],
     ['KPI', 'Стойност (EUR)'],
     ['Приходи (EUR)', String(((kpis.revenueEur || kpis.revenue / 1.95583) || 0).toFixed(2))],
-    ['Разходи EUR', String(kpis.totalPurchasesEur || 0)],
+    ['Покупки EUR', String(kpis.totalPurchasesEur || 0)],
     ['Брой покупки', String(kpis.totalPurchasesCount || 0)],
     ['Брой фактури', String(kpis.invoiceCount || 0)],
     ['Брутен марж %', String(kpis.grossMargin || 0)],

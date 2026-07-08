@@ -150,7 +150,7 @@ router.get('/overview', auth, async (req, res) => {
     const [invoices, incomingDocs, documents, vatAlerts] = await Promise.all([
       prisma.invoice.findMany({
         where: { date: { gte: start, lte: end }, status: { not: 'CANCELLED' } },
-        select: { id: true, number: true, date: true, currency: true, vatAmount: true, amountTotal: true },
+        select: { id: true, number: true, date: true, currency: true, vatAmount: true, amountNet: true, amountTotal: true },
       }),
       prisma.bizDocument.findMany({
         where: {
@@ -179,7 +179,8 @@ router.get('/overview', auth, async (req, res) => {
     ]);
 
     const outputVat = invoices.reduce((s, i) => s + asBgn(i.vatAmount, i.currency), 0);
-    const outputNet = invoices.reduce((s, i) => s + asBgn(i.amountTotal, i.currency), 0);
+    // Net = without VAT; amountTotal here would overstate the base by ~20%
+    const outputNet = invoices.reduce((s, i) => s + asBgn(i.amountNet, i.currency), 0);
     const estimatedInputVat = incomingDocs.reduce((s, doc) => s + bizDocumentInputVatBgn(doc), 0);
     const pendingVatDocuments = documents.filter(d => pendingDocumentVatBgn(d) > 0);
     const pendingCredit = pendingVatDocuments.reduce((s, d) => s + pendingDocumentVatBgn(d), 0);
