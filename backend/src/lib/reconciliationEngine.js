@@ -96,14 +96,6 @@ function classifySystemPayment(payment) {
   return null;
 }
 
-function inferMissingType(payment) {
-  const text = `${payment.notes || ''} ${payment.reference || ''}`;
-  if (/delivery|доставк|товарителница|cmr|awb/i.test(text)) return 'DELIVERY_NOTE';
-  if (/аванс|advance/i.test(text)) return 'ADVANCE_INVOICE';
-  if (/invoice|фактура|proforma|проформа|оферта|offer|quote|order confirmation|order/i.test(text)) return 'PAYMENT_PROOF';
-  return 'OTHER';
-}
-
 /**
  * Check if two amounts are within tolerance (default 0.5%).
  */
@@ -111,6 +103,18 @@ function amountsMatch(a, b, tolerance = 0.005) {
   if (a === 0 && b === 0) return true;
   const maxVal = Math.max(Math.abs(a), Math.abs(b));
   return Math.abs(a - b) <= maxVal * tolerance;
+}
+
+const BGN_PER_EUR = 1.95583;
+const toEurAmount = (amount, currency) =>
+  currency === 'BGN' ? Number(amount) / BGN_PER_EUR : Number(amount);
+
+/**
+ * Currency-aware amount comparison: converts BGN<->EUR before comparing,
+ * so a 2026 EUR payment can match a 2025 BGN invoice and vice versa.
+ */
+function amountsMatchFx(payAmount, payCurrency, docAmount, docCurrency, tolerance = 0.005) {
+  return amountsMatch(toEurAmount(payAmount, payCurrency), toEurAmount(docAmount, docCurrency), tolerance);
 }
 
 /**
@@ -226,18 +230,27 @@ async function autoMatch({ year } = {}) {
         }
         return 0;
       };
-      bestMatch = [...exactMatches].sort((a, b) => {
-        const ra = docTypeRank(a);
-        const rb = docTypeRank(b);
-        if (rb !== ra) return rb - ra;
-        const amtA = Math.abs(Number(payment.amount) - Number(a.amountTotal));
-        const amtB = Math.abs(Number(payment.amount) - Number(b.amountTotal));
-        if (amtA !== amtB) return amtA - amtB;
-        const dateA = a.docDate ? Math.abs(new Date(a.docDate).getTime() - new Date(payment.paymentDate).getTime()) : Number.MAX_SAFE_INTEGER;
-        const dateB = b.docDate ? Math.abs(new Date(b.docDate).getTime() - new Date(payment.paymentDate).getTime()) : Number.MAX_SAFE_INTEGER;
-        return dateA - dateB;
-      })[0];
-      confidence = amountsMatch(payment.amount, bestMatch.amountTotal) ? 1.0 : 0.82;
+      // A doc-number hit alone is not enough: bank references are full of
+      // date/sequence digits that collide with unrelated doc numbers.
+      // Require the amounts to agree (currency-aware) before trusting the match.
+      const payEur = toEurAmount(payment.amount, payment.currency);
+      const candidates = [...exactMatches]
+        .filter(d => amountsMatchFx(payment.amount, payment.currency, d.amountTotal, d.currency, 0.02))
+        .sort((a, b) => {
+          const ra = docTypeRank(a);
+          const rb = docTypeRank(b);
+          if (rb !== ra) return rb - ra;
+          const amtA = Math.abs(payEur - toEurAmount(a.amountTotal, a.currency));
+          const amtB = Math.abs(payEur - toEurAmount(b.amountTotal, b.currency));
+          if (amtA !== amtB) return amtA - amtB;
+          const dateA = a.docDate ? Math.abs(new Date(a.docDate).getTime() - new Date(payment.paymentDate).getTime()) : Number.MAX_SAFE_INTEGER;
+          const dateB = b.docDate ? Math.abs(new Date(b.docDate).getTime() - new Date(payment.paymentDate).getTime()) : Number.MAX_SAFE_INTEGER;
+          return dateA - dateB;
+        });
+      if (candidates.length > 0) {
+        bestMatch = candidates[0];
+        confidence = amountsMatchFx(payment.amount, payment.currency, bestMatch.amountTotal, bestMatch.currency) ? 1.0 : 0.85;
+      }
     }
 
     // ── Step 2: fallback – counterparty + amount + date window ──────────────
@@ -249,20 +262,21 @@ async function autoMatch({ year } = {}) {
 
       const candidates = docs.filter(d =>
         d.counterpartyId === payment.counterpartyId &&
-        d.currency === payment.currency &&
         d.docDate &&
         d.docDate >= windowStart &&
         d.docDate <= windowEnd
       );
 
+      const payEur = toEurAmount(payment.amount, payment.currency);
       for (const candidate of candidates) {
-        if (amountsMatch(payment.amount, candidate.amountTotal)) {
+        if (amountsMatchFx(payment.amount, payment.currency, candidate.amountTotal, candidate.currency)) {
           bestMatch = candidate;
           confidence = 0.85;
           break;
         }
         // Partial: within 10%
-        if (Math.abs(payment.amount - candidate.amountTotal) / Math.max(payment.amount, candidate.amountTotal) < 0.10) {
+        const candEur = toEurAmount(candidate.amountTotal, candidate.currency);
+        if (Math.abs(payEur - candEur) / Math.max(payEur, candEur) < 0.10) {
           bestMatch = candidate;
           confidence = 0.7;
           // keep looking for exact match
@@ -320,45 +334,11 @@ async function autoMatch({ year } = {}) {
     else partial++;
   }
 
-  let missingDocsCreated = 0;
-  for (const payment of openItems) {
-    const description = (payment.notes || payment.reference || 'Unmatched payment').slice(0, 240);
-    const missingType = inferMissingType(payment);
-    const existingMissing = await prisma.missingDocument.findFirst({
-      where: {
-        status: 'OPEN',
-        counterpartyId: payment.counterpartyId || null,
-        description,
-        expectedAmount: payment.amount,
-        currency: payment.currency,
-      },
-      select: { id: true },
-    });
-    if (!existingMissing) {
-      await prisma.missingDocument.create({
-        data: {
-          counterpartyId: payment.counterpartyId || null,
-          description,
-          expectedAmount: payment.amount,
-          currency: payment.currency,
-          status: 'OPEN',
-          notes: `Auto-created from unmatched payment ${payment.id}`,
-          missingType,
-        },
-      });
-      missingDocsCreated++;
-    }
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'PARTIAL',
-        notes: `${payment.notes || ''} [auto:missing_document]`.trim(),
-      },
-    });
-    partial++;
-  }
+  // Payments with no trustworthy match stay UNMATCHED — hiding them behind a
+  // forced PARTIAL status makes the reconciliation stats lie.
+  unmatched = openItems.length;
 
-  return { matched, partial, unmatched: 0, bankCharges: bankChargeCount, systemResolved: systemResolvedCount, missingDocsCreated, totalProcessed: payments.length };
+  return { matched, partial, unmatched, bankCharges: bankChargeCount, systemResolved: systemResolvedCount, totalProcessed: payments.length };
 }
 
 /**

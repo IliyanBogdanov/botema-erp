@@ -52,14 +52,17 @@ async function runNightlyImport() {
         const buf = await downloadDriveFile(sf.externalId);
         const ai = await parseDocumentWithAI(sf.fileName, sf.filePath, buf);
         const supplierId = guessSupplierFromPath(sf.filePath, sf.fileName);
+        const invoiceDate = ai.docDate ? new Date(ai.docDate) : new Date();
+        // Bulgaria switched to EUR on 2026-01-01 — older documents default to BGN
+        const fallbackCurrency = invoiceDate < new Date('2026-01-01') ? 'BGN' : 'EUR';
         await prisma.purchase.create({
           data: {
             supplierId,
             driveFileId: sf.externalId,
             invoiceNumber: ai.invoiceNo || sf.fileName,
-            invoiceDate: ai.docDate ? new Date(ai.docDate) : new Date(),
+            invoiceDate,
             amount: parseFloat(ai.amountTotal) || 0,
-            currency: ai.currency || 'EUR',
+            currency: ai.currency || fallbackCurrency,
             description: ai.description || sf.fileName,
             status: 'RECEIVED',
           },

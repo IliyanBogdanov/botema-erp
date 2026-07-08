@@ -305,7 +305,9 @@ async function main() {
           vatAmount: asDecimal(data.vatAmount),
           amountTotal: asDecimal(amountTotal),
           vatType: vatTypeFor(currency),
-          status: conf >= 80 ? 'REVIEWED' : 'NEEDS_REVIEW',
+          // Docs without a resolved counterparty must be human-reviewed before
+          // they can count toward dashboard/VAT totals.
+          status: conf >= 80 && counterpartyId ? 'REVIEWED' : 'NEEDS_REVIEW',
           confidence: new Prisma.Decimal(conf),
           notes: [
             `MinerU promoted ${new Date().toISOString()}: Document ${doc.id}`,
