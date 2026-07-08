@@ -27,6 +27,53 @@ async function ensureAlert(prisma, data) {
   return prisma.alert.create({ data });
 }
 
+function alertDedupeKey(alert) {
+  return [
+    alert.type,
+    alert.title,
+    alert.documentId || '',
+    alert.invoiceId || '',
+    alert.purchaseId || '',
+    alert.projectId || '',
+  ].join('\u001f');
+}
+
+async function resolveDuplicateActiveAlerts(prisma) {
+  const alerts = await prisma.alert.findMany({
+    where: { status: { in: ['ACTIVE', 'SNOOZED'] } },
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      status: true,
+      documentId: true,
+      invoiceId: true,
+      purchaseId: true,
+      projectId: true,
+      detectedAt: true,
+    },
+    orderBy: { detectedAt: 'desc' },
+  });
+
+  const seen = new Set();
+  const duplicateIds = [];
+  for (const alert of alerts) {
+    const key = alertDedupeKey(alert);
+    if (seen.has(key)) {
+      duplicateIds.push(alert.id);
+    } else {
+      seen.add(key);
+    }
+  }
+
+  if (!duplicateIds.length) return 0;
+  const result = await prisma.alert.updateMany({
+    where: { id: { in: duplicateIds } },
+    data: { status: 'RESOLVED', resolvedAt: new Date() },
+  });
+  return result.count;
+}
+
 async function generateAlerts(prisma) {
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -175,6 +222,7 @@ async function generateAlerts(prisma) {
     }));
   }
 
+  await resolveDuplicateActiveAlerts(prisma);
   return created.filter(Boolean);
 }
 
@@ -315,4 +363,4 @@ function startAlertJobs(prisma) {
   }, { timezone: process.env.TZ || 'Europe/Sofia' });
 }
 
-module.exports = { generateAlerts, sendDailyDigest, startAlertJobs, ensureAlert };
+module.exports = { generateAlerts, sendDailyDigest, startAlertJobs, ensureAlert, resolveDuplicateActiveAlerts };

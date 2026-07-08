@@ -16,6 +16,7 @@ const toBgn = (amount, currency) => {
   if (currency === 'EUR') return numericAmount * BGN_PER_EUR;
   return numericAmount;
 };
+const AUTHORITATIVE_BIZ_DOC_STATUSES = ['REVIEWED', 'IMPORTED', 'MATCHED'];
 
 // GET /api/dashboard — Main KPIs
 router.get('/', auth, async (req, res) => {
@@ -85,7 +86,7 @@ router.get('/', auth, async (req, res) => {
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
-          status: { notIn: ['REJECTED', 'ARCHIVED'] },
+          status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
           amountTotal: { gt: 0 },
           docDate: { gte: startDate, lte: endDate },
         },
@@ -230,7 +231,7 @@ router.get('/monthly-pnl', auth, async (req, res) => {
       prisma.bizDocument.findMany({
         where: {
           docType: 'INVOICE_IN',
-          status: { notIn: ['REJECTED', 'ARCHIVED'] },
+          status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
           amountTotal: { gt: 0 },
           docDate: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) },
         },

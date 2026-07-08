@@ -2,11 +2,13 @@ node_modules/
 .venv-mineru/
 .env
 .env.local
+.env.production
 .next/
 dist/
 build/
 output/
 *.log
+backend/logs/
 .codex-logs/
 .DS_Store
 .vercel

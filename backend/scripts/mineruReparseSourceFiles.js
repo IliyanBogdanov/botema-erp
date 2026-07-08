@@ -29,17 +29,44 @@ const ONLY_MISSING = process.argv.includes('--only-missing');
 const INCLUDE_PROCESSED = process.argv.includes('--include-processed');
 const REPARSE_MINERU = process.argv.includes('--reparse-mineru');
 const INCLUDE_FAILED = process.argv.includes('--include-failed');
+const RETRY_INVALID_GRANT = process.argv.includes('--retry-invalid-grant');
+const MINERU_ONLY = process.argv.includes('--mineru-only');
+const SKIP_NONFINANCIAL = process.argv.includes('--skip-nonfinancial');
 const FAILED_MARKER = '[MINERU_FAILED]';
+const NONFINANCIAL_KEYWORDS = [
+  'price list',
+  'pricelist',
+  'catalogue',
+  'catalog',
+  'brochure',
+  'technical sheet',
+  'базови цени',
+  'ценова листа',
+  'каталог',
+  'брошура',
+];
 
 function argValue(name, fallback = null) {
   const i = process.argv.indexOf(name);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const POSITIONAL = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
+const SOURCE_FILE_ID = argValue('--source-file-id', null);
+const FLAGS_WITH_VALUES = new Set(['--limit', '--source', '--min-confidence', '--run-id', '--order', '--source-file-id']);
+const POSITIONAL = [];
+for (let i = 2; i < process.argv.length; i++) {
+  const arg = process.argv[i];
+  if (FLAGS_WITH_VALUES.has(arg)) {
+    i++;
+  } else if (!arg.startsWith('--')) {
+    POSITIONAL.push(arg);
+  }
+}
 const LIMIT_ARG = argValue('--limit', POSITIONAL[0] || '10');
 const SOURCE = String(argValue('--source', POSITIONAL[1] || 'all')).toUpperCase(); // DRIVE | GMAIL | all
 const MIN_CONFIDENCE = Number(argValue('--min-confidence', '70'));
+const RUN_ID = argValue('--run-id', process.env.MINERU_RUN_ID || null);
+const ORDER = String(argValue('--order', 'desc')).toLowerCase() === 'asc' ? 'asc' : 'desc';
 const LIMIT = Number(LIMIT_ARG);
 const EFFECTIVE_LIMIT = Number.isFinite(LIMIT) && LIMIT > 0 ? LIMIT : 10;
 
@@ -48,6 +75,14 @@ function configureMineruDefaults() {
   process.env.MINERU_BACKEND = process.env.MINERU_BACKEND || 'pipeline';
   process.env.MINERU_METHOD = process.env.MINERU_METHOD || 'auto';
   process.env.MINERU_TIMEOUT_MS = process.env.MINERU_TIMEOUT_MS || '180000';
+
+  if (MINERU_ONLY) {
+    process.env.MINERU_ONLY = 'true';
+    process.env.DISABLE_GEMINI_EXTRACTION = 'true';
+    process.env.DISABLE_GROQ_EXTRACTION = 'true';
+    process.env.DISABLE_OPENROUTER_EXTRACTION = 'true';
+    process.env.DISABLE_OPENAI_EXTRACTION = 'true';
+  }
 
   const localMineru = path.resolve(__dirname, '../../.venv-mineru/Scripts/mineru.exe');
   if (!process.env.MINERU_COMMAND && fs.existsSync(localMineru)) {
@@ -91,6 +126,17 @@ function docKeyForSourceFile(sourceFile) {
     return messageId ? `gmail:${messageId}:${sourceFile.filename}` : null;
   }
   return null;
+}
+
+function isLikelyNonFinancial(sourceFile) {
+  const text = `${sourceFile.filename || ''} ${sourceFile.folder || ''} ${sourceFile.subject || ''}`.toLowerCase();
+  return NONFINANCIAL_KEYWORDS.some(keyword => text.includes(keyword));
+}
+
+function lastMineruFailure(notes) {
+  const raw = String(notes || '');
+  const idx = raw.lastIndexOf(FAILED_MARKER);
+  return idx >= 0 ? raw.slice(idx) : '';
 }
 
 async function downloadGmailAttachment(gmail, sourceFile) {
@@ -214,6 +260,7 @@ async function upsertDocument(sourceFile, parsed, docKey, bizAction = null) {
       subject: sourceFile.subject,
       fromEmail: sourceFile.fromEmail,
       mineruReparsedAt: new Date().toISOString(),
+      mineruRunId: RUN_ID || undefined,
       mineruBizStatus: bizAction,
     },
     confidence: new Prisma.Decimal(Math.min(Number(parsed.confidence || 0), 100) / 100),
@@ -322,6 +369,7 @@ async function upsertBizDocument(sourceFile, parsed) {
 
 async function getSourceFiles() {
   const where = {
+    ...(SOURCE_FILE_ID ? { id: SOURCE_FILE_ID } : {}),
     OR: [
       { filename: { endsWith: '.pdf', mode: 'insensitive' } },
       { mimeType: { contains: 'pdf', mode: 'insensitive' } },
@@ -342,18 +390,39 @@ async function getSourceFiles() {
 
   const rows = await prisma.sourceFile.findMany({
     where,
-    orderBy: [{ receivedAt: 'desc' }, { createdAt: 'desc' }],
-    take: EFFECTIVE_LIMIT * 10,
+    orderBy: [{ receivedAt: ORDER }, { createdAt: ORDER }],
+    ...(RUN_ID ? {} : { take: EFFECTIVE_LIMIT * 10 }),
   });
 
   const downloadable = rows;
   let candidates = downloadable;
 
-  if (!INCLUDE_FAILED) {
+  if (SKIP_NONFINANCIAL) {
+    candidates = candidates.filter(row => !isLikelyNonFinancial(row));
+  }
+
+  if (RETRY_INVALID_GRANT) {
+    candidates = candidates.filter(row => {
+      const failure = lastMineruFailure(row.notes);
+      return !failure
+        || (failure.includes('invalid_grant') && !failure.includes('EBUSY') && !failure.includes('ETIMEDOUT'));
+    });
+  } else if (!INCLUDE_FAILED) {
     candidates = candidates.filter(row => !String(row.notes || '').includes(FAILED_MARKER));
   }
 
-  if (!REPARSE_MINERU) {
+  if (RUN_ID) {
+    const keys = candidates.map(docKeyForSourceFile).filter(Boolean);
+    const alreadyParsed = keys.length ? await prisma.document.findMany({
+      where: {
+        driveFileId: { in: keys },
+        extractedData: { path: ['mineruRunId'], equals: RUN_ID },
+      },
+      select: { driveFileId: true },
+    }) : [];
+    const parsedKeys = new Set(alreadyParsed.map(d => d.driveFileId));
+    candidates = candidates.filter(row => !parsedKeys.has(docKeyForSourceFile(row)));
+  } else if (!REPARSE_MINERU) {
     const keys = candidates.map(docKeyForSourceFile).filter(Boolean);
     const alreadyParsed = keys.length ? await prisma.document.findMany({
       where: {
@@ -384,10 +453,15 @@ async function main() {
   console.log({
     source: SOURCE,
     limit: EFFECTIVE_LIMIT,
+    order: ORDER,
+    runId: RUN_ID,
     onlyMissing: ONLY_MISSING,
     includeProcessed: INCLUDE_PROCESSED,
     includeFailed: INCLUDE_FAILED,
+    retryInvalidGrant: RETRY_INVALID_GRANT,
     reparseMineru: REPARSE_MINERU,
+    mineruOnly: MINERU_ONLY,
+    skipNonfinancial: SKIP_NONFINANCIAL,
     applyBizDocs: APPLY_BIZDOCS,
     createNewBizDocs: CREATE_NEW_BIZDOCS,
     mineruCommand: process.env.MINERU_COMMAND || 'mineru',

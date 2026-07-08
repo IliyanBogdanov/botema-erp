@@ -581,6 +581,7 @@ async function parseDocumentWithAI(filename, folder, pdfBuffer) {
   const folderType = guessFolderType(folder);
   const mimeType = inferMimeType(filename);
   const t0 = Date.now();
+  const mineruOnly = process.env.MINERU_ONLY === 'true';
 
   log.info('Starting document parse', { filename, folder, mimeType, folderType });
 
@@ -655,14 +656,19 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
             console.warn(`[MinerU] AI extraction failed for ${filename}: ${err.message?.slice(0, 200)}`);
           }
           const parsed = parseStructuredFromMineruText(filename, folder, mineru.text);
-          if (parsed.amountTotal || parsed.invoiceNo || parsed.docDate) {
+          if (mineruOnly || parsed.amountTotal || parsed.invoiceNo || parsed.docDate) {
             return withMineruMeta(parsed);
           }
         }
       }
     } catch (err) {
       console.warn(`[MinerU] ${filename}: ${err.message?.slice(0, 300)}`);
+      if (mineruOnly) throw err;
     }
+  }
+
+  if (mineruOnly) {
+    throw new Error('MINERU_ONLY is enabled, but MinerU did not produce parseable text');
   }
 
   const tryGemini = async (retries = 2) => {
