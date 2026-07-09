@@ -14,19 +14,21 @@ const { parseBankStatementBuffer } = require('../src/lib/bankStatementParser');
 
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes('--apply');
-const CSV = path.resolve(__dirname, '../../bank statements and docs/2026.csv');
+const yIdx = process.argv.indexOf('--year');
+const YEAR = yIdx >= 0 ? Number(process.argv[yIdx + 1]) : 2026;
+const CSV = path.resolve(__dirname, `../../bank statements and docs/${YEAR}.csv`);
 
 async function main() {
-  console.log(`=== Backfill payment directions from 2026.csv ${APPLY ? '(APPLY)' : '(DRY RUN)'} ===`);
+  console.log(`=== Backfill payment directions from ${YEAR}.csv ${APPLY ? '(APPLY)' : '(DRY RUN)'} ===`);
   const { meta, rows } = parseBankStatementBuffer(fs.readFileSync(CSV));
   console.log(`CSV: ${rows.length} rows, currency ${meta.currency}, IBAN ${meta.iban}`);
 
   const payments = await prisma.payment.findMany({
-    where: { paymentDate: { gte: new Date('2026-01-01') } },
+    where: { paymentDate: { gte: new Date(`${YEAR}-01-01`), lt: new Date(`${YEAR + 1}-01-01`) } },
     select: { id: true, paymentDate: true, amount: true, currency: true, reference: true, notes: true },
   });
   const unmarked = payments.filter(p => !/\[(IN|OUT)\]/.test(p.notes || ''));
-  console.log(`Payments 2026: ${payments.length}, без посока: ${unmarked.length}`);
+  console.log(`Payments ${YEAR}: ${payments.length}, без посока: ${unmarked.length}`);
 
   const stats = { marked: 0, ambiguous: 0, noRow: 0 };
   for (const pay of unmarked) {
