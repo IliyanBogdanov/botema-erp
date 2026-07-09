@@ -792,6 +792,9 @@ model Payment {
   reference       String?       // bank ref / COD ref
   bankAccount     String?
   status          PaymentMatchStatus @default(UNMATCHED)
+  // Cash-flow category (bank-first accounting): INCOME | PURCHASE | SALARY | TAX |
+  // RENT | BANK_FEE | SOFTWARE_ADS | LOGISTICS | SERVICES | CASH | OTHER
+  category        String?
   notes           String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

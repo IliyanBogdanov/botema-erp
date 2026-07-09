@@ -249,54 +249,56 @@ export default function DashboardPage() {
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden group hover:border-primary-container/20 hover:shadow-[0_0_48px_rgba(62,144,255,0.07)] transition-all duration-300">
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container/5 rounded-bl-full translate-x-12 -translate-y-12 group-hover:scale-110 transition-transform duration-500" />
             <div className="absolute top-4 right-4 w-1.5 h-1.5 rounded-full bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.6)]" />
-            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.totalEur')}</p>
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">ПОКУПКИ (ПО БАНКА)</p>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-[40px] leading-none text-on-surface italic tracking-tight">
-                {totalPurchasesEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                {(kpis.bankPurchasesEur ?? totalPurchasesEur).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
               <span className="font-label-caps text-[11px] text-primary tracking-[0.15em]">EUR</span>
             </div>
             <div className="mt-5 flex items-center gap-2 text-primary/60">
-              <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">{periodLabel}{isCurrentYear ? ' (ЯНУ)' : ''} · {t('dash.allCurrCombined')}</span>
+              <span className="material-symbols-outlined text-[14px]">account_balance</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">{periodLabel} · реално платено на доставчици{kpis.bankOutEur ? ` · всички изходящи ${Math.round(kpis.bankOutEur).toLocaleString('bg-BG')} €` : ''}</span>
             </div>
           </div>
 
           {/* EUR Revenue */}
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
-            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.revenueBgn')}</p>
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">ПОСТЪПЛЕНИЯ (ПО БАНКА)</p>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-[40px] leading-none text-on-surface italic tracking-tight">
-                {(kpis.revenueEur || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                {(kpis.bankInEur ?? kpis.revenueEur ?? 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
               </span>
               <span className="font-label-caps text-[11px] text-secondary-fixed-dim tracking-[0.15em]">EUR</span>
             </div>
             <div className="mt-5 h-px bg-outline-variant/20 overflow-hidden rounded-full">
               <div
                 className="h-full bg-primary-container/50 rounded-full transition-all duration-1000"
-                style={{ width: `${Math.min(100, kpis.revenueEur > 0 ? Math.round(((kpis.costsEur || kpis.costs / 1.95583) / kpis.revenueEur) * 100) : 0)}%` }}
+                style={{ width: `${Math.min(100, (kpis.bankInEur ?? 0) > 0 ? Math.round(((kpis.bankOutEur || 0) / kpis.bankInEur) * 100) : 0)}%` }}
               />
             </div>
             <div className="mt-3 flex items-center gap-2 text-on-surface-variant/40">
-              <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">Нетни приходи · {periodLabel}</span>
+              <span className="material-symbols-outlined text-[14px]">account_balance</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">фактурирано нето {(kpis.revenueEur || 0).toLocaleString('bg-BG', { maximumFractionDigits: 0 })} € · {periodLabel}</span>
             </div>
           </div>
 
           {/* Margin */}
           <div className="bg-surface-container-low p-7 rounded-xl border border-outline-variant/8 relative overflow-hidden hover:border-outline-variant/12 transition-all duration-300">
-            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">{t('dash.grossMargin')}</p>
+            <p className="font-label-caps text-[10px] text-on-surface-variant/60 mb-5 tracking-[0.14em]">НЕТЕН ПАРИЧЕН ПОТОК</p>
             <div className="flex items-baseline gap-1">
-              <span className={`font-display text-[40px] leading-none italic tracking-tight ${margin < -30 ? 'text-error/80' : 'text-on-surface'}`}>{margin || '—'}</span>
-              {margin !== 0 && <span className="font-label-caps text-[18px] text-on-surface-variant/40 self-end mb-2">%</span>}
+              <span className={`font-display text-[40px] leading-none italic tracking-tight ${(kpis.bankNetEur ?? 0) < 0 ? 'text-error/80' : 'text-emerald-400'}`}>
+                {kpis.bankNetEur != null ? `${kpis.bankNetEur >= 0 ? '+' : ''}${Math.round(kpis.bankNetEur).toLocaleString('bg-BG')}` : '—'}
+              </span>
+              <span className="font-label-caps text-[14px] text-on-surface-variant/40 self-end mb-2">EUR</span>
             </div>
             <div className="mt-5 flex items-center gap-2 text-on-surface-variant/40">
               <span className="material-symbols-outlined text-[14px]">analytics</span>
-              <span className="font-label-caps text-[9px] tracking-[0.12em]">{kpis.invoiceCount || 0} {t('dash.invoices')} · {periodLabel}</span>
+              <span className="font-label-caps text-[9px] tracking-[0.12em]">по банка · {kpis.invoiceCount || 0} {t('dash.invoices')} · {periodLabel}</span>
             </div>
-            {margin < -30 && isCurrentYear && (
+            {(kpis.bankNetEur ?? 0) < 0 && isCurrentYear && (
               <div className="mt-3 px-2 py-1.5 bg-error/5 border border-error/15 rounded text-[9px] font-label-caps text-error/70 leading-relaxed">
-                ⚠ YTD: разходите включват авансови покупки за бъдещи проекти
+                ⚠ YTD: изходящите включват авансови покупки за бъдещи проекти
               </div>
             )}
           </div>

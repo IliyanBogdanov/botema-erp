@@ -33,6 +33,7 @@ router.get('/', auth, async (req, res) => {
       invoiceCount,
       paymentStats,
       pendingTotals,
+      bankFlows,
     ] = await Promise.all([
       // Fetch individually so we can do proper currency conversion
       prisma.invoice.findMany({
@@ -108,6 +109,11 @@ router.get('/', auth, async (req, res) => {
         where: { status: 'PENDING' },
         select: { amountTotal: true, currency: true },
       }),
+      // Bank truth (leading source): categorized cash flows for the year
+      prisma.payment.findMany({
+        where: { paymentDate: { gte: startDate, lte: endDate } },
+        select: { amount: true, currency: true, category: true },
+      }),
     ]);
 
     const clientIds = topClients.map(c => c.clientId).filter(Boolean);
@@ -155,6 +161,17 @@ router.get('/', auth, async (req, res) => {
     const expensesEur = expenseRows.reduce((s, e) => s + toEur(e.amount, e.currency), 0);
     const expensesBgn = expenseRows.reduce((s, e) => s + toBgn(e.amount, e.currency), 0);
 
+    // Bank-first cash KPIs (банката винаги води)
+    const bankByCat = {};
+    let bankInEur = 0, bankOutEur = 0;
+    for (const bp of bankFlows) {
+      const eur = toEur(bp.amount, bp.currency);
+      const cat = bp.category || 'OTHER';
+      bankByCat[cat] = (bankByCat[cat] || 0) + eur;
+      if (cat === 'INCOME') bankInEur += eur; else bankOutEur += eur;
+    }
+    const bankPurchasesEur = (bankByCat.PURCHASE || 0) + (bankByCat.LOGISTICS || 0);
+
     const revenueNum = revenueInvoices.reduce((s, inv) => s + toBgn(inv.amountNet, inv.currency), 0);
     const revenueEur = revenueInvoices.reduce((s, inv) => s + toEur(inv.amountNet, inv.currency), 0);
     const vatCollected = revenueInvoices.reduce((s, inv) => s + toBgn(inv.vatAmount, inv.currency), 0);
@@ -188,6 +205,12 @@ router.get('/', auth, async (req, res) => {
         expensesEur: Number(expensesEur.toFixed(2)),
         invoiceCount,
         grossMargin: revenueNum > 0 ? ((revenueNum - costsNum) / revenueNum * 100).toFixed(1) : 0,
+        // Bank truth (leading): cash-basis flows for the selected year
+        bankInEur: Number(bankInEur.toFixed(2)),
+        bankOutEur: Number(bankOutEur.toFixed(2)),
+        bankPurchasesEur: Number(bankPurchasesEur.toFixed(2)),
+        bankNetEur: Number((bankInEur - bankOutEur).toFixed(2)),
+        bankByCategory: Object.fromEntries(Object.entries(bankByCat).map(([k, v]) => [k, Number(v.toFixed(2))])),
         inventoryCount: available,
         pendingCount: pendingTotals.length,
         pendingAmount: pendingTotals.reduce((sum, invoice) => sum + toBgn(invoice.amountTotal, invoice.currency), 0),
@@ -297,6 +320,49 @@ router.get('/monthly-pnl', auth, async (req, res) => {
       : 0;
 
     res.json({ year, months, totals });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dashboard/cashflow?year=2026
+// Bank-first monthly cash flow (the leading source of truth): per-month
+// in/out/net in EUR plus a category breakdown for the year.
+router.get('/cashflow', auth, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getFullYear());
+    await fx.loadRates();
+    const payments = await prisma.payment.findMany({
+      where: { paymentDate: { gte: new Date(`${year}-01-01T00:00:00.000Z`), lte: new Date(`${year}-12-31T23:59:59.999Z`) } },
+      select: { paymentDate: true, amount: true, currency: true, category: true },
+    });
+    const MONTH_NAMES = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+    const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, label: MONTH_NAMES[i], inEur: 0, outEur: 0, netEur: 0 }));
+    const byCategory = {};
+    for (const p of payments) {
+      const eur = toEur(p.amount, p.currency);
+      const m = new Date(p.paymentDate).getUTCMonth();
+      const cat = p.category || 'OTHER';
+      byCategory[cat] = (byCategory[cat] || 0) + eur;
+      if (cat === 'INCOME') months[m].inEur += eur; else months[m].outEur += eur;
+    }
+    for (const m of months) {
+      m.inEur = Number(m.inEur.toFixed(2));
+      m.outEur = Number(m.outEur.toFixed(2));
+      m.netEur = Number((m.inEur - m.outEur).toFixed(2));
+    }
+    const totals = {
+      inEur: Number(months.reduce((s, m) => s + m.inEur, 0).toFixed(2)),
+      outEur: Number(months.reduce((s, m) => s + m.outEur, 0).toFixed(2)),
+    };
+    totals.netEur = Number((totals.inEur - totals.outEur).toFixed(2));
+    res.json({
+      year,
+      source: 'bank',
+      months,
+      totals,
+      byCategory: Object.fromEntries(Object.entries(byCategory).map(([k, v]) => [k, Number(v.toFixed(2))]).sort((a, b) => b[1] - a[1])),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
