@@ -168,6 +168,15 @@ async function main() {
   }
   function sleep() { return new Promise(r => setTimeout(r, THROTTLE_MS)); }
   console.log('\n=== DONE ===', JSON.stringify(stats));
+
+  // For the scheduled daily batch: how many actionable files are still left
+  // (excludes obvious non-invoices which will never get a BizDocument)
+  const leftRows = await prisma.sourceFile.findMany({
+    where: { driveFileId: { in: all.map(f => f.id) }, bizDocuments: { none: {} } },
+    select: { filename: true },
+  });
+  const actionable = leftRows.filter(r => !SKIP_FILE.test(r.filename)).length;
+  console.log(`REMAINING_ACTIONABLE=${actionable}`);
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => prisma.$disconnect());
