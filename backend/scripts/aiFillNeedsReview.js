@@ -126,6 +126,18 @@ async function main() {
       const pName = parsed.supplierName || parsed.counterpartyName || '';
       const pAmt = num(parsed.amountTotal);
 
+      // 0) Собствена изходяща фактура (наша серия 0000000xxx / For-Operation export) —
+      //    не е разход; маркирай за приходен импорт
+      const ownSeries = /^0000000\d{2,3}$/.test(String(parsed.invoiceNo || '')) || /For-Operation-(Sale|Advance)/i.test(String(sf.filename || ''));
+      const ownCp = /студио ботема|luminavera|луминавера/i.test(String(pName || ''));
+      if (ownSeries || ownCp) {
+        stats.stillReview++;
+        console.log(`OWN-OUT  ${tag} → наша изходяща фактура #${parsed.invoiceNo || '?'}, не разход`);
+        if (APPLY) await prisma.bizDocument.update({ where: { id: doc.id }, data: { docType: 'INVOICE_OUT', status: 'NEEDS_REVIEW', notes: `${doc.notes ? doc.notes + ' | ' : ''}2026-07-09 AI: изходяща фактура (наша серия), кандидат за приходен импорт`.slice(0, 1000) } });
+        await new Promise(r => setTimeout(r, THROTTLE_MS));
+        continue;
+      }
+
       // 1) Не е фактура → архив
       if (!['INVOICE_IN', 'INVOICE'].includes(pType) && conf >= 60) {
         stats.archived++;
@@ -168,17 +180,22 @@ async function main() {
         continue;
       }
 
-      // 3) Попълване + евентуално промотиране
-      const promote = cp?.id !== undefined && cp !== null && amountTotal > 0 && conf >= 70;
+      // 3) Попълване + евентуално промотиране.
+      // Sanity: суми над 100K EUR екв. са почти сигурно parse грешка (номер като сума) —
+      // никога не се промотират автоматично.
+      const amountEurEq = currency === 'BGN' ? amountTotal / 1.95583 : currency === 'USD' ? amountTotal / 1.14 : amountTotal;
+      const amountSane = amountEurEq > 0 && amountEurEq < 100000;
+      const promote = cp?.id !== undefined && cp !== null && amountSane && conf >= 70;
+      if (!amountSane && amountTotal) console.log(`INSANE   ${tag} → parsed amount ${amountTotal} ${currency} — не се промотира`);
       const data = {
         ...(cp ? { counterpartyId: cp.id } : {}),
         docNumber,
         docDate,
         dueDate: asDate(parsed.dueDate) || doc.dueDate,
         currency,
-        amountNet: dec(parsed.amountNet) ?? doc.amountNet,
-        vatAmount: dec(parsed.vatAmount) ?? doc.vatAmount,
-        amountTotal: dec(amountTotal) ?? doc.amountTotal,
+        amountNet: amountSane ? (dec(parsed.amountNet) ?? doc.amountNet) : doc.amountNet,
+        vatAmount: amountSane ? (dec(parsed.vatAmount) ?? doc.vatAmount) : doc.vatAmount,
+        amountTotal: amountSane ? (dec(amountTotal) ?? doc.amountTotal) : doc.amountTotal,
         confidence: dec(conf) ?? doc.confidence,
         status: promote ? 'REVIEWED' : 'NEEDS_REVIEW',
         notes: `${doc.notes ? doc.notes + ' | ' : ''}AI parse 2026-07-09: ${pType} @${cp?.name || 'NO-CP'} conf=${conf}${promote ? ' → REVIEWED' : ''}`.slice(0, 1000),
