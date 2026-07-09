@@ -1,10 +1,9 @@
 /**
  * Document parser — AI-powered with smart heuristic fallback
  * Handles Bulgarian folder names, extracts supplier/date/invoice from filename+folder
- * AI chain: Gemini 2.5 Flash → Groq llama-3.3-70b → OpenRouter (free) → heuristic
+ * AI chain (free-only): Groq llama-3.3-70b → OpenRouter gpt-oss-20b:free → heuristic
  */
 const { google } = require('googleapis');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const OpenAI = require('openai');
 const pdfParse = require('pdf-parse');
 const { createLogger } = require('./logger');
@@ -21,8 +20,6 @@ const getAuth = () => {
   oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
   return oauth2;
 };
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const groq = process.env.GROQ_API_KEY ? new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1',
@@ -510,17 +507,6 @@ function parseStructuredFromMineruText(filename, folder, text) {
 async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
   const providers = [];
 
-  if (process.env.GEMINI_API_KEY && process.env.DISABLE_GEMINI_EXTRACTION !== 'true') {
-    providers.push({
-      name: 'gemini',
-      run: async () => {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const result = await model.generateContent([{ text: prompt }]);
-        return result.response.text();
-      },
-    });
-  }
-
   if (groq && process.env.DISABLE_GROQ_EXTRACTION !== 'true') {
     providers.push({
       name: 'groq',
@@ -549,19 +535,7 @@ async function extractJsonFromTextPrompt(prompt, label = 'text extraction') {
     });
   }
 
-  if (openai && process.env.DISABLE_OPENAI_EXTRACTION !== 'true') {
-    providers.push({
-      name: 'openai',
-      run: async () => {
-        const chat = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-        });
-        return chat.choices[0].message.content;
-      },
-    });
-  }
+  // OpenAI (paid) intentionally excluded — free providers only.
 
   let lastErr;
   for (const provider of providers) {
@@ -625,8 +599,6 @@ Return ONLY valid JSON (no markdown, no explanation):
   "confidence": number
 }`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
   if (isMineruEnabled()) {
     try {
       const mineru = await runMineru({ filename, buffer: pdfBuffer });
@@ -671,71 +643,33 @@ Return ONLY the structured JSON requested above.`, 'MinerU');
     throw new Error('MINERU_ONLY is enabled, but MinerU did not produce parseable text');
   }
 
-  const tryGemini = async (retries = 2) => {
-    log.info(`Trying Gemini 2.5 Flash`, { filename, retriesLeft: retries });
-    const tGemini = Date.now();
-    try {
-      const result = await model.generateContent([
-        { text: prompt },
-        { inlineData: { mimeType, data: pdfBuffer.toString('base64') } },
-      ]);
-      const text = result.response.text().trim();
-      const parsed = parseJsonFromAIText(text, 'AI');
-      log.info('Gemini parse success', {
-        filename,
-        docType: parsed.docType,
-        invoiceNo: parsed.invoiceNo,
-        amountTotal: parsed.amountTotal,
-        currency: parsed.currency,
-        confidence: parsed.confidence,
-        ms: Date.now() - tGemini,
-      });
-      return parsed;
-    } catch (err) {
-      const msg = (err.message || '').toLowerCase();
-      const isRateLimit = err.status === 429 || msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('rate limit') || msg.includes('quota');
-      if (isRateLimit && retries > 0) {
-        log.warn('Gemini rate limit hit — waiting 65s before retry', { filename, retriesLeft: retries - 1 });
-        await new Promise(r => setTimeout(r, 65000));
-        return tryGemini(retries - 1);
-      }
-      log.warn('Gemini failed', { filename, error: err.message, isRateLimit });
-      throw err;
-    }
-  };
+  // Free-only chain: Groq → OpenRouter (:free) → filename heuristic.
+  // (Gemini and the paid OpenAI fallback were removed 2026-07-09.)
+  const parsers = mimeType === 'application/pdf' ? [parseDocumentWithGroq, parseDocumentWithOpenRouter] : [];
 
-  try {
-    return await tryGemini();
-  } catch (err) {
-    const fallbackParsers = [
-      ...(mimeType === 'application/pdf' ? [parseDocumentWithGroq, parseDocumentWithOpenRouter, parseDocumentWithOpenAI] : []),
-    ];
-
-    if (fallbackParsers.length === 0) {
-      log.warn('No fallback parsers available for non-PDF, using heuristic', { filename, mimeType });
-      return parseFromFilename(filename, folder);
-    }
-
-    log.warn('Gemini unavailable — starting fallback chain', { filename, error: err.message, fallbacks: fallbackParsers.map(f => f.name) });
-
-    for (const parser of fallbackParsers) {
-      try {
-        const result = await parser(filename, folder, pdfBuffer);
-        log.info('Fallback parse success', { filename, parser: parser.name, docType: result.docType, confidence: result.confidence, totalMs: Date.now() - t0 });
-        return result;
-      } catch (fallbackErr) {
-        if (fallbackErr.message?.includes('not configured')) {
-          log.debug(`Skipping ${parser.name} — not configured`, { filename });
-          continue;
-        }
-        log.warn(`Fallback ${parser.name} failed`, { filename, error: fallbackErr.message });
-        err = fallbackErr;
-      }
-    }
-
-    log.error('All AI parsers failed — falling back to filename heuristic', { filename, folder, error: err.message });
+  if (parsers.length === 0) {
+    log.warn('No AI parsers available for non-PDF, using heuristic', { filename, mimeType });
     return parseFromFilename(filename, folder);
   }
+
+  let lastErr = null;
+  for (const parser of parsers) {
+    try {
+      const result = await parser(filename, folder, pdfBuffer);
+      log.info('AI parse success', { filename, parser: parser.name, docType: result.docType, confidence: result.confidence, totalMs: Date.now() - t0 });
+      return result;
+    } catch (err) {
+      if (err.message?.includes('not configured')) {
+        log.debug(`Skipping ${parser.name} — not configured`, { filename });
+        continue;
+      }
+      log.warn(`${parser.name} failed`, { filename, error: err.message });
+      lastErr = err;
+    }
+  }
+
+  log.error('All AI parsers failed — falling back to filename heuristic', { filename, folder, error: lastErr?.message });
+  return parseFromFilename(filename, folder);
 }
 
 module.exports = {
@@ -743,7 +677,7 @@ module.exports = {
   parseDocumentWithAI,
   parseDocumentWithGroq,
   parseDocumentWithOpenRouter,
-  parseDocumentWithOpenAI,
+  extractJsonFromTextPrompt,
   parseFromFilename,
   inferMimeType,
   guessSupplierFromPath,

@@ -6,11 +6,9 @@
  */
 
 const { google } = require('googleapis');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const pdfParse = require('pdf-parse');
 const { buildBankPaymentKey } = require('./bankStatementParser');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const { extractJsonFromTextPrompt } = require('./aiParser');
 
 function getGoogleAuth() {
   const oauth2 = new google.auth.OAuth2(
@@ -22,16 +20,18 @@ function getGoogleAuth() {
   return oauth2;
 }
 
-async function callGeminiWithPdf(prompt, pdfBuffer) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  const result = await model.generateContent([
-    { text: prompt },
-    { inlineData: { mimeType: 'application/pdf', data: pdfBuffer.toString('base64') } },
-  ]);
-  const text = result.response.text().trim();
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON from Gemini: ' + text.substring(0, 200));
-  return JSON.parse(match[0]);
+// Free-only chain: pdf-parse text → Groq/OpenRouter JSON extraction
+async function callAIWithPdf(prompt, pdfBuffer) {
+  const pdfData = await pdfParse(pdfBuffer);
+  const text = String(pdfData.text || '').trim();
+  if (!text) throw new Error('PDF has no extractable text layer');
+  const { parsed } = await extractJsonFromTextPrompt(`${prompt}
+
+Document content:
+${text.substring(0, 24000)}
+
+Return ONLY the JSON requested above.`, 'gmailScanner');
+  return parsed;
 }
 
 async function classifyPdf(pdfBuffer, filename, emailSubject, fromEmail) {
@@ -59,7 +59,7 @@ INVOICE_OUT: outgoing invoice to a client.
 PROFORMA: proforma invoice (advance payment request).
 OFFER: price offer/quotation.`;
 
-  return callGeminiWithPdf(prompt, pdfBuffer);
+  return callAIWithPdf(prompt, pdfBuffer);
 }
 
 async function extractBankStatement(pdfBuffer, filename) {
@@ -91,7 +91,7 @@ Return ONLY valid JSON, no markdown:
 
 Return every transaction row. debit = money going out (we paid), credit = money coming in (we received).`;
 
-  return callGeminiWithPdf(prompt, pdfBuffer);
+  return callAIWithPdf(prompt, pdfBuffer);
 }
 
 async function extractInvoiceData(pdfBuffer, filename, folder) {

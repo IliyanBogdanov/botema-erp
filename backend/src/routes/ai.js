@@ -1,22 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const Groq = require('groq-sdk');
 const OpenAI = require('openai');
 const { auth } = require('../middleware/auth');
 const prisma = require('../lib/prisma');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 const openRouter = process.env.OPENROUTER_API_KEY ? new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: 'https://openrouter.ai/api/v1',
 }) : null;
 
-// Build messages array for non-Gemini providers
-function buildMessages(systemPrompt, geminiHistory, message) {
+// Build messages array (history arrives in Gemini-style {role, parts} shape from the FE)
+function buildMessages(systemPrompt, history, message) {
   const msgs = [{ role: 'system', content: systemPrompt }];
-  for (const h of (geminiHistory || [])) {
+  for (const h of (history || [])) {
     const text = h?.parts?.[0]?.text || '';
     if (text) msgs.push({ role: h.role === 'model' ? 'assistant' : 'user', content: text });
   }
@@ -24,32 +22,11 @@ function buildMessages(systemPrompt, geminiHistory, message) {
   return msgs;
 }
 
-// Try Gemini first, fallback to Groq, then OpenRouter
-async function callAI(systemPrompt, message, geminiHistory) {
-  // 1. Try Gemini 2.5 Flash (with one retry on 503)
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt });
-      const chat = model.startChat({ history: geminiHistory || [] });
-      const result = await chat.sendMessage(message);
-      const text = result.response.text();
-      console.log(`[AI] Gemini 2.5-flash OK (attempt ${attempt})`);
-      return text;
-    } catch (err) {
-      const is503 = err.message?.includes('503') || err.message?.includes('high demand');
-      console.warn(`[AI] gemini-2.5-flash attempt ${attempt} failed: ${err.message?.slice(0, 100)}`);
-      if (attempt === 1 && is503) {
-        await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
-        continue;
-      }
-      break;
-    }
-  }
-
-  // 2. Fallback: Groq llama-3.3-70b
+// Free-only chain: Groq llama-3.3-70b → OpenRouter gpt-oss-20b:free
+async function callAI(systemPrompt, message, history) {
   if (groq) {
     try {
-      const msgs = buildMessages(systemPrompt, geminiHistory, message);
+      const msgs = buildMessages(systemPrompt, history, message);
       const resp = await groq.chat.completions.create({ model: 'llama-3.3-70b-versatile', messages: msgs, max_tokens: 2048 });
       console.log('[AI] Groq llama-3.3-70b OK');
       return resp.choices[0].message.content;
@@ -60,12 +37,11 @@ async function callAI(systemPrompt, message, geminiHistory) {
     console.warn('[AI] Groq not configured (missing GROQ_API_KEY)');
   }
 
-  // 3. Fallback: OpenRouter
   if (openRouter) {
     try {
-      const msgs = buildMessages(systemPrompt, geminiHistory, message);
-      const resp = await openRouter.chat.completions.create({ model: 'openai/gpt-4.1-mini', messages: msgs, max_tokens: 2048 });
-      console.log('[AI] OpenRouter gpt-4.1-mini OK');
+      const msgs = buildMessages(systemPrompt, history, message);
+      const resp = await openRouter.chat.completions.create({ model: 'openai/gpt-oss-20b:free', messages: msgs, max_tokens: 2048 });
+      console.log('[AI] OpenRouter gpt-oss-20b:free OK');
       return resp.choices[0].message.content;
     } catch (err) {
       console.warn('[AI] OpenRouter failed:', err.message?.slice(0, 100));
@@ -237,35 +213,25 @@ ${JSON.stringify(counterparties.map(c => ({ ime: c.name, tip: c.type, eik: c.eik
   }
 });
 
-// POST /api/ai/extract — Extract data from PDF using Gemini
+// POST /api/ai/extract — Extract data from PDF (free chain: Groq → OpenRouter)
 router.post('/extract', auth, async (req, res) => {
   try {
     const { pdfBase64, filename } = req.body;
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent([
-      {
-        text: `Извлечи данните от този документ и върни САМО валиден JSON без markdown:
-{
-  "type": "INVOICE_IN",
-  "invoiceNo": "...",
-  "date": "YYYY-MM-DD",
-  "supplierName": "...",
-  "clientName": "...",
-  "amount": 0.00,
-  "vatAmount": 0.00,
-  "amountTotal": 0.00,
-  "currency": "EUR",
-  "description": "...",
-  "confidence": 0.95,
-  "items": [{"description":"...","qty":1,"unitPrice":0.00,"vatPct":20}]
-}`,
-      },
-      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
-    ]);
-    const text = result.response.text().trim();
-    const match = text.match(/\{[\s\S]*\}/);
-    const data = JSON.parse(match ? match[0] : text);
-    res.json(data);
+    const { parseDocumentWithAI } = require('../lib/aiParser');
+    const parsed = await parseDocumentWithAI(filename || 'document.pdf', '', Buffer.from(pdfBase64, 'base64'));
+    res.json({
+      type: parsed.docType || parsed.type || 'INVOICE_IN',
+      invoiceNo: parsed.invoiceNo || null,
+      date: parsed.docDate || null,
+      supplierName: parsed.supplierName || null,
+      clientName: parsed.clientName || null,
+      amount: parsed.amountNet ?? null,
+      vatAmount: parsed.vatAmount ?? null,
+      amountTotal: parsed.amountTotal ?? null,
+      currency: parsed.currency || 'EUR',
+      description: parsed.description || null,
+      confidence: (Number(parsed.confidence) || 0) / 100,
+    });
   } catch (err) {
     console.error('[AI extract]', err.message);
     res.status(500).json({ error: err.message });
