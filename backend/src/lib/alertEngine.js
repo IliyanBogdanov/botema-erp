@@ -113,7 +113,11 @@ async function generateAlerts(prisma) {
         metadata: { flags },
       }));
     }
-    if (flags.includes('MISSING_VAT') && doc.type === 'INVOICE_IN') {
+    // MISSING_VAT: only for real supplier invoices — bank statements, transaction
+    // slips and waybills get mis-typed as INVOICE_IN by bulk parses and are noise.
+    const nonInvoiceFile = /извлечение|транзакция|statement|texim|товарителница|consignment|waybill|наложен платеж/i
+      .test(String(doc.filename || ''));
+    if (flags.includes('MISSING_VAT') && doc.type === 'INVOICE_IN' && !nonInvoiceFile) {
       created.push(await ensureAlert(prisma, {
         type: 'VAT',
         severity: 'WARNING',
@@ -207,28 +211,9 @@ async function generateAlerts(prisma) {
     }
   }
 
-  const purchasesWithNumbers = await prisma.purchase.findMany({
-    where: { invoiceNo: { not: null } },
-    select: { supplierId: true, invoiceNo: true, amount: true, currency: true },
-  });
-  const duplicateMap = new Map();
-  for (const purchase of purchasesWithNumbers) {
-    const invoiceNo = String(purchase.invoiceNo || '').trim();
-    if (!invoiceNo) continue;
-    const amt = Math.round(toNumber(purchase.amount) * 100);
-    // Key on supplier + invoiceNo + rounded amount to avoid flagging multi-line orders or net/gross variants
-    const key = `${purchase.supplierId}:${invoiceNo}:${purchase.currency}:${amt}`;
-    duplicateMap.set(key, { supplierId: purchase.supplierId, invoiceNo, amount: purchase.amount, currency: purchase.currency, count: (duplicateMap.get(key)?.count || 0) + 1 });
-  }
-  for (const duplicate of [...duplicateMap.values()].filter(d => d.count > 1)) {
-    created.push(await ensureAlert(prisma, {
-      type: 'VAT',
-      severity: 'CRITICAL',
-      title: `Дублирана входяща фактура ${duplicate.invoiceNo}`,
-      description: `${duplicate.count}× запис: ${toNumber(duplicate.amount).toFixed(2)} ${duplicate.currency} от доставчик ${duplicate.supplierId}. Провери преди ДДС отчет.`,
-      metadata: duplicate,
-    }));
-  }
+  // Duplicate-invoice alerts from the legacy Purchase table were removed
+  // (2026-07-09): Purchase is an archive, costs come from BizDocument where
+  // duplicates are handled by the review queue — those alerts were noise.
 
   await resolveDuplicateActiveAlerts(prisma);
   return created.filter(Boolean);
