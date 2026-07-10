@@ -1,7 +1,6 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
 const prisma = require('../lib/prisma');
-const { resolveDuplicateActiveAlerts } = require('../lib/alertEngine');
 
 const fx = require('../lib/fx');
 const { AUTHORITATIVE_BIZ_DOC_STATUSES, inputVatAmount } = require('../lib/costs');
@@ -150,7 +149,8 @@ router.get('/overview', auth, async (req, res) => {
       ? new Date(Date.UTC(year, month, 0, 23, 59, 59, 999))
       : new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
-    await resolveDuplicateActiveAlerts(prisma);
+    // (resolveDuplicateActiveAlerts moved to the alert generation flow — running
+    // it per dashboard request was an egress burner)
     await fx.loadRates();
 
     const [invoices, incomingDocs, documents, vatAlerts] = await Promise.all([
@@ -176,6 +176,8 @@ router.get('/overview', auth, async (req, res) => {
             { type: 'DELIVERY' },
           ],
         },
+        // Only what pendingDocumentVatBgn needs — full rows carry heavy JSON
+        select: { id: true, filename: true, type: true, confidence: true, extractedData: true },
       }),
       prisma.alert.findMany({
         where: { type: 'VAT', status: 'ACTIVE' },

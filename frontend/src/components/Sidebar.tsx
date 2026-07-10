@@ -59,12 +59,13 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const t = useT();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const { data: alerts = [] } = useQuery({
-    queryKey: ['alerts-sidebar'],
-    queryFn: () => api.get('/alerts?status=ACTIVE&limit=20').then(r => r.data),
-    refetchInterval: 60000,
+  const { data: alertData } = useQuery({
+    queryKey: ['alerts-count'],
+    queryFn: () => api.get('/alerts/count').then(r => r.data),
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
-  const alertCount = Array.isArray(alerts) ? alerts.length : 0;
+  const alertCount = alertData?.count ?? 0;
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname?.startsWith(href);

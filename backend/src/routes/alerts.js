@@ -5,10 +5,31 @@ const prisma = require('../lib/prisma');
 
 const router = express.Router();
 
+// Lightweight badge endpoint — count only, no generation, no row transfer
+router.get('/count', auth, async (req, res) => {
+  try {
+    const count = await prisma.alert.count({
+      where: { status: 'ACTIVE', OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: new Date() } }] },
+    });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Alert generation is EXPENSIVE (scans documents/invoices/projects) — it runs
+// via POST /alerts/generate and the daily cron, NOT on every list request.
+// (The sidebar used to poll this route every 60s, which alone burned the
+// Supabase egress quota.)
+let lastGenerate = 0;
 router.get('/', auth, async (req, res) => {
   try {
     const { status = 'ACTIVE', type, severity, limit = 100 } = req.query;
-    await generateAlerts(prisma);
+    // Refresh at most once per hour, piggybacked on a real page visit
+    if (Date.now() - lastGenerate > 60 * 60 * 1000) {
+      lastGenerate = Date.now();
+      generateAlerts(prisma).catch(e => console.error('generateAlerts:', e.message));
+    }
     const where = {};
     if (status) where.status = status;
     if (type) where.type = type;

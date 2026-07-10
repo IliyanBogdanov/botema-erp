@@ -113,20 +113,11 @@ async function generateAlerts(prisma) {
         metadata: { flags },
       }));
     }
-    // MISSING_VAT: only for real supplier invoices — bank statements, transaction
-    // slips and waybills get mis-typed as INVOICE_IN by bulk parses and are noise.
-    const nonInvoiceFile = /извлечение|транзакция|statement|texim|товарителница|consignment|waybill|наложен платеж/i
-      .test(String(doc.filename || ''));
-    if (flags.includes('MISSING_VAT') && doc.type === 'INVOICE_IN' && !nonInvoiceFile) {
-      created.push(await ensureAlert(prisma, {
-        type: 'VAT',
-        severity: 'WARNING',
-        title: `Липсва ДДС в документ: ${doc.filename}`,
-        description: 'Провери дали има право на данъчен кредит и попълни ДДС преди запис.',
-        documentId: doc.id,
-        metadata: { flags },
-      }));
-    }
+    // Per-document MISSING_VAT alerts removed entirely (2026-07-10): most EU
+    // supplier invoices legitimately carry no Bulgarian VAT (reverse charge),
+    // so the alert was ~95% noise at scale. MISSING_VAT stays visible as a
+    // riskFlag in the review UI; the pending-documents summary alert covers
+    // the queue itself.
   }
 
   // Auto-resolve REVENUE alerts for invoices that are no longer PENDING

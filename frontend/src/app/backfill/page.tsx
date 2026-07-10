@@ -22,7 +22,7 @@ export default function BackfillPage() {
   const { data: coverage, refetch: refetchCoverage } = useQuery({
     queryKey: ['coverage'],
     queryFn: () => api.get('/backfill/coverage').then(r => r.data),
-    refetchInterval: 15000,
+    refetchInterval: 60000,
   });
 
   // ── Run-all job ──────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ function GoogleOAuthSection() {
   const { data: status, isLoading, refetch } = useQuery({
     queryKey: ['google-status'],
     queryFn: () => api.get('/google/status').then(r => r.data),
-    refetchInterval: 10000,
+    refetchInterval: 60000,
   });
 
   const testDigest = useMutation({
