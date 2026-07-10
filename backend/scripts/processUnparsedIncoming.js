@@ -79,8 +79,12 @@ async function main() {
     if (inDir) await walk(inDir.id, `${mon}/${inDir.name}`, all);
   }
   const sfs = await prisma.sourceFile.findMany({
-    where: { driveFileId: { in: all.map(f => f.id) }, bizDocuments: { none: {} } },
-    select: { id: true, driveFileId: true, filename: true, folder: true, receivedAt: true },
+    where: {
+      driveFileId: { in: all.map(f => f.id) },
+      bizDocuments: { none: {} },
+      NOT: { notes: { contains: '[SKIP_NOT_INVOICE]' } },
+    },
+    select: { id: true, driveFileId: true, filename: true, folder: true, receivedAt: true, notes: true },
   });
   console.log(`Без BizDocument: ${sfs.length} от ${all.length} PDF-а\n`);
 
@@ -107,8 +111,10 @@ async function main() {
       const currency = parsed.currency || 'EUR';
 
       const ownSeries = /^0000000\d{2,3}$/.test(String(parsed.invoiceNo || '')) || /студио ботема|luminavera|луминавера/i.test(pName);
-      if (ownSeries) { stats.skippedOwn++; console.log(`SKIP-OWN  ${tag} → наша фактура #${parsed.invoiceNo}`); await sleep(); continue; }
-      if (!['INVOICE_IN', 'INVOICE'].includes(pType)) { stats.skippedNonInvoice++; console.log(`SKIP-TYPE ${tag} → ${pType} conf=${conf}`); await sleep(); continue; }
+      // Tag non-invoices on the SourceFile so future runs skip them WITHOUT an AI call
+      const tagSkip = async why => { if (APPLY) await prisma.sourceFile.update({ where: { id: sf.id }, data: { notes: `${sf.notes ? sf.notes + ' | ' : ''}[SKIP_NOT_INVOICE] ${why}`.slice(0, 900) } }); };
+      if (ownSeries) { stats.skippedOwn++; console.log(`SKIP-OWN  ${tag} → наша фактура #${parsed.invoiceNo}`); await tagSkip('own outgoing'); await sleep(); continue; }
+      if (!['INVOICE_IN', 'INVOICE'].includes(pType)) { stats.skippedNonInvoice++; console.log(`SKIP-TYPE ${tag} → ${pType} conf=${conf}`); await tagSkip(`parsed as ${pType}`); await sleep(); continue; }
       const amountEurEq = currency === 'BGN' ? pAmt / 1.95583 : currency === 'USD' ? pAmt / 1.14 : pAmt;
       if (!(amountEurEq > 0 && amountEurEq < 100000)) { stats.failed++; console.log(`INSANE    ${tag} → ${pAmt} ${currency}`); await sleep(); continue; }
 
@@ -133,7 +139,7 @@ async function main() {
       };
       const dup = dupWhere.OR.length ? (await prisma.bizDocument.findMany({ where: dupWhere, select: { id: true, docNumber: true, docDate: true } }))
         .find(c => !c.docDate || Math.abs(new Date(c.docDate) - new Date(docDate)) < 40 * 864e5) : null;
-      if (dup) { stats.skippedDup++; console.log(`SKIP-DUP  ${tag} → вече записан като ${dup.id.slice(0, 12)} #${dup.docNumber}`); await sleep(); continue; }
+      if (dup) { stats.skippedDup++; console.log(`SKIP-DUP  ${tag} → вече записан като ${dup.id.slice(0, 12)} #${dup.docNumber}`); await tagSkip(`duplicate of ${dup.id}`); await sleep(); continue; }
 
       // МД (митнически декларации): parsed "amount" е стойността на стоката, не митото —
       // никога не се промотират автоматично (дублират доставчиковата фактура)
@@ -172,7 +178,11 @@ async function main() {
   // For the scheduled daily batch: how many actionable files are still left
   // (excludes obvious non-invoices which will never get a BizDocument)
   const leftRows = await prisma.sourceFile.findMany({
-    where: { driveFileId: { in: all.map(f => f.id) }, bizDocuments: { none: {} } },
+    where: {
+      driveFileId: { in: all.map(f => f.id) },
+      bizDocuments: { none: {} },
+      NOT: { notes: { contains: '[SKIP_NOT_INVOICE]' } },
+    },
     select: { filename: true },
   });
   const actionable = leftRows.filter(r => !SKIP_FILE.test(r.filename)).length;
