@@ -24,6 +24,12 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
   return <div className={`flex-1 rounded-sm ${color} transition-all`} style={{ height: `${h}%` }} />;
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  INCOME: 'Постъпления', PURCHASE: 'Покупки стока', SALARY: 'Заплати', TAX: 'Данъци и мита',
+  RENT: 'Наем', BANK_FEE: 'Банкови такси', SOFTWARE_ADS: 'Софтуер и реклама',
+  LOGISTICS: 'Логистика', SERVICES: 'Услуги', CASH: 'Кеш', OTHER: 'Друго',
+};
+
 export default function FinancePage() {
   const [year, setYear] = useState(new Date().getFullYear());
 
@@ -31,6 +37,19 @@ export default function FinancePage() {
     queryKey: ['monthly-pnl', year],
     queryFn: () => api.get(`/dashboard/monthly-pnl?year=${year}`).then(r => r.data),
   });
+
+  // Bank truth (leading source): monthly cash flow + category breakdown
+  const { data: cashflow } = useQuery({
+    queryKey: ['cashflow', year],
+    queryFn: () => api.get(`/dashboard/cashflow?year=${year}`).then(r => r.data),
+    staleTime: 60000,
+  });
+  const cfMonths: any[] = cashflow?.months || [];
+  const cfTotals = cashflow?.totals || { inEur: 0, outEur: 0, netEur: 0 };
+  const cfCats: [string, number][] = Object.entries(cashflow?.byCategory || {})
+    .filter(([k]) => k !== 'INCOME')
+    .sort((a: any, b: any) => b[1] - a[1]) as [string, number][];
+  const cfMaxCat = cfCats.length ? Math.max(...cfCats.map(([, v]) => v)) : 1;
 
   const months: any[] = data?.months || [];
   const totals = data?.totals || { revenue: 0, costs: 0, profit: 0, margin: 0 };
@@ -70,6 +89,69 @@ export default function FinancePage() {
             </p>
           </div>
         )}
+        {/* ── ПАРИЧЕН ПОТОК (ПО БАНКА) — водещият източник ── */}
+        <div className="border border-primary-container/20 bg-surface-container-low overflow-hidden">
+          <div className="px-5 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-primary">account_balance</span>
+              <p className="font-label-caps text-label-caps text-on-surface">ПАРИЧЕН ПОТОК ПО БАНКА — {year}</p>
+            </div>
+            <p className="font-label-caps text-[9px] text-on-surface-variant/50">ВОДЕЩ ИЗТОЧНИК · РЕАЛНИ ДВИЖЕНИЯ ПО СМЕТКАТА</p>
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-outline-variant/10">
+            <div className="p-5">
+              <p className="font-label-caps text-[9px] text-on-surface-variant mb-2">ПОСТЪПЛЕНИЯ</p>
+              <p className="font-headline text-headline-md text-emerald-400">{fmt(cfTotals.inEur)}</p>
+            </div>
+            <div className="p-5">
+              <p className="font-label-caps text-[9px] text-on-surface-variant mb-2">ИЗХОДЯЩИ</p>
+              <p className="font-headline text-headline-md text-error/80">{fmt(cfTotals.outEur)}</p>
+            </div>
+            <div className="p-5">
+              <p className="font-label-caps text-[9px] text-on-surface-variant mb-2">НЕТЕН ПОТОК</p>
+              <p className={`font-headline text-headline-md ${cfTotals.netEur >= 0 ? 'text-emerald-400' : 'text-error'}`}>
+                {cfTotals.netEur >= 0 ? '+' : ''}{fmt(cfTotals.netEur)}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-t border-outline-variant/10">
+            {/* Месечен поток */}
+            <div className="p-5">
+              <p className="font-label-caps text-[9px] text-on-surface-variant/60 mb-3">ПО МЕСЕЦИ (EUR)</p>
+              <div className="flex items-end gap-1.5 h-24">
+                {cfMonths.map((m, i) => {
+                  const max = Math.max(...cfMonths.map(x => Math.max(x.inEur, x.outEur)), 1);
+                  return (
+                    <div key={i} className="flex flex-col items-center gap-1 flex-1 min-w-0">
+                      <div className="w-full flex items-end gap-0.5 h-20">
+                        <MiniBar value={m.inEur} max={max} color="bg-emerald-400/60" />
+                        <MiniBar value={m.outEur} max={max} color="bg-error/40" />
+                      </div>
+                      <span className="font-label-caps text-[8px] text-on-surface-variant/50">{m.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Разбивка по категории */}
+            <div className="p-5 lg:border-l border-outline-variant/10">
+              <p className="font-label-caps text-[9px] text-on-surface-variant/60 mb-3">ИЗХОДЯЩИ ПО КАТЕГОРИИ (EUR)</p>
+              <div className="space-y-1.5">
+                {cfCats.slice(0, 6).map(([cat, v]) => (
+                  <div key={cat} className="flex items-center gap-2">
+                    <span className="font-label-caps text-[9px] text-on-surface-variant w-32 shrink-0">{CATEGORY_LABELS[cat] || cat}</span>
+                    <div className="flex-1 h-2 bg-surface-container-high overflow-hidden rounded-sm">
+                      <div className="h-full bg-primary-container/60 rounded-sm" style={{ width: `${Math.round((v / cfMaxCat) * 100)}%` }} />
+                    </div>
+                    <span className="font-data-mono text-[10px] text-on-surface w-20 text-right shrink-0">{Math.round(v).toLocaleString('bg-BG')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="font-label-caps text-[9px] text-on-surface-variant/40 tracking-[0.1em] pt-2">ДОКУМЕНТЕН ИЗГЛЕД (ФАКТУРИ) — СПОМАГАТЕЛЕН</p>
         {/* Annual KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {isLoading ? (
