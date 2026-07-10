@@ -15,3 +15,7 @@ backend/logs/
 prisma/migrations/
 bank statements and docs/
 bank statements/
+
+# DB backups (local + synced to Drive)
+backend/backups/
+backend/scripts/*.log
