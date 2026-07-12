@@ -88,19 +88,39 @@ suppliersRouter.get('/', auth, async (req, res) => {
     countMap[doc.counterpartyId] = (countMap[doc.counterpartyId] || 0) + 1;
   }
 
-  const cpIds = Object.keys(allTimeCountMap);
+  // Ledger: what actually LEFT the bank per counterparty ([OUT] payments) —
+  // the leading source. Documented-vs-paid gaps surface remaining noise.
+  const payDateFilter = year
+    ? { paymentDate: { gte: new Date(`${year}-01-01T00:00:00.000Z`), lte: new Date(`${year}-12-31T23:59:59.999Z`) } }
+    : {};
+  const outPays = await prisma.payment.findMany({
+    where: { notes: { contains: '[OUT]' }, counterpartyId: { not: null }, ...payDateFilter },
+    select: { counterpartyId: true, amount: true, currency: true },
+  });
+  const paidMap = {};
+  for (const pp of outPays) {
+    paidMap[pp.counterpartyId] = (paidMap[pp.counterpartyId] || 0) + fx.toEur(pp.amount, pp.currency);
+  }
+
+  const cpIds = [...new Set([...Object.keys(allTimeCountMap), ...Object.keys(paidMap)])];
   const counterparties = cpIds.length ? await prisma.counterparty.findMany({
     where: { id: { in: cpIds } },
   }) : [];
 
-  const enriched = counterparties.map(cp => ({
-    ...cp,
-    purchaseCount: allTimeCountMap[cp.id] || 0,
-    totalSpentEur: Math.round((spendMap[cp.id] || 0) * 100) / 100,
-    totalSpentBgn: Math.round((spendMap[cp.id] || 0) * fx.BGN_PER_EUR * 100) / 100,
-    filteredPurchaseCount: countMap[cp.id] || 0,
-    discount: null,
-  }));
+  const enriched = counterparties.map(cp => {
+    const documented = Math.round((spendMap[cp.id] || 0) * 100) / 100;
+    const paid = Math.round((paidMap[cp.id] || 0) * 100) / 100;
+    return {
+      ...cp,
+      purchaseCount: allTimeCountMap[cp.id] || 0,
+      totalSpentEur: documented,
+      totalSpentBgn: Math.round(documented * fx.BGN_PER_EUR * 100) / 100,
+      filteredPurchaseCount: countMap[cp.id] || 0,
+      paidEur: paid,
+      gapEur: Math.round((documented - paid) * 100) / 100,
+      discount: null,
+    };
+  });
 
   enriched.sort((a, b) => b.totalSpentEur - a.totalSpentEur);
   res.json(enriched);

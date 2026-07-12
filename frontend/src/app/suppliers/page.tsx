@@ -138,13 +138,7 @@ export default function SuppliersPage() {
 
   const totalPurchases = suppliers.reduce((sum, supplier) => sum + (supplier.purchaseCount || 0), 0);
   const totalSpentEur = suppliers.reduce((sum, s) => sum + (s.totalSpentEur || 0), 0);
-  const currencies = new Set(suppliers.map(supplier => supplier.currency).filter(Boolean)).size;
-  const countryCounts = suppliers.reduce<Record<string, number>>((acc, supplier) => {
-    const country = supplier.country?.trim();
-    if (country) acc[country] = (acc[country] || 0) + 1;
-    return acc;
-  }, {});
-  const topCountry = Object.entries(countryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+  const totalPaidEur = suppliers.reduce((sum, s: any) => sum + (s.paidEur || 0), 0);
 
   return (
     <div className="min-h-screen bg-surface-container-lowest p-container-padding text-on-surface">
@@ -163,8 +157,8 @@ export default function SuppliersPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label={t('sup.totalSuppliers')} value={String(suppliers.length)} sub={`${filtered.length} видими`} />
           <MetricCard label={t('sup.totalOrders')} value={String(totalPurchases)} sub="общо покупки" />
-          <MetricCard label="Общо разходи" value={`€${totalSpentEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}`} sub="EUR всички години" />
-          <MetricCard label="Водеща държава" value={topCountry} sub="по брой доставчици" />
+          <MetricCard label="Документирано" value={`€${totalSpentEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}`} sub="фактури, всички години" />
+          <MetricCard label="Платено (банка)" value={`€${totalPaidEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}`} sub="реални изходящи, всички години" />
         </div>
 
         <div className="space-y-6">
@@ -185,10 +179,10 @@ export default function SuppliersPage() {
                   <th className="table-header">{t('sup.colSupplier')}</th>
                   <th className="table-header">{t('sup.colCountry')}</th>
                   <th className="table-header">{t('sup.colCurrency')}</th>
-                  <th className="table-header">{t('sup.colDiscount')}</th>
-                  <th className="table-header">{t('sup.colEmail')}</th>
                   <th className="table-header text-right">ПОКУПКИ</th>
-                  <th className="table-header text-right">ИЗРАЗХОДВАНО EUR</th>
+                  <th className="table-header text-right">ДОКУМЕНТИРАНО €</th>
+                  <th className="table-header text-right">ПЛАТЕНО €</th>
+                  <th className="table-header text-right">РАЗЛИКА €</th>
                   <th className="table-header w-16"></th>
                 </tr>
               </thead>
@@ -203,7 +197,7 @@ export default function SuppliersPage() {
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">{t('sup.none')}</td>
+                    <td colSpan={8} className="table-cell py-12 text-center text-on-surface-variant">{t('sup.none')}</td>
                   </tr>
                 ) : (
                   filtered.map(s => (
@@ -223,15 +217,31 @@ export default function SuppliersPage() {
                       <td className="table-cell">
                         <span className="font-data-mono text-data-mono text-primary">{s.currency}</span>
                       </td>
-                      <td className="table-cell text-on-surface-variant">{s.discount || '—'}</td>
-                      <td className="table-cell text-on-surface-variant">{s.email || '—'}</td>
                       <td className="table-cell text-right font-data-mono text-data-mono text-on-surface-variant">{s.purchaseCount || 0}</td>
                       <td className="table-cell text-right">
                         {s.totalSpentEur > 0 ? (
                           <span className="font-mono text-sm font-semibold text-primary">
-                            €{s.totalSpentEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                            {s.totalSpentEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
                           </span>
                         ) : <span className="text-on-surface-variant/30">—</span>}
+                      </td>
+                      <td className="table-cell text-right">
+                        {(s as any).paidEur > 0 ? (
+                          <span className="font-mono text-sm text-emerald-400">
+                            {(s as any).paidEur.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                          </span>
+                        ) : <span className="text-on-surface-variant/30">—</span>}
+                      </td>
+                      <td className="table-cell text-right">
+                        {(() => {
+                          const gap = (s as any).gapEur ?? (s.totalSpentEur || 0);
+                          if (Math.abs(gap) < 50) return <span className="text-emerald-400/60 font-mono text-sm">✓</span>;
+                          return (
+                            <span className={`font-mono text-sm ${gap > 0 ? 'text-warning' : 'text-on-surface-variant'}`}>
+                              {gap > 0 ? '+' : ''}{gap.toLocaleString('bg-BG', { maximumFractionDigits: 0 })}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="table-cell">
                         <button onClick={() => openEdit(s)} className="ml-auto flex h-9 w-9 items-center justify-center text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface">
