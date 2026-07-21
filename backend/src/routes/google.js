@@ -144,4 +144,30 @@ router.get('/status', auth, async (req, res) => {
   });
 });
 
+// TEMP DEBUG 2026-07-21 — remove after use. Search Gmail for a query string.
+router.get('/_debug-search', auth, async (req, res) => {
+  try {
+    const oauth2 = getOAuth2Client();
+    oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+    const gmail = google.gmail({ version: 'v1', auth: oauth2 });
+    const q = req.query.q;
+    const list = await gmail.users.messages.list({ userId: 'me', q, maxResults: 3 });
+    const out = [];
+    for (const m of list.data.messages || []) {
+      const full = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' });
+      const headers = full.data.payload.headers;
+      out.push({
+        id: m.id,
+        date: headers.find(h => h.name === 'Date')?.value,
+        from: headers.find(h => h.name === 'From')?.value,
+        subject: headers.find(h => h.name === 'Subject')?.value,
+        snippet: full.data.snippet,
+      });
+    }
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
