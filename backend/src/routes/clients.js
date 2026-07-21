@@ -16,7 +16,7 @@ router.get('/', auth, async (req, res) => {
     where, orderBy: { name: 'asc' },
     include: { _count: { select: { invoices: true } } }
   });
-  res.json(clients);
+  res.json(clients.map(c => ({ ...c, invoiceCount: c._count.invoices })));
 });
 
 router.post('/', auth, async (req, res) => {
