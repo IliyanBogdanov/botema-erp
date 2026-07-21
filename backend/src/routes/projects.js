@@ -47,7 +47,9 @@ router.get('/', auth, async (req, res) => {
     const costsBGN = projectCostsBGN(p.bizDocuments);
 
     const profitBGN = revenueBGN - costsBGN;
-    const marginPct = revenueBGN > 0 ? Math.round((profitBGN / revenueBGN) * 100) : null;
+    // No linked cost documents means costs are untracked, not zero — a "100%"
+    // margin here would be a false claim, so leave it unknown instead.
+    const marginPct = (revenueBGN > 0 && p.bizDocuments.length > 0) ? Math.round((profitBGN / revenueBGN) * 100) : null;
 
     return {
       ...p,
@@ -102,7 +104,7 @@ router.get('/pnl', auth, async (req, res) => {
       revenueBGN: Math.round(revenueBGN),
       costsBGN: Math.round(costsBGN),
       profitBGN: Math.round(profitBGN),
-      marginPct: revenueBGN > 0 ? Math.round((profitBGN / revenueBGN) * 100) : null,
+      marginPct: (revenueBGN > 0 && p.bizDocuments.length > 0) ? Math.round((profitBGN / revenueBGN) * 100) : null,
       invoiceCount: p.invoices.filter(i => i.status !== 'CANCELLED').length,
       purchaseCount: p.bizDocuments.length,
     };
@@ -112,6 +114,7 @@ router.get('/pnl', auth, async (req, res) => {
   const totalRevenue = result.reduce((s, p) => s + p.revenueBGN, 0);
   const totalCosts = result.reduce((s, p) => s + p.costsBGN, 0);
   const totalProfit = totalRevenue - totalCosts;
+  const projectsWithCosts = result.filter(p => p.purchaseCount > 0).length;
 
   res.json({
     projects: result,
@@ -119,7 +122,9 @@ router.get('/pnl', auth, async (req, res) => {
       revenueBGN: totalRevenue,
       costsBGN: totalCosts,
       profitBGN: totalProfit,
-      marginPct: totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : null,
+      marginPct: (totalRevenue > 0 && totalCosts > 0) ? Math.round((totalProfit / totalRevenue) * 100) : null,
+      projectsWithCosts,
+      projectsTotal: result.length,
     },
   });
 });
@@ -166,16 +171,15 @@ router.get('/:id', auth, async (req, res) => {
   const totalRevenueBGN = project.invoices
     .filter(inv => inv.status !== 'CANCELLED')
     .reduce((s, inv) => s + toBGN(Number(inv.amountNet ?? inv.amountTotal), inv.currency), 0);
-  const totalCostsBGN = projectCostsBGN(
-    project.bizDocuments.filter(d => d.docType === 'INVOICE_IN' && AUTHORITATIVE_BIZ_DOC_STATUSES.includes(d.status))
-  );
+  const costDocs = project.bizDocuments.filter(d => d.docType === 'INVOICE_IN' && AUTHORITATIVE_BIZ_DOC_STATUSES.includes(d.status));
+  const totalCostsBGN = projectCostsBGN(costDocs);
 
   res.json({
     ...project,
     totalRevenue: totalRevenueBGN,
     totalCosts: totalCostsBGN,
     margin: totalRevenueBGN - totalCostsBGN,
-    marginPct: totalRevenueBGN > 0 ? Math.round(((totalRevenueBGN - totalCostsBGN) / totalRevenueBGN) * 100) : null,
+    marginPct: (totalRevenueBGN > 0 && costDocs.length > 0) ? Math.round(((totalRevenueBGN - totalCostsBGN) / totalRevenueBGN) * 100) : null,
   });
 });
 
