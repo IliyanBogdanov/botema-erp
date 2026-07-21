@@ -4,6 +4,10 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 
+const BIZ_DOC_STATUS_LABELS: Record<string, string> = {
+  MATCHED: 'Платено (банка)', REVIEWED: 'Прегледано', IMPORTED: 'Импортирано',
+};
+
 interface Purchase {
   id: string;
   invoiceNo?: string;
@@ -181,8 +185,8 @@ export default function SupplierDetailPage() {
                       </td>
                       <td className="table-cell">
                         <span className={`font-label-caps text-[9px] border px-2 py-0.5 ${
-                          p.status === 'PAID' ? 'border-primary/30 text-primary' : 'border-outline-variant/20 text-on-surface-variant'
-                        }`}>{p.status}</span>
+                          p.status === 'MATCHED' ? 'border-primary/30 text-primary' : 'border-outline-variant/20 text-on-surface-variant'
+                        }`}>{BIZ_DOC_STATUS_LABELS[p.status] || p.status}</span>
                       </td>
                     </tr>
                   ))}

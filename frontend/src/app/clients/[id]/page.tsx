@@ -4,6 +4,10 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api, fmt, fmtDate } from '@/lib/api';
 
+const CLIENT_TYPE_LABELS: Record<string, string> = {
+  COMPANY: 'Фирма', PERSON: 'Физическо лице', ET: 'ЕТ',
+};
+
 interface ClientInvoice {
   id: string;
   number: string;
@@ -91,7 +95,7 @@ export default function ClientDetailPage() {
               <div>
                 <h1 className="font-headline text-headline-lg text-on-surface">{client.name}</h1>
                 <p className="font-label-caps text-label-caps text-on-surface-variant mt-0.5">
-                  {[client.type, client.city, client.brand].filter(Boolean).join(' · ')}
+                  {[CLIENT_TYPE_LABELS[client.type] || client.type, client.city].filter(Boolean).join(' · ')}
                 </p>
               </div>
             </div>

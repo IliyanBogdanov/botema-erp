@@ -117,7 +117,7 @@ router.get('/review-queue', auth, async (req, res) => {
       status: { notIn: ['MATCHED', 'ARCHIVED', 'REJECTED'] },
       OR: [
         { status: 'NEEDS_REVIEW' },
-        { confidence: { lt: 0.75 } },
+        { confidence: { lt: 75 } },
         { docNumber: null },
         { docDate: null },
         { amountTotal: null },
@@ -150,7 +150,7 @@ router.get('/review-queue', auth, async (req, res) => {
     const enrichedDocs = docs.map(doc => {
       const reasons = [];
       if (doc.status === 'NEEDS_REVIEW') reasons.push('NEEDS_REVIEW');
-      if (Number(doc.confidence || 0) < 0.75) reasons.push('LOW_CONFIDENCE');
+      if (Number(doc.confidence || 0) < 75) reasons.push('LOW_CONFIDENCE');
       if (!doc.docNumber) reasons.push('MISSING_INVOICE_NO');
       if (!doc.docDate) reasons.push('MISSING_DATE');
       if (!doc.amountTotal) reasons.push('MISSING_AMOUNT');
