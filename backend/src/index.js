@@ -93,4 +93,7 @@ startGmailScanJob(prisma);
 const { startNightlyImportJob } = require('./jobs/nightlyImportJob');
 startNightlyImportJob();
 
+const { startUnparsedIncomingJob } = require('./jobs/unparsedIncomingJob');
+startUnparsedIncomingJob(prisma);
+
 module.exports = app;
