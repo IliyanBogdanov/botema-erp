@@ -151,24 +151,11 @@ function RatesSection() {
   );
 }
 
-const BRANDS = [
-  { value: 'STUDIO_BOTEMA', label: 'Studio Botema ЕООД' },
-  { value: 'LUMINAVERA',    label: 'LuminaVera ЕООД' },
-];
-
-const DEFAULTS: Record<string, any> = {
-  STUDIO_BOTEMA: {
-    name: 'СТУДИО БОТЕМА ЕООД', eik: '', vat: '',
-    address: '', city: '', mol: '',
-    bankIban: '', bankBic: '', bankName: '',
-    email: 'office@studiobotema.com', phone: '',
-  },
-  LUMINAVERA: {
-    name: 'ЛУМИНАВЕРА ЕООД', eik: '', vat: '',
-    address: '', city: '', mol: '',
-    bankIban: '', bankBic: '', bankName: '',
-    email: 'office@luminavera.bg', phone: '',
-  },
+const STUDIO_BOTEMA_DEFAULTS = {
+  name: 'СТУДИО БОТЕМА ЕООД', eik: '', vat: '',
+  address: '', city: '', mol: '',
+  bankIban: '', bankBic: '', bankName: '',
+  email: 'office@studiobotema.com', phone: '',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -187,8 +174,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const qc = useQueryClient();
-  const [activeBrand, setActiveBrand] = useState('STUDIO_BOTEMA');
-  const [form, setForm] = useState<Record<string, string>>(DEFAULTS.STUDIO_BOTEMA);
+  const [form, setForm] = useState<Record<string, string>>(STUDIO_BOTEMA_DEFAULTS);
   const [saved, setSaved] = useState('');
   const [error, setError] = useState('');
 
@@ -198,21 +184,17 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    const company = (companies as any[]).find((c: any) => c.brand === activeBrand);
-    if (company) {
-      setForm({ ...DEFAULTS[activeBrand], ...company });
-    } else {
-      setForm(DEFAULTS[activeBrand]);
-    }
-  }, [activeBrand, companies]);
+    const company = (companies as any[]).find((c: any) => c.brand === 'STUDIO_BOTEMA');
+    setForm(company ? { ...STUDIO_BOTEMA_DEFAULTS, ...company } : STUDIO_BOTEMA_DEFAULTS);
+  }, [companies]);
 
   const mutation = useMutation({
     mutationFn: async (payload: any) => {
-      const company = (companies as any[]).find((c: any) => c.brand === activeBrand);
+      const company = (companies as any[]).find((c: any) => c.brand === 'STUDIO_BOTEMA');
       if (company?.id) {
         return api.patch(`/company/${company.id}`, payload);
       }
-      return api.post('/company', { brand: activeBrand, ...payload });
+      return api.post('/company', { brand: 'STUDIO_BOTEMA', ...payload });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['companies'] });
@@ -231,7 +213,7 @@ export default function SettingsPage() {
 
   const setField = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
-  const activeCompany = (companies as any[]).find((c: any) => c.brand === activeBrand);
+  const activeCompany = (companies as any[]).find((c: any) => c.brand === 'STUDIO_BOTEMA');
 
   return (
     <div className="p-container-padding max-w-3xl mx-auto space-y-8">
@@ -241,23 +223,6 @@ export default function SettingsPage() {
         <p className="font-body-sm text-on-surface-variant mt-1">
           Тези данни се появяват в печатните документи — оферти, проформи, протоколи.
         </p>
-      </div>
-
-      {/* Brand tabs */}
-      <div className="flex gap-1 border border-outline-variant/20 p-1 bg-surface-container-low w-fit">
-        {BRANDS.map(b => (
-          <button
-            key={b.value}
-            onClick={() => setActiveBrand(b.value)}
-            className={`px-5 py-2.5 font-label-caps text-label-caps transition-colors ${
-              activeBrand === b.value
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            {b.label}
-          </button>
-        ))}
       </div>
 
       {isLoading ? (

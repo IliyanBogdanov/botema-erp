@@ -59,9 +59,7 @@ export default function InvoiceDetailPage() {
         </button>
         <div className="flex-1">
           <h1 className="font-display-sm text-on-surface">Фактура {invoice.number}</h1>
-          <p className="font-body-sm text-on-surface-variant">
-            {fmtDate(invoice.date)} · {invoice.brand === 'STUDIO_BOTEMA' ? 'Studio Botema' : 'LuminaVera'}
-          </p>
+          <p className="font-body-sm text-on-surface-variant">{fmtDate(invoice.date)}</p>
         </div>
         <StatusBadge status={invoice.status} />
         <a

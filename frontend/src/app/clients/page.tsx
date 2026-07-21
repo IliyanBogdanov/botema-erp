@@ -71,14 +71,6 @@ function ClientModal({
             </select>
           </div>
           <div>
-            <label className={modalLabelClass}>Марка</label>
-            <select className="input" value={form.brand} onChange={e => setField('brand', e.target.value)}>
-              <option value="STUDIO_BOTEMA">Studio Botema</option>
-              <option value="LUMINAVERA">Luminavera</option>
-              <option value="BOTH">И двете</option>
-            </select>
-          </div>
-          <div>
             <label className={modalLabelClass}>ЕИК</label>
             <input className="input" value={form.eik} onChange={e => setField('eik', e.target.value)} placeholder="123456789" />
           </div>
@@ -138,31 +130,17 @@ const typeLabels: Record<string, string> = {
   COMPANY: 'Фирма', PERSON: 'Физическо лице', ET: 'ЕТ'
 };
 
-const brandLabels: Record<string, string> = {
-  STUDIO_BOTEMA: 'Studio Botema', LUMINAVERA: 'Luminavera', BOTH: 'И двете'
-};
-
-function getBrandTabs(t: ReturnType<typeof useT>) {
-  return [
-    { label: t('clients.allBrands'), value: '' },
-    { label: 'Studio Botema', value: 'STUDIO_BOTEMA' },
-    { label: 'Luminavera', value: 'LUMINAVERA' },
-  ];
-}
-
 export default function ClientsPage() {
   const [search, setSearch] = useState('');
-  const [brand, setBrand] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
 
   const { data = [], isLoading } = useQuery({
-    queryKey: ['clients', brand],
-    queryFn: () => api.get(`/clients${brand ? `?brand=${brand}` : ''}`).then(r => r.data),
+    queryKey: ['clients'],
+    queryFn: () => api.get('/clients').then(r => r.data),
     staleTime: 30000,
   });
   const t = useT();
-  const brandTabs = getBrandTabs(t);
 
   const clients: Client[] = Array.isArray(data) ? data : (data as any).data || [];
 
@@ -192,22 +170,7 @@ export default function ClientsPage() {
         </section>
 
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex gap-1 border border-outline-variant/20 bg-surface-container p-1 w-fit">
-              {brandTabs.map(tab => (
-                <button
-                  key={tab.label}
-                  onClick={() => setBrand(tab.value)}
-                  className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors ${
-                    brand === tab.value
-                      ? 'bg-primary-container text-on-primary-container'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center justify-end">
             <p className="font-label-caps text-label-caps text-on-surface-variant">{filtered.length} клиента</p>
           </div>
 
@@ -229,7 +192,6 @@ export default function ClientsPage() {
                   <th className="table-header">{t('clients.colType')}</th>
                   <th className="table-header">{t('clients.colCity')}</th>
                   <th className="table-header">{t('clients.colEmail')}</th>
-                  <th className="table-header">{t('clients.colBrand')}</th>
                   <th className="table-header text-right">{t('clients.colInvoices')}</th>
                   <th className="table-header w-16"></th>
                 </tr>
@@ -238,14 +200,14 @@ export default function ClientsPage() {
                 {isLoading ? (
                   [...Array(6)].map((_, i) => (
                     <tr key={i} className="animate-pulse hover:bg-surface-container-high">
-                      {[...Array(7)].map((_, j) => (
+                      {[...Array(6)].map((_, j) => (
                         <td key={j} className="table-cell"><div className="h-4 rounded bg-surface-container-high" /></td>
                       ))}
                     </tr>
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-cell py-12 text-center text-on-surface-variant">{t('clients.none')}</td>
+                    <td colSpan={6} className="table-cell py-12 text-center text-on-surface-variant">{t('clients.none')}</td>
                   </tr>
                 ) : (
                   filtered.map(c => (
@@ -259,9 +221,6 @@ export default function ClientsPage() {
                       <td className="table-cell text-on-surface-variant">{typeLabels[c.type] || c.type}</td>
                       <td className="table-cell text-on-surface-variant">{c.city || '—'}</td>
                       <td className="table-cell text-on-surface-variant">{c.email || '—'}</td>
-                      <td className="table-cell">
-                        <span className="font-label-caps text-label-caps text-on-surface-variant">{brandLabels[c.brand || ''] || c.brand || '—'}</span>
-                      </td>
                       <td className="table-cell text-right font-data-mono text-data-mono">{c.invoiceCount ?? 0}</td>
                       <td className="table-cell">
                         <button

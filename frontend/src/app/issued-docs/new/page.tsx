@@ -144,13 +144,6 @@ export default function NewIssuedDocPage() {
               <label className="block text-xs text-on-surface-variant mb-1">Срок на валидност</label>
               <input type="date" className="input" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} />
             </div>
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">Марка</label>
-              <select className="input" value={form.brand} onChange={e => setField('brand', e.target.value)}>
-                <option value="STUDIO_BOTEMA">Studio Botema</option>
-                <option value="LUMINAVERA">Luminavera</option>
-              </select>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

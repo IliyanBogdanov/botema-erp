@@ -6,14 +6,12 @@ import { api } from '@/lib/api';
 
 const COMPANY_FALLBACK: Record<string, any> = {
   STUDIO_BOTEMA: {
-    name: 'СТУДИО БОТЕМА ЕООД', eik: '', vat: '', address: '', city: '',
-    mol: '', bankIban: '', bankBic: '', bankName: 'ОББ',
-    email: 'office@studiobotema.com', phone: '',
-  },
-  LUMINAVERA: {
-    name: 'ЛУМИНАВЕРА ЕООД', eik: '', vat: '', address: '', city: '',
-    mol: '', bankIban: '', bankBic: '', bankName: 'ОББ',
-    email: 'office@luminavera.bg', phone: '',
+    name: 'СТУДИО БОТЕМА ЕООД',
+    eik: '206043213', vat: 'BG206043213',
+    address: 'ул. "Каймак Чалан" №3 ап.6', city: 'Пазарджик',
+    mol: 'Илиян Богданов',
+    bankIban: 'BG80 TEXI 9545 1008 5050 00', bankBic: 'TEXIBGSFXXX', bankName: 'Тексим Банк',
+    email: 'office@studiobotema.com', phone: '0889433368',
   },
 };
 

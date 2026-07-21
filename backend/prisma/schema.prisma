@@ -493,7 +493,7 @@ model Counterparty {
   website     String?
   logoUrl     String?         // logo image URL (Clearbit or manual)
   notes       String?
-  companyId   String?         // Studio Botema or Luminavera
+  companyId   String?         // Studio Botema
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -592,7 +592,7 @@ model EmailThread {
 
 model BizDocument {
   id              String          @id @default(cuid())
-  companyId       String?         // Studio Botema / Luminavera
+  companyId       String?         // Studio Botema
   counterpartyId  String?
   counterparty    Counterparty?   @relation(fields: [counterpartyId], references: [id])
   projectId       String?

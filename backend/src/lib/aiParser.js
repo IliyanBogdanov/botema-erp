@@ -225,7 +225,7 @@ async function parseDocumentWithGroq(filename, folder, pdfBuffer) {
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000); // keep within token limit
 
-  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG206043213) — a Bulgarian interior design company importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
@@ -238,7 +238,7 @@ CRITICAL RULES:
 2. currency: € or EUR→EUR, лв. or BGN→BGN. Italian/Dutch/Polish/German suppliers→EUR. Bulgarian suppliers→BGN
 3. invoiceNo: look for "Фактура №", "Invoice No.", "Fattura n.", "Rechnung Nr."
 4. docDate: "Date:", "Дата:", "Data:", "Datum:" → YYYY-MM-DD
-5. supplierName: the SELLER (not Studio Botema/Luminavera)
+5. supplierName: the SELLER (not Studio Botema)
 6. confidence: 90-100 if all 4 (invoiceNo,docDate,amountTotal,currency) found; 60-89 if 3; 30-59 if 2; 0-29 if <2
 
 Document text:
@@ -283,7 +283,7 @@ async function parseDocumentWithOpenRouter(filename, folder, pdfBuffer) {
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 6000);
 
-  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG206043213) — a Bulgarian interior design company importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
@@ -296,7 +296,7 @@ CRITICAL RULES:
 2. currency: € or EUR→EUR, лв. or BGN→BGN. Italian/Dutch/Polish/German suppliers→EUR. Bulgarian suppliers→BGN
 3. invoiceNo: look for "Фактура №", "Invoice No.", "Fattura n.", "Rechnung Nr."
 4. docDate: "Date:", "Дата:", "Data:", "Datum:" → YYYY-MM-DD
-5. supplierName: the SELLER (not Studio Botema/Luminavera)
+5. supplierName: the SELLER (not Studio Botema)
 6. confidence: 90-100 if all 4 (invoiceNo,docDate,amountTotal,currency) found; 60-89 if 3; 30-59 if 2; 0-29 if <2
 
 Document text:
@@ -341,7 +341,7 @@ async function parseDocumentWithOpenAI(filename, folder, pdfBuffer) {
   const pdfData = await pdfParse(pdfBuffer);
   const text = pdfData.text.substring(0, 12000);
 
-  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG206043213) — a Bulgarian interior design company importing from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
@@ -354,7 +354,7 @@ CRITICAL RULES:
 2. currency: € or EUR→EUR, лв. or BGN→BGN. Italian/Dutch/Polish/German suppliers→EUR. Bulgarian suppliers→BGN
 3. invoiceNo: look for "Фактура №", "Invoice No.", "Fattura n.", "Rechnung Nr."
 4. docDate: "Date:", "Дата:", "Data:", "Datum:" → YYYY-MM-DD
-5. supplierName: the SELLER (not Studio Botema/Luminavera)
+5. supplierName: the SELLER (not Studio Botema)
 6. confidence: 90-100 if all 4 (invoiceNo,docDate,amountTotal,currency) found; 60-89 if 3; 30-59 if 2; 0-29 if <2
 
 Document text:
@@ -559,7 +559,7 @@ async function parseDocumentWithAI(filename, folder, pdfBuffer) {
 
   log.info('Starting document parse', { filename, folder, mimeType, folderType });
 
-  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG204971854) and Luminavera — Bulgarian interior design companies that import lighting and furniture from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
+  const prompt = `You are an expert accountant parsing business documents for Studio Botema (VAT BG206043213) — a Bulgarian interior design company that imports lighting and furniture from Italy, Netherlands, Poland, Austria, Germany, and local Bulgarian suppliers.
 
 File: "${filename}"
 Folder: "${folder}"
@@ -575,7 +575,7 @@ CRITICAL EXTRACTION RULES:
    - Bulgarian suppliers (Polaris, Omega Light, Siltem, Bulinvest, Econt) → BGN
 3. invoiceNo: look for "Фактура №", "Invoice No.", "Invoice #", "Fattura n.", "Rechnung Nr.", document number in the header
 4. docDate: look for "Date:", "Дата:", "Data:", "Datum:", "Invoice date:" → format as YYYY-MM-DD
-5. supplierName: the company ISSUING this document (the seller). It is NOT Studio Botema or Luminavera.
+5. supplierName: the company ISSUING this document (the seller). It is NOT Studio Botema.
    Known suppliers: Lodes, Polaris, Exenza Studio, Formani, Zieta, Omega Light, DHL, Fercam, Tridonic, Sielte, Bulinvest, Microinvest, Siltem, ACA Lighting, Novaluce, Bonaldo, Macro
 6. confidence scoring:
    - 90-100: all 4 key fields clearly found (invoiceNo, docDate, amountTotal, currency)

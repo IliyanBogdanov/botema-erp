@@ -14,33 +14,20 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   INVOICE: 'ФАКТУРА',
 };
 
-// Fallback if company not yet in DB
+// Fallback if company not yet loaded from DB — must match the real company record
 const COMPANY_FALLBACK: Record<string, any> = {
   STUDIO_BOTEMA: {
     name: 'СТУДИО БОТЕМА ЕООД',
-    eik: '207416148',
-    vat: 'BG207416148',
-    address: 'ул. Тракия 28',
-    city: 'София 1000',
-    mol: 'Ботьо Богданов',
-    bankIban: 'BG18UBBS80021030174631',
-    bankBic: 'UBBSBGSF',
-    bankName: 'ОББ',
+    eik: '206043213',
+    vat: 'BG206043213',
+    address: 'ул. "Каймак Чалан" №3 ап.6',
+    city: 'Пазарджик',
+    mol: 'Илиян Богданов',
+    bankIban: 'BG80 TEXI 9545 1008 5050 00',
+    bankBic: 'TEXIBGSFXXX',
+    bankName: 'Тексим Банк',
     email: 'office@studiobotema.com',
-    phone: '+359 888 123 456',
-  },
-  LUMINAVERA: {
-    name: 'ЛУМИНАВЕРА ЕООД',
-    eik: '207416149',
-    vat: 'BG207416149',
-    address: 'ул. Тракия 28',
-    city: 'София 1000',
-    mol: 'Ботьо Богданов',
-    bankIban: 'BG18UBBS80021030174632',
-    bankBic: 'UBBSBGSF',
-    bankName: 'ОББ',
-    email: 'office@luminavera.bg',
-    phone: '+359 888 123 457',
+    phone: '0889433368',
   },
 };
 

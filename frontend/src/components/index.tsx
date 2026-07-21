@@ -60,25 +60,18 @@ const MONTHS = ['Яну','Фев','Мар','Апр','Май','Юни','Юли','
 
 export function RevenueChart({ data }: { data: any[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
-  const monthly = Array.from({ length: 12 }, (_, i) => ({
-    month: MONTHS[i], SB: 0, LV: 0,
-  }));
+  const monthly = Array.from({ length: 12 }, (_, i) => ({ month: MONTHS[i], revenue: 0 }));
   data.forEach(d => {
     const idx = parseInt(d.month) - 1;
-    if (idx >= 0 && idx < 12) {
-      monthly[idx][d.brand === 'LUMINAVERA' ? 'LV' : 'SB'] = Number(d.revenue);
-    }
+    if (idx >= 0 && idx < 12) monthly[idx].revenue = Number(d.revenue);
   });
-  const maxVal = Math.max(...monthly.map(d => d.SB + d.LV), 1);
+  const maxVal = Math.max(...monthly.map(d => d.revenue), 1);
   const BAR_H = 155;
 
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: BAR_H + 24, position: 'relative' }}>
       {monthly.map((d, i) => {
-        const total = d.SB + d.LV;
-        const totalH = (total / maxVal) * BAR_H;
-        const sbH = total > 0 ? (d.SB / total) * totalH : 0;
-        const lvH = totalH - sbH;
+        const barH = (d.revenue / maxVal) * BAR_H;
         const isHov = hovered === i;
         return (
           <div
@@ -87,7 +80,7 @@ export function RevenueChart({ data }: { data: any[] }) {
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
           >
-            {isHov && total > 0 && (
+            {isHov && d.revenue > 0 && (
               <div style={{
                 position: 'absolute', bottom: BAR_H + 4, left: '50%', transform: 'translateX(-50%)',
                 background: '#1d1d1f', border: '1px solid #27272a', borderRadius: 8,
@@ -95,23 +88,14 @@ export function RevenueChart({ data }: { data: any[] }) {
                 zIndex: 10, pointerEvents: 'none',
               }}>
                 <div style={{ fontWeight: 700, marginBottom: 2 }}>{MONTHS[i]}</div>
-                {d.SB > 0 && <div style={{ color: '#0a84ff' }}>SB {fmt(d.SB)} EUR</div>}
-                {d.LV > 0 && <div style={{ color: '#30d158' }}>LV {fmt(d.LV)} EUR</div>}
+                <div style={{ color: '#0a84ff' }}>{fmt(d.revenue)} EUR</div>
               </div>
             )}
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: BAR_H, gap: 2 }}>
-              {d.LV > 0 && (
+              {d.revenue > 0 ? (
                 <div style={{
-                  width: '100%', height: lvH,
+                  width: '100%', height: barH,
                   borderRadius: '4px 4px 0 0',
-                  background: '#30d158', opacity: isHov ? 1 : 0.8,
-                  transition: 'opacity 0.15s',
-                }} />
-              )}
-              {total > 0 ? (
-                <div style={{
-                  width: '100%', height: sbH > 0 ? sbH : totalH,
-                  borderRadius: d.LV > 0 ? 0 : '4px 4px 0 0',
                   background: 'linear-gradient(to bottom, #0a84ff, rgba(10,132,255,0.5))',
                   opacity: isHov ? 1 : 0.85,
                   transition: 'opacity 0.15s',

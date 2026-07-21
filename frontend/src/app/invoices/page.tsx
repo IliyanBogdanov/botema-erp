@@ -105,13 +105,6 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
             </select>
           </div>
           <div>
-            <label className={modalLabelClass}>Марка</label>
-            <select className="input" value={form.brand} onChange={e => setField('brand', e.target.value)}>
-              <option value="STUDIO_BOTEMA">Studio Botema</option>
-              <option value="LUMINAVERA">Luminavera</option>
-            </select>
-          </div>
-          <div>
             <label className={modalLabelClass}>Валута</label>
             <select className="input" value={form.currency} onChange={e => setField('currency', e.target.value)}>
               <option value="BGN">BGN</option>
