@@ -51,6 +51,20 @@ export default function FinancePage() {
     .sort((a: any, b: any) => b[1] - a[1]) as [string, number][];
   const cfMaxCat = cfCats.length ? Math.max(...cfCats.map(([, v]) => v)) : 1;
 
+  // Forward-looking 30/60/90-day cash-flow forecast (year-independent)
+  const { data: forecast } = useQuery({
+    queryKey: ['forecast'],
+    queryFn: () => api.get('/dashboard/forecast').then(r => r.data),
+    staleTime: 60000,
+  });
+  const FORECAST_BUCKETS: { key: string; label: string }[] = [
+    { key: 'OVERDUE', label: 'ПРОСРОЧЕНО' },
+    { key: 'D0_30', label: '0–30 ДНИ' },
+    { key: 'D31_60', label: '31–60 ДНИ' },
+    { key: 'D61_90', label: '61–90 ДНИ' },
+    { key: 'D90_PLUS', label: '90+ ДНИ' },
+  ];
+
   const months: any[] = data?.months || [];
   const totals = data?.totals || { revenue: 0, costs: 0, profit: 0, margin: 0 };
   const currentMonth = new Date().getMonth();
@@ -148,6 +162,63 @@ export default function FinancePage() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* ── ПРОГНОЗА ЗА ПАРИЧНИЯ ПОТОК 30/60/90 ДНИ ── */}
+        <div className="border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+          <div className="px-5 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-primary">schedule</span>
+              <p className="font-label-caps text-label-caps text-on-surface">ПРОГНОЗА ЗА ПАРИЧНИЯ ПОТОК</p>
+            </div>
+            <p className="font-label-caps text-[9px] text-on-surface-variant/50">НЕПЛАТЕНИ ФАКТУРИ И РАЗХОДИ ПО СРОК</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+              <thead>
+                <tr className="border-b border-outline-variant/10">
+                  <th className="table-header text-left w-36"> </th>
+                  {FORECAST_BUCKETS.map(b => <th key={b.key} className="table-header text-right">{b.label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-outline-variant/5">
+                  <td className="table-cell font-medium text-emerald-400">Очаквани постъпления</td>
+                  {FORECAST_BUCKETS.map(b => (
+                    <td key={b.key} className="table-cell text-right font-data-mono text-on-surface">
+                      {fmt(forecast?.inflows?.buckets?.[b.key] || 0)}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-outline-variant/5">
+                  <td className="table-cell font-medium text-error/80">Очаквани плащания</td>
+                  {FORECAST_BUCKETS.map(b => (
+                    <td key={b.key} className="table-cell text-right font-data-mono text-error/80">
+                      {fmt(forecast?.outflows?.buckets?.[b.key] || 0)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-outline-variant/20 bg-surface-container">
+                  <td className="table-cell font-semibold text-on-surface">Нетно</td>
+                  {FORECAST_BUCKETS.map(b => {
+                    const v = forecast?.net?.[b.key] || 0;
+                    return (
+                      <td key={b.key} className={`table-cell text-right font-semibold font-data-mono ${v >= 0 ? 'text-emerald-400' : 'text-error'}`}>
+                        {v >= 0 ? '+' : ''}{fmt(v)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="px-5 py-2.5 border-t border-outline-variant/10">
+            <p className="font-label-caps text-[9px] text-on-surface-variant/50">
+              Базирано на срокове за плащане на неплатени фактури (приходи) и документирани разходи без банково потвърдено плащане. Записи без падеж се оценяват на +30 дни от датата на документа.
+            </p>
           </div>
         </div>
 

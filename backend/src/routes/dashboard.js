@@ -368,6 +368,87 @@ router.get('/cashflow', auth, async (req, res) => {
   }
 });
 
+// GET /api/dashboard/forecast — 30/60/90-day cash-flow forecast.
+// Outflows (AP): documented purchases with no bank-confirmed payment yet.
+// Inflows (AR): issued invoices not yet marked PAID.
+// Bucketed by due date relative to today (falls back to doc/invoice date + 30d
+// when no due date is set) — OVERDUE / 0-30 / 31-60 / 61-90 / 90+.
+router.get('/forecast', auth, async (req, res) => {
+  try {
+    await fx.loadRates();
+    const today = new Date();
+
+    const bucketFor = date => {
+      const days = Math.floor((date - today) / 86400000);
+      if (days < 0) return 'OVERDUE';
+      if (days <= 30) return 'D0_30';
+      if (days <= 60) return 'D31_60';
+      if (days <= 90) return 'D61_90';
+      return 'D90_PLUS';
+    };
+    const makeBuckets = () => ({ OVERDUE: 0, D0_30: 0, D31_60: 0, D61_90: 0, D90_PLUS: 0 });
+
+    // ── Outflows: documented BizDocument INVOICE_IN without a real payment link ──
+    const apDocs = await prisma.bizDocument.findMany({
+      where: {
+        docType: 'INVOICE_IN',
+        status: { in: AUTHORITATIVE_BIZ_DOC_STATUSES },
+        amountTotal: { not: null },
+      },
+      select: {
+        docDate: true, dueDate: true, currency: true, amountNet: true, amountTotal: true,
+        counterparty: { select: { name: true } },
+        linkedTo: { select: { linkType: true } },
+      },
+    });
+    const outflowBuckets = makeBuckets();
+    const outflowItems = [];
+    for (const doc of apDocs) {
+      if (doc.linkedTo.some(l => l.linkType === 'PAYMENT_TO_INVOICE')) continue; // already bank-confirmed
+      const dueDate = doc.dueDate || new Date((doc.docDate || today).getTime() + 30 * 86400000);
+      const eur = fx.toEur(netCostAmount(doc), doc.currency);
+      const bucket = bucketFor(dueDate);
+      outflowBuckets[bucket] += eur;
+      outflowItems.push({ dueDate, counterparty: doc.counterparty?.name || null, amountEur: Number(eur.toFixed(2)), bucket });
+    }
+
+    // ── Inflows: issued invoices not yet PAID ──
+    const arInvoices = await prisma.invoice.findMany({
+      where: { status: { in: ['PENDING', 'OVERDUE'] } },
+      select: { number: true, date: true, dueDate: true, currency: true, amountNet: true, clientId: true, client: { select: { name: true } } },
+    });
+    const inflowBuckets = makeBuckets();
+    const inflowItems = [];
+    for (const inv of arInvoices) {
+      const dueDate = inv.dueDate || new Date(inv.date.getTime() + 30 * 86400000);
+      const eur = fx.toEur(inv.amountNet, inv.currency);
+      const bucket = bucketFor(dueDate);
+      inflowBuckets[bucket] += eur;
+      inflowItems.push({ dueDate, number: inv.number, client: inv.client?.name || null, amountEur: Number(eur.toFixed(2)), bucket });
+    }
+
+    const round2 = n => Number(n.toFixed(2));
+    for (const k of Object.keys(outflowBuckets)) outflowBuckets[k] = round2(outflowBuckets[k]);
+    for (const k of Object.keys(inflowBuckets)) inflowBuckets[k] = round2(inflowBuckets[k]);
+
+    const netBuckets = {};
+    for (const k of Object.keys(outflowBuckets)) netBuckets[k] = round2(inflowBuckets[k] - outflowBuckets[k]);
+
+    res.json({
+      generatedAt: today.toISOString(),
+      outflows: { buckets: outflowBuckets, totalEur: round2(Object.values(outflowBuckets).reduce((a, b) => a + b, 0)) },
+      inflows: { buckets: inflowBuckets, totalEur: round2(Object.values(inflowBuckets).reduce((a, b) => a + b, 0)) },
+      net: netBuckets,
+      items: {
+        outflows: outflowItems.sort((a, b) => a.dueDate - b.dueDate).slice(0, 200),
+        inflows: inflowItems.sort((a, b) => a.dueDate - b.dueDate).slice(0, 200),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/dashboard/data-health
 // Returns data quality metrics: bank import status, reconciliation coverage, unverified invoices.
 router.get('/data-health', auth, async (req, res) => {
