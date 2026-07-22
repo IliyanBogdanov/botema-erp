@@ -25,12 +25,19 @@ async function getDuplicateGroups(limit = 25) {
 // GET /api/biz-documents
 router.get('/', auth, async (req, res) => {
   try {
-    const { status, docType, counterpartyId, projectId } = req.query;
+    const { status, docType, counterpartyId, projectId, year } = req.query;
     const where = {};
-    if (status) where.status = status;
+    // Without an explicit status filter, hide rejected/archived noise by default
+    where.status = status ? status : { notIn: ['REJECTED', 'ARCHIVED'] };
     if (docType) where.docType = docType;
     if (counterpartyId) where.counterpartyId = counterpartyId;
     if (projectId) where.projectId = projectId;
+    if (year) {
+      where.docDate = {
+        gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        lte: new Date(`${year}-12-31T23:59:59.999Z`),
+      };
+    }
 
     const docs = await prisma.bizDocument.findMany({
       where,
@@ -173,6 +180,55 @@ router.get('/review-queue', auth, async (req, res) => {
 });
 
 // GET /api/biz-documents/:id
+// POST /api/biz-documents — manual entry (used by the Purchases "нова доставка" form)
+router.post('/', auth, async (req, res) => {
+  try {
+    const { docType, docDate, docNumber, counterpartyId, projectId, currency, amountTotal, status, notes } = req.body;
+    if (!counterpartyId) return res.status(400).json({ error: 'counterpartyId е задължителен' });
+    const doc = await prisma.bizDocument.create({
+      data: {
+        docType: docType || 'INVOICE_IN',
+        docDate: docDate ? new Date(docDate) : new Date(),
+        docNumber: docNumber || null,
+        counterpartyId,
+        projectId: projectId || null,
+        currency: currency || 'EUR',
+        amountTotal,
+        amountNet: amountTotal,
+        status: status || 'REVIEWED',
+        confidence: 100,
+        notes: notes || 'Ръчно въведено',
+      },
+      include: { counterparty: { select: { id: true, name: true } }, project: { select: { id: true, code: true, name: true } } },
+    });
+    res.status(201).json(doc);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// PATCH /api/biz-documents/:id — edit basic fields (used by the Purchases edit form)
+router.patch('/:id', auth, async (req, res) => {
+  try {
+    const { docNumber, docDate, currency, amountTotal, status, notes } = req.body;
+    const data = {};
+    if (docNumber !== undefined) data.docNumber = docNumber;
+    if (docDate !== undefined) data.docDate = new Date(docDate);
+    if (currency !== undefined) data.currency = currency;
+    if (amountTotal !== undefined) { data.amountTotal = amountTotal; data.amountNet = amountTotal; }
+    if (status !== undefined) data.status = status;
+    if (notes !== undefined) data.notes = notes;
+    const doc = await prisma.bizDocument.update({
+      where: { id: req.params.id },
+      data,
+      include: { counterparty: { select: { id: true, name: true } }, project: { select: { id: true, code: true, name: true } } },
+    });
+    res.json(doc);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.get('/:id', auth, async (req, res) => {
   try {
     const doc = await prisma.bizDocument.findUnique({
@@ -210,6 +266,23 @@ router.patch('/:id/status', auth, async (req, res) => {
     const doc = await prisma.bizDocument.update({
       where: { id: req.params.id },
       data: { status, ...(notes && { notes }) },
+    });
+    res.json(doc);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PATCH /api/biz-documents/:id/project — manual project assignment (no automated
+// bridge exists: suppliers rarely reference our PO/offer codes, so this is filled
+// in by hand as purchases are reviewed)
+router.patch('/:id/project', auth, async (req, res) => {
+  try {
+    const { projectId } = req.body;
+    const doc = await prisma.bizDocument.update({
+      where: { id: req.params.id },
+      data: { projectId: projectId || null },
+      include: { project: { select: { id: true, code: true, name: true } } },
     });
     res.json(doc);
   } catch (e) {

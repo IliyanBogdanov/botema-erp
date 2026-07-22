@@ -9,7 +9,10 @@ const BGN_PER_EUR = 1.95583;
 const toBgn = (amount: number, currency: string) =>
   currency === 'EUR' ? amount * BGN_PER_EUR : amount;
 
-const STATUS_OPTIONS = ['PENDING', 'PAID'];
+const STATUS_OPTIONS = ['NEEDS_REVIEW', 'REVIEWED', 'MATCHED'];
+const STATUS_LABELS: Record<string, string> = {
+  NEEDS_REVIEW: 'За преглед', REVIEWED: 'Прегледано', MATCHED: 'Платено (банка)', IMPORTED: 'Импортирано',
+};
 
 export default function PurchaseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,11 +24,11 @@ export default function PurchaseDetailPage() {
 
   const { data: purchase, isLoading } = useQuery({
     queryKey: ['purchase', id],
-    queryFn: () => api.get(`/purchases/${id}`).then(r => r.data),
+    queryFn: () => api.get(`/biz-documents/${id}`).then(r => r.data),
   });
 
   const patch = useMutation({
-    mutationFn: (data: any) => api.patch(`/purchases/${id}`, data),
+    mutationFn: (data: any) => api.patch(`/biz-documents/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['purchase', id] });
       qc.invalidateQueries({ queryKey: ['purchases'] });
@@ -37,11 +40,12 @@ export default function PurchaseDetailPage() {
   if (isLoading) return <div className="p-8 text-on-surface-variant">Зареждане…</div>;
   if (!purchase) return <div className="p-8 text-error">Доставката не е намерена.</div>;
 
-  const total = Number(purchase.amount);
+  const total = Number(purchase.amountTotal);
   const totalBgn = toBgn(total, purchase.currency);
 
-  const driveViewUrl = purchase.driveFileId
-    ? `https://drive.google.com/file/d/${purchase.driveFileId}/preview`
+  const driveFileId = purchase.sourceFile?.driveFileId;
+  const driveViewUrl = driveFileId
+    ? `https://drive.google.com/file/d/${driveFileId}/preview`
     : null;
 
   return (
@@ -53,16 +57,16 @@ export default function PurchaseDetailPage() {
         </button>
         <div className="flex-1">
           <h1 className="font-display-sm text-on-surface">
-            Доставка {purchase.invoiceNo ? `№ ${purchase.invoiceNo}` : `— ${fmtDate(purchase.date)}`}
+            Доставка {purchase.docNumber ? `№ ${purchase.docNumber}` : `— ${fmtDate(purchase.docDate)}`}
           </h1>
           <p className="font-body-sm text-on-surface-variant">
-            {purchase.supplier?.name || '—'} · {fmtDate(purchase.date)}
+            {purchase.counterparty?.name || '—'} · {fmtDate(purchase.docDate)}
           </p>
         </div>
-        <StatusBadge status={purchase.status || 'PENDING'} />
-        {purchase.driveFileId && (
+        <StatusBadge status={purchase.status || 'NEEDS_REVIEW'} />
+        {driveFileId && (
           <a
-            href={`https://drive.google.com/file/d/${purchase.driveFileId}/view`}
+            href={`https://drive.google.com/file/d/${driveFileId}/view`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-variant hover:bg-surface-variant/80 transition-colors font-label-md text-on-surface-variant"
@@ -81,7 +85,7 @@ export default function PurchaseDetailPage() {
             <div className="grid grid-cols-2 gap-4 font-body-sm">
               <div>
                 <span className="text-on-surface-variant">Доставчик</span>
-                <p className="text-on-surface font-medium">{purchase.supplier?.name || '—'}</p>
+                <p className="text-on-surface font-medium">{purchase.counterparty?.name || '—'}</p>
               </div>
               <div>
                 <span className="text-on-surface-variant">Проект</span>
@@ -91,11 +95,11 @@ export default function PurchaseDetailPage() {
               </div>
               <div>
                 <span className="text-on-surface-variant">Дата</span>
-                <p className="text-on-surface">{fmtDate(purchase.date)}</p>
+                <p className="text-on-surface">{fmtDate(purchase.docDate)}</p>
               </div>
               <div>
                 <span className="text-on-surface-variant">Фактура №</span>
-                <p className="text-on-surface">{purchase.invoiceNo || '—'}</p>
+                <p className="text-on-surface">{purchase.docNumber || '—'}</p>
               </div>
               <div>
                 <span className="text-on-surface-variant">Валута</span>
@@ -103,12 +107,12 @@ export default function PurchaseDetailPage() {
               </div>
               <div>
                 <span className="text-on-surface-variant">Година</span>
-                <p className="text-on-surface">{purchase.year}</p>
+                <p className="text-on-surface">{purchase.docDate ? new Date(purchase.docDate).getUTCFullYear() : '—'}</p>
               </div>
             </div>
-            {purchase.description && (
+            {purchase.notes && (
               <p className="font-body-sm text-on-surface-variant border-t border-outline-variant pt-3">
-                {purchase.description}
+                {purchase.notes}
               </p>
             )}
           </div>
@@ -136,11 +140,11 @@ export default function PurchaseDetailPage() {
           <div className="rounded-2xl bg-surface-container p-5 space-y-4">
             <h2 className="font-title-md text-on-surface">Статус</h2>
             <select
-              value={editStatus || purchase.status || 'PENDING'}
+              value={editStatus || purchase.status || 'NEEDS_REVIEW'}
               onChange={e => setEditStatus(e.target.value)}
               className="w-full bg-surface-variant border border-outline-variant rounded-xl px-3 py-2 text-on-surface font-body-md"
             >
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
             </select>
             <button
               onClick={() => patch.mutate({ status: editStatus || purchase.status })}
@@ -166,7 +170,7 @@ export default function PurchaseDetailPage() {
                   src={driveViewUrl}
                   className="w-full rounded-xl border border-outline-variant"
                   style={{ height: 500 }}
-                  title={`Purchase ${purchase.invoiceNo || purchase.id}`}
+                  title={`Purchase ${purchase.docNumber || purchase.id}`}
                 />
               )}
             </div>

@@ -64,4 +64,9 @@ export const statusConfig: Record<string, { label: string; color: string; bg: st
   ACTIVE:    { label: '● Активен',   color: '#0a84ff', bg: 'rgba(10,132,255,0.15)' },
   COMPLETED: { label: '✓ Приключен', color: '#636366', bg: 'rgba(99,99,102,0.15)' },
   ON_HOLD:   { label: '⏸ Пауза',     color: '#ff9f0a', bg: 'rgba(255,159,10,0.15)' },
+  // BizDocument statuses (purchases/documents)
+  NEEDS_REVIEW: { label: '⏳ За преглед',      color: '#ff9f0a', bg: 'rgba(255,159,10,0.15)' },
+  REVIEWED:     { label: '● Прегледано',       color: '#0a84ff', bg: 'rgba(10,132,255,0.15)' },
+  MATCHED:      { label: '✓ Платено (банка)',  color: '#30d158', bg: 'rgba(48,209,88,0.15)' },
+  IMPORTED:     { label: '● Импортирано',      color: '#636366', bg: 'rgba(99,99,102,0.15)' },
 };

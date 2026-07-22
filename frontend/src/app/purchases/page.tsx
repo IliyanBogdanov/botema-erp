@@ -8,56 +8,98 @@ import { Modal } from '@/components/Modal';
 
 interface Purchase {
   id: string;
-  date: string;
-  invoiceNo?: string;
-  amount: number;
+  docDate: string;
+  docNumber?: string;
+  amountTotal: number;
   currency: string;
-  description?: string;
-  status?: string;
-  supplierId?: string;
-  supplier?: { id: string; name: string };
+  notes?: string;
+  status: string;
+  counterpartyId?: string;
+  counterparty?: { id: string; name: string };
   project?: { id: string; code: string; name: string };
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  NEEDS_REVIEW: 'За преглед', REVIEWED: 'Прегледано', MATCHED: 'Платено (банка)', IMPORTED: 'Импортирано',
+};
+
+function ProjectCell({ purchase }: { purchase: Purchase }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects-list'],
+    queryFn: () => api.get('/projects').then(r => r.data),
+    enabled: editing,
+  });
+  const mutation = useMutation({
+    mutationFn: (projectId: string) => api.patch(`/biz-documents/${purchase.id}/project`, { projectId: projectId || null }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchases'] }); setEditing(false); },
+  });
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        className="input py-1 text-xs"
+        defaultValue={purchase.project?.id || ''}
+        onBlur={() => setEditing(false)}
+        onChange={e => mutation.mutate(e.target.value)}
+        onClick={e => e.stopPropagation()}
+      >
+        <option value="">— Без проект —</option>
+        {(projects as any[]).map((p: any) => <option key={p.id} value={p.id}>{p.code} – {p.name}</option>)}
+      </select>
+    );
+  }
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); setEditing(true); }}
+      className="text-left hover:text-primary transition-colors"
+    >
+      {purchase.project ? `${purchase.project.code}` : <span className="text-on-surface-variant/40">— задай —</span>}
+    </button>
+  );
 }
 
 function EditPurchaseModal({ purchase, onClose }: { purchase: Purchase; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    invoiceNo: purchase.invoiceNo || '',
-    amount: String(purchase.amount),
+    docNumber: purchase.docNumber || '',
+    amountTotal: String(purchase.amountTotal),
     currency: purchase.currency || 'EUR',
-    description: purchase.description || '',
-    status: purchase.status || 'PENDING',
+    status: purchase.status || 'REVIEWED',
   });
   const [error, setError] = useState('');
 
   const mutation = useMutation({
-    mutationFn: (payload: any) => api.patch(`/purchases/${purchase.id}`, payload),
+    mutationFn: (payload: any) => api.patch(`/biz-documents/${purchase.id}`, payload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchases'] }); onClose(); },
-    onError: (err: any) => setError(err.response?.data?.message || 'Грешка при запис'),
+    onError: (err: any) => setError(err.response?.data?.error || 'Грешка при запис'),
   });
 
   const setField = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <Modal open onClose={onClose} title={`Редакция: ${purchase.supplier?.name || purchase.supplierId}`} size="md">
-      <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, amount: Number(form.amount) }); }} className="space-y-4">
+    <Modal open onClose={onClose} title={`Редакция: ${purchase.counterparty?.name || ''}`} size="md">
+      <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, amountTotal: Number(form.amountTotal) }); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Фактура №</label>
-            <input className="input" value={form.invoiceNo} onChange={e => setField('invoiceNo', e.target.value)} placeholder="0000012345" />
+            <input className="input" value={form.docNumber} onChange={e => setField('docNumber', e.target.value)} placeholder="0000012345" />
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Статус</label>
             <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
-              <option value="PENDING">Чака</option>
-              <option value="PAID">Платено</option>
+              <option value="NEEDS_REVIEW">За преглед</option>
+              <option value="REVIEWED">Прегледано</option>
+              <option value="MATCHED">Платено (банка)</option>
             </select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Сума *</label>
-            <input type="number" required min="0" step="0.01" className="input" value={form.amount} onChange={e => setField('amount', e.target.value)} />
+            <input type="number" required min="0" step="0.01" className="input" value={form.amountTotal} onChange={e => setField('amountTotal', e.target.value)} />
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Валута</label>
@@ -67,10 +109,6 @@ function EditPurchaseModal({ purchase, onClose }: { purchase: Purchase; onClose:
               <option value="USD">USD</option>
             </select>
           </div>
-        </div>
-        <div>
-          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Описание</label>
-          <textarea className="input" rows={2} value={form.description} onChange={e => setField('description', e.target.value)} />
         </div>
         {error && (
           <div className="bg-error-container/20 border border-error/30 px-3 py-2">
@@ -91,14 +129,13 @@ function EditPurchaseModal({ purchase, onClose }: { purchase: Purchase; onClose:
 function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    supplierId: '',
+    docDate: new Date().toISOString().slice(0, 10),
+    counterpartyId: '',
     projectId: '',
-    invoiceNo: '',
+    docNumber: '',
     currency: 'EUR',
-    amount: '',
-    description: '',
-    status: 'PENDING',
+    amountTotal: '',
+    status: 'REVIEWED',
   });
   const [error, setError] = useState('');
 
@@ -112,30 +149,30 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
   });
 
   const mutation = useMutation({
-    mutationFn: (payload: any) => api.post('/purchases', payload),
+    mutationFn: (payload: any) => api.post('/biz-documents', payload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchases'] }); onClose(); },
-    onError: (err: any) => setError(err.response?.data?.message || 'Грешка при запис'),
+    onError: (err: any) => setError(err.response?.data?.error || 'Грешка при запис'),
   });
 
   const setField = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   return (
     <Modal open={open} onClose={onClose} title="Нова доставка" size="md">
-      <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, amount: Number(form.amount) }); }} className="space-y-4">
+      <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, amountTotal: Number(form.amountTotal) }); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Дата *</label>
-            <input type="date" required className="input" value={form.date} onChange={e => setField('date', e.target.value)} />
+            <input type="date" required className="input" value={form.docDate} onChange={e => setField('docDate', e.target.value)} />
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Фактура №</label>
-            <input className="input" value={form.invoiceNo} onChange={e => setField('invoiceNo', e.target.value)} placeholder="0000012345" />
+            <input className="input" value={form.docNumber} onChange={e => setField('docNumber', e.target.value)} placeholder="0000012345" />
           </div>
         </div>
 
         <div>
           <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Доставчик *</label>
-          <select required className="input" value={form.supplierId} onChange={e => setField('supplierId', e.target.value)}>
+          <select required className="input" value={form.counterpartyId} onChange={e => setField('counterpartyId', e.target.value)}>
             <option value="">— Избери доставчик —</option>
             {(suppliers as any[]).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -152,7 +189,7 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Сума *</label>
-            <input type="number" required min="0" step="0.01" className="input" value={form.amount} onChange={e => setField('amount', e.target.value)} placeholder="0.00" />
+            <input type="number" required min="0" step="0.01" className="input" value={form.amountTotal} onChange={e => setField('amountTotal', e.target.value)} placeholder="0.00" />
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Валута</label>
@@ -167,14 +204,9 @@ function PurchaseModal({ open, onClose }: { open: boolean; onClose: () => void }
         <div>
           <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Статус</label>
           <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
-            <option value="PENDING">Чака</option>
-            <option value="PAID">Платено</option>
+            <option value="NEEDS_REVIEW">За преглед</option>
+            <option value="REVIEWED">Прегледано</option>
           </select>
-        </div>
-
-        <div>
-          <label className="block font-label-caps text-label-caps text-on-surface-variant mb-1.5">Описание</label>
-          <textarea className="input" rows={2} value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Описание на доставката..." />
         </div>
 
         {error && (
@@ -208,12 +240,13 @@ export default function PurchasesPage() {
   });
 
   const params = new URLSearchParams();
+  params.set('docType', 'INVOICE_IN');
   if (year) params.set('year', String(year));
-  if (supplierId) params.set('supplierId', supplierId);
+  if (supplierId) params.set('counterpartyId', supplierId);
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['purchases', year, supplierId],
-    queryFn: () => api.get(`/purchases?${params}`).then(r => r.data),
+    queryFn: () => api.get(`/biz-documents?${params}`).then(r => r.data),
     staleTime: 30000,
   });
   const t = useT();
@@ -222,13 +255,12 @@ export default function PurchasesPage() {
 
   const filtered = search
     ? purchases.filter(p =>
-        (p.supplier?.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (p.invoiceNo || '').toLowerCase().includes(search.toLowerCase()) ||
-        (p.description || '').toLowerCase().includes(search.toLowerCase())
+        (p.counterparty?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.docNumber || '').toLowerCase().includes(search.toLowerCase())
       )
     : purchases;
 
-  const total = filtered.reduce((s, p) => s + amountToEur(p.amount, p.currency), 0);
+  const total = filtered.reduce((s, p) => s + amountToEur(p.amountTotal, p.currency), 0);
 
   return (
     <div className="p-container-padding">
@@ -291,22 +323,14 @@ export default function PurchasesPage() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button className="p-2 text-on-surface-variant hover:text-primary transition-colors">
-              <span className="material-symbols-outlined">filter_list</span>
-            </button>
-            <button className="p-2 text-on-surface-variant hover:text-primary transition-colors">
-              <span className="material-symbols-outlined">sort_by_alpha</span>
-            </button>
-          </div>
         </div>
 
         {/* Data Table */}
         <div className="bg-surface-container-low border border-outline-variant/10 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[820px]">
             <thead>
               <tr className="bg-surface-container-high">
-                {[t('pur.colDate'), t('pur.colSupplier'), t('pur.colInvoice'), t('pur.colAmount'), t('pur.colCurrency'), t('pur.colStatus'), ''].map(h => (
+                {[t('pur.colDate'), t('pur.colSupplier'), t('pur.colInvoice'), 'Проект', t('pur.colAmount'), t('pur.colCurrency'), t('pur.colStatus'), ''].map(h => (
                   <th key={h} className="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant border-b border-outline-variant/10">
                     {h}
                   </th>
@@ -317,7 +341,7 @@ export default function PurchasesPage() {
               {isLoading ? (
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {[...Array(7)].map((_, j) => (
+                    {[...Array(8)].map((_, j) => (
                       <td key={j} className="px-6 py-4">
                         <div className="h-3 bg-surface-container-high rounded" />
                       </td>
@@ -326,32 +350,35 @@ export default function PurchasesPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-on-surface-variant font-body-sm">
+                  <td colSpan={8} className="px-6 py-16 text-center text-on-surface-variant font-body-sm">
                     {t('pur.noData')}
                   </td>
                 </tr>
               ) : (
                 filtered.map(p => {
-                  const isPaid = p.status === 'PAID';
-                  const isZero = Number(p.amount) === 0;
+                  const isMatched = p.status === 'MATCHED';
+                  const isZero = Number(p.amountTotal) === 0;
                   return (
                     <tr key={p.id} className="hover:bg-surface-variant/10 transition-colors group cursor-pointer" onClick={() => router.push(`/purchases/${p.id}`)}>
-                      <td className="px-6 py-4 font-data-mono text-data-mono">{fmtDate(p.date)}</td>
-                      <td className="px-6 py-4 font-body-md font-semibold text-on-surface">{p.supplier?.name || '—'}</td>
-                      <td className="px-6 py-4 text-on-surface-variant">{p.invoiceNo || '—'}</td>
+                      <td className="px-6 py-4 font-data-mono text-data-mono">{fmtDate(p.docDate)}</td>
+                      <td className="px-6 py-4 font-body-md font-semibold text-on-surface">{p.counterparty?.name || '—'}</td>
+                      <td className="px-6 py-4 text-on-surface-variant">{p.docNumber || '—'}</td>
+                      <td className="px-6 py-4 font-label-caps text-[12px]" onClick={e => e.stopPropagation()}>
+                        <ProjectCell purchase={p} />
+                      </td>
                       <td className={`px-6 py-4 font-data-mono text-data-mono ${isZero ? 'text-error' : 'text-primary'}`}>
-                        {fmt(p.amount, p.currency)}
+                        {fmt(p.amountTotal, p.currency)}
                       </td>
                       <td className="px-6 py-4 font-label-caps text-[12px] text-on-surface-variant">{p.currency}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${
-                            isPaid
+                            isMatched
                               ? 'bg-primary-container shadow-[0_0_8px_rgba(62,144,255,0.4)]'
                               : 'bg-outline'
                           }`} />
-                          <span className={`font-label-caps text-label-caps ${isPaid ? 'text-primary-container' : 'text-on-surface-variant'}`}>
-                            {isPaid ? 'PAID' : t('pur.pending')}
+                          <span className={`font-label-caps text-label-caps ${isMatched ? 'text-primary-container' : 'text-on-surface-variant'}`}>
+                            {STATUS_LABELS[p.status] || p.status}
                           </span>
                         </div>
                       </td>
@@ -387,7 +414,7 @@ export default function PurchasesPage() {
               <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">{t('pur.pending')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
-                  {purchases.filter(p => p.status !== 'PAID').length}
+                  {purchases.filter(p => p.status !== 'MATCHED').length}
                 </span>
                 <div className="text-xs text-on-surface-variant mt-1">неплатени за {year} г.</div>
               </div>
@@ -396,7 +423,7 @@ export default function PurchasesPage() {
               <span className="font-label-caps text-label-caps text-error uppercase">{t('pur.zeroAmt')}</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-error">
-                  {purchases.filter(p => Number(p.amount) === 0).length}
+                  {purchases.filter(p => Number(p.amountTotal) === 0).length}
                 </span>
                 <div className="text-xs text-on-surface-variant mt-1">изискват проверка</div>
               </div>
@@ -405,7 +432,7 @@ export default function PurchasesPage() {
               <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">ДОСТАВЧИЦИ</span>
               <div className="mt-4">
                 <span className="font-headline text-headline-md text-on-background">
-                  {new Set(purchases.map(p => p.supplier?.id).filter(Boolean)).size}
+                  {new Set(purchases.map(p => p.counterparty?.id).filter(Boolean)).size}
                 </span>
                 <div className="text-xs text-on-surface-variant mt-1">уникални доставчика за {year} г.</div>
               </div>
@@ -420,4 +447,3 @@ export default function PurchasesPage() {
     </div>
   );
 }
-
