@@ -5,6 +5,7 @@ const { auth } = require('../middleware/auth');
 
 const fx = require('../lib/fx');
 const { AUTHORITATIVE_BIZ_DOC_STATUSES, netCostAmount } = require('../lib/costs');
+const { STAGE_ORDER, STAGE_LABELS } = require('../lib/dealStages');
 
 const toNumber = value => Number(value || 0);
 const toEur = fx.toEur;
@@ -238,6 +239,45 @@ router.get('/', auth, async (req, res) => {
         processed: paymentStats.reduce((s, p) => s + (p.status === 'MATCHED' || p.status === 'PARTIAL' ? (p._count || 0) : 0), 0),
       },
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dashboard/pipeline — live deal-stage counts for the "Днес" operational
+// view. Pure groupBy/count, no row hydration — safe for frequent polling
+// (same cost class as /api/alerts/count).
+router.get('/pipeline', auth, async (req, res) => {
+  try {
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
+    const [byStageRaw, unstagedCount, stuckCount] = await Promise.all([
+      prisma.project.groupBy({
+        by: ['dealStage'],
+        where: { status: 'ACTIVE', dealStage: { not: null } },
+        _count: { id: true },
+      }),
+      prisma.project.count({
+        where: { status: 'ACTIVE', dealStage: null },
+      }),
+      prisma.project.count({
+        where: {
+          status: 'ACTIVE',
+          dealStage: { notIn: ['INVOICED_ZERO', 'CLOSED'] },
+          dealStageUpdatedAt: { lt: fourteenDaysAgo },
+        },
+      }),
+    ]);
+
+    const countByStage = Object.fromEntries(byStageRaw.map(r => [r.dealStage, r._count.id]));
+    const byStage = STAGE_ORDER.map(stage => ({
+      stage,
+      label: STAGE_LABELS[stage],
+      count: countByStage[stage] || 0,
+    }));
+
+    res.json({ byStage, unstagedCount, stuckCount });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

@@ -334,6 +334,7 @@ export default function ProjectDetailPage() {
     queryKey: ['project', id],
     queryFn: () => api.get(`/projects/${id}`).then(r => r.data),
     enabled: !!id,
+    refetchInterval: 60000,
   });
 
   if (isLoading) return (

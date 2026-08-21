@@ -6,7 +6,7 @@ import { api, fmtDate } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
-import { DEAL_STAGE_LABELS } from '@/lib/dealStages';
+import { DEAL_STAGE_LABELS, DEAL_STAGE_ORDER, dealStageIndex } from '@/lib/dealStages';
 
 interface Project {
   id: string;
@@ -32,6 +32,22 @@ function DealStageChip({ stage, owner }: { stage?: string | null; owner?: string
   return (
     <span className="inline-flex items-center gap-1 border border-primary-container/30 bg-primary-container/10 px-2 py-0.5 font-label-caps text-[9px] text-primary">
       {label}{owner && ` · ${owner}`}
+    </span>
+  );
+}
+
+const OWNER_COLOR: Record<string, string> = {
+  'Жоро': 'bg-primary-container/25 text-primary',
+  'Илиян': 'bg-warning/20 text-warning',
+  'Стефи': 'bg-emerald-500/20 text-emerald-400',
+};
+
+function OwnerAvatar({ owner }: { owner?: string | null }) {
+  if (!owner) return null;
+  const color = OWNER_COLOR[owner] || 'bg-surface-container-high text-on-surface-variant';
+  return (
+    <span title={owner} className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full font-label-caps text-[9px] ${color}`}>
+      {owner[0]}
     </span>
   );
 }
@@ -174,13 +190,95 @@ function MarginBadge({ pct }: { pct: number | null }) {
   return <span className={`font-data-mono text-data-mono ${color}`}>{pct}%</span>;
 }
 
+// ─── Поток (kanban по етапи на сделката) ────────────────────────────────────
+// Default изглед на страницата — вместо да отваряш всеки проект поотделно,
+// за да видиш къде спира сделката, целият екип вижда всичко на едно място.
+// Преместването е бутон върху картата (не drag-and-drop), за да работи
+// еднакво добре на телефон.
+const KANBAN_STAGES: Array<{ key: string; label: string }> = [
+  { key: '__none__', label: 'Без етап' },
+  ...DEAL_STAGE_ORDER.map(s => ({ key: s, label: DEAL_STAGE_LABELS[s] })),
+];
+
+function PipelineBoard({ projects, router }: { projects: Project[]; router: ReturnType<typeof useRouter> }) {
+  const qc = useQueryClient();
+  const move = useMutation({
+    mutationFn: ({ id, dealStage }: { id: string; dealStage: string | null }) =>
+      api.patch(`/projects/${id}`, { dealStage }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+
+  const byStage = new Map<string, Project[]>();
+  for (const col of KANBAN_STAGES) byStage.set(col.key, []);
+  for (const p of projects) {
+    const key = p.dealStage || '__none__';
+    (byStage.get(key) || byStage.get('__none__')!).push(p);
+  }
+
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-4">
+      {KANBAN_STAGES.map(col => {
+        const items = byStage.get(col.key) || [];
+        return (
+          <div key={col.key} className="w-72 flex-shrink-0">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <p className="font-label-caps text-label-caps text-on-surface-variant">{col.label}</p>
+              <span className="font-data-mono text-[11px] text-on-surface-variant/60">{items.length}</span>
+            </div>
+            <div className="space-y-3">
+              {items.length === 0 ? (
+                <div className="border border-dashed border-outline-variant/15 p-4 text-center font-body-sm text-body-sm text-on-surface-variant/30">—</div>
+              ) : items.map(p => {
+                const idx = dealStageIndex(p.dealStage);
+                const nextStage = idx >= 0 && idx < DEAL_STAGE_ORDER.length - 1 ? DEAL_STAGE_ORDER[idx + 1] : null;
+                return (
+                  <div key={p.id} className="border border-outline-variant/10 bg-surface-container-low p-3 space-y-2">
+                    <button onClick={() => router.push(`/projects/${p.id}`)} className="block w-full text-left">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-data-mono text-[10px] text-primary">{p.code}</p>
+                        <OwnerAvatar owner={p.dealStageOwner} />
+                      </div>
+                      <p className="mt-1 font-body-sm text-body-sm text-on-surface truncate">{p.name}</p>
+                      <p className="font-body-sm text-[11px] text-on-surface-variant truncate">{p.client?.name || 'Без клиент'}</p>
+                      <p className="mt-1 font-data-mono text-[11px] text-on-surface-variant">{fmtBGN(p.revenueBGN || 0)}</p>
+                    </button>
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-outline-variant/10">
+                      <select
+                        value={p.dealStage || ''}
+                        onChange={e => move.mutate({ id: p.id, dealStage: e.target.value || null })}
+                        className="flex-1 min-w-0 bg-surface-container border border-outline-variant/20 px-1.5 py-1 font-label-caps text-[9px] text-on-surface"
+                      >
+                        <option value="">— без етап —</option>
+                        {DEAL_STAGE_ORDER.map(s => <option key={s} value={s}>{DEAL_STAGE_LABELS[s]}</option>)}
+                      </select>
+                      {nextStage && (
+                        <button
+                          onClick={() => move.mutate({ id: p.id, dealStage: nextStage })}
+                          title={`Напред: ${DEAL_STAGE_LABELS[nextStage]}`}
+                          className="flex-shrink-0 border border-primary/30 px-2 py-1 font-label-caps text-[9px] text-primary hover:bg-primary/10"
+                        >
+                          Напред →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const router = useRouter();
   const [year, setYear] = useState(new Date().getFullYear());
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [view, setView] = useState<'grid' | 'pnl'>('grid');
+  const [view, setView] = useState<'kanban' | 'grid' | 'pnl'>('kanban');
 
   const params = new URLSearchParams();
   if (year) params.set('year', String(year));
@@ -190,6 +288,7 @@ export default function ProjectsPage() {
     queryKey: ['projects', year, status],
     queryFn: () => api.get(`/projects?${params}`).then(r => r.data),
     staleTime: 30000,
+    refetchInterval: 60000,
   });
   const t = useT();
   const statusTabs = getStatusTabs(t);
@@ -214,11 +313,11 @@ export default function ProjectsPage() {
           </div>
           <div className="flex items-center gap-2">
             <div className="flex border border-outline-variant/20 bg-surface-container p-1">
-              {(['grid', 'pnl'] as const).map(v => (
+              {(['kanban', 'grid', 'pnl'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)}
                   className={`px-3 py-1.5 font-label-caps text-label-caps transition-colors flex items-center gap-1.5 ${view === v ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'}`}>
-                  <span className="material-symbols-outlined text-[14px]">{v === 'grid' ? 'grid_view' : 'bar_chart'}</span>
-                  {v === 'grid' ? 'Карти' : 'P&L'}
+                  <span className="material-symbols-outlined text-[14px]">{v === 'kanban' ? 'view_kanban' : v === 'grid' ? 'grid_view' : 'bar_chart'}</span>
+                  {v === 'kanban' ? 'Поток' : v === 'grid' ? 'Карти' : 'P&L'}
                 </button>
               ))}
             </div>
@@ -283,6 +382,8 @@ export default function ProjectsPage() {
             <div className="bg-surface-container-low border border-outline-variant/10 p-12 text-center text-on-surface-variant">
               {t('proj.none')}
             </div>
+          ) : view === 'kanban' ? (
+            <PipelineBoard projects={filtered} router={router} />
           ) : view === 'grid' ? (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {filtered.map((project, index) => (

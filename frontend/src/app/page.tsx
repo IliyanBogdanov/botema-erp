@@ -53,6 +53,7 @@ function exportDashboardCsv(data: any, year: number) {
 
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear());
+  const [tab, setTab] = useState<'today' | 'finance'>('today');
   const qc = useQueryClient();
 
   // Sync pipeline state
@@ -101,6 +102,11 @@ export default function DashboardPage() {
   const { data: vat } = useQuery({
     queryKey: ['vat-overview', year],
     queryFn: () => api.get(`/vat/overview?year=${year}`).then(r => r.data),
+  });
+  const { data: pipeline } = useQuery({
+    queryKey: ['dashboard-pipeline'],
+    queryFn: () => api.get('/dashboard/pipeline').then(r => r.data),
+    refetchInterval: 60000,
   });
   const t = useT();
 
@@ -215,6 +221,18 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="flex border border-outline-variant/20 bg-surface-container p-1 w-fit">
+          {(['today', 'finance'] as const).map(v => (
+            <button key={v} onClick={() => setTab(v)}
+              className={`px-4 py-1.5 font-label-caps text-label-caps transition-colors flex items-center gap-1.5 ${tab === v ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'}`}>
+              <span className="material-symbols-outlined text-[14px]">{v === 'today' ? 'today' : 'account_balance'}</span>
+              {v === 'today' ? 'Днес' : 'Финанси'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'today' && <>
+
         {/* ── ALERT BANNERS ──────────────────────────────────────────────────── */}
         {(Array.isArray(alertsList) ? alertsList : []).length > 0 && (
           <div className="bg-surface-container-low rounded-xl border border-error/15 border-l-4 border-l-error p-4 flex items-center justify-between">
@@ -241,6 +259,34 @@ export default function DashboardPage() {
               ДАННИТЕ СА ЗА ПЕРИОДА <span className="text-on-surface/70">{periodLabel}</span> — РАЗХОДИТЕ ВКЛЮЧВАТ АВАНСОВИ ПОКУПКИ ЗА БЪДЕЩИ ДОСТАВКИ
             </p>
           </div>
+        )}
+
+        {/* ── ХОД НА СДЕЛКИТЕ (live deal-stage pipeline) ───────────────────────── */}
+        {pipeline && (
+          <section className="bg-surface-container-low rounded-xl border border-outline-variant/8 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-label-caps text-label-caps text-on-surface">Ход на сделките</h3>
+              {pipeline.stuckCount > 0 && (
+                <a href="/projects" className="font-label-caps text-[10px] text-warning hover:opacity-80">
+                  {pipeline.stuckCount} {pipeline.stuckCount === 1 ? 'сделка чака' : 'сделки чакат'} &gt;14 дни →
+                </a>
+              )}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {pipeline.unstagedCount > 0 && (
+                <a href="/projects" className="flex-shrink-0 min-w-[92px] border border-outline-variant/15 px-3 py-2 hover:border-primary-container/30 transition-colors">
+                  <p className="font-data-mono text-headline-sm text-on-surface-variant">{pipeline.unstagedCount}</p>
+                  <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-1">Без етап</p>
+                </a>
+              )}
+              {(pipeline.byStage || []).map((s: any) => (
+                <a key={s.stage} href="/projects" className="flex-shrink-0 min-w-[92px] border border-outline-variant/15 px-3 py-2 hover:border-primary-container/30 transition-colors">
+                  <p className={`font-data-mono text-headline-sm ${s.count > 0 ? 'text-primary' : 'text-on-surface-variant/30'}`}>{s.count}</p>
+                  <p className="font-label-caps text-[9px] text-on-surface-variant/60 mt-1 leading-tight">{s.label}</p>
+                </a>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ── KPI CARDS ──────────────────────────────────────────────────────── */}
@@ -303,6 +349,10 @@ export default function DashboardPage() {
             )}
           </div>
         </section>
+
+        </>}
+
+        {tab === 'finance' && <>
 
         {/* ── BENTO GRID (Suppliers + AI Docs) ──────────────────────────────── */}
         <section className="grid grid-cols-12 gap-gutter">
@@ -494,6 +544,10 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        </>}
+
+        {tab === 'today' && <>
+
         {/* ── FEATURED PROJECTS (Visual Gallery) ─────────────────────────────── */}
         <section>
           <div className="flex justify-between items-center mb-6">
@@ -536,6 +590,8 @@ export default function DashboardPage() {
             ))}
           </div>
         </section>
+
+        </>}
 
       </div>
     </div>
