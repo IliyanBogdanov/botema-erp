@@ -1,10 +1,10 @@
-name: Deploy Studio Botema ERP
+name: CI Studio Botema ERP
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   # ─── Test Backend ────────────────────────────────────────────────────────────
@@ -30,29 +30,8 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
 
-  # ─── Deploy Backend to Railway ───────────────────────────────────────────────
-  deploy-backend:
-    needs: [test-backend]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: railwayapp/railway-action@v1
-        with:
-          railway-token: ${{ secrets.RAILWAY_TOKEN }}
-          service: botema-erp-backend
-
-  # ─── Deploy Frontend to Vercel ───────────────────────────────────────────────
-  deploy-frontend:
-    needs: [test-frontend]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend
-          vercel-args: '--prod'
+# Deploys are NOT handled here:
+# - Backend (Railway) has its own native GitHub integration — auto-deploys on push to master.
+# - Frontend (Vercel) needs the same: connect the repo in the Vercel dashboard
+#   (Project Settings → Git → Connect Git Repository) so it auto-deploys too.
+#   Until that's connected, deploy manually: cd frontend && vercel --prod
