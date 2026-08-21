@@ -154,7 +154,8 @@ router.get('/:id', auth, async (req, res) => {
       inventory: { include: { supplier: { select: { name: true } } } },
       orders: {
         include: {
-          counterparty: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true } },
+          supplier: { select: { id: true, name: true } },
           lines: true,
           deliveries: { select: { id: true, status: true, deliveryDate: true, deliveryType: true } },
         },

@@ -25,7 +25,7 @@ router.get('/', auth, async (req, res) => {
       prisma.delivery.findMany({
         where,
         include: {
-          order: { select: { id: true, orderType: true, status: true, counterpartyId: true } },
+          order: { select: { id: true, orderType: true, status: true, clientId: true, supplierId: true } },
           project: { select: { id: true, code: true, name: true } },
           movements: {
             include: { inventoryItem: { select: { id: true, sku: true, name: true, unit: true } } },
@@ -49,7 +49,7 @@ router.get('/:id', auth, async (req, res) => {
     const delivery = await prisma.delivery.findUnique({
       where: { id: req.params.id },
       include: {
-        order: { include: { lines: true, counterparty: { select: { id: true, name: true } } } },
+        order: { include: { lines: true, client: { select: { id: true, name: true } }, supplier: { select: { id: true, name: true } } } },
         project: { select: { id: true, code: true, name: true } },
         movements: { include: { inventoryItem: true } },
       },

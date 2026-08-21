@@ -134,7 +134,7 @@ function TimelineTab({ project }: { project: any }) {
                 <div>
                   <p className="font-body-sm text-body-sm text-on-surface">{o.orderNumber || o.id.slice(-6)}</p>
                   <p className="text-[10px] text-on-surface-variant/60">
-                    {fmtDate(o.orderDate)} · {ORDER_TYPE_LABELS[o.orderType] || o.orderType} · {o.counterparty?.name || '—'}
+                    {fmtDate(o.orderDate)} · {ORDER_TYPE_LABELS[o.orderType] || o.orderType} · {(o.client || o.supplier)?.name || '—'}
                   </p>
                 </div>
                 <StatusChip status={o.status} />
