@@ -38,7 +38,7 @@ export default function NewIssuedDocPage() {
     number: '',
     date: new Date().toISOString().slice(0, 10),
     dueDate: '',
-    clientId: '',
+    counterpartyId: '',
     projectId: '',
     currency: 'EUR',
     description: '',
@@ -50,7 +50,7 @@ export default function NewIssuedDocPage() {
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients-list'],
-    queryFn: () => api.get('/clients').then(r => r.data),
+    queryFn: () => api.get('/counterparties?type=CLIENT').then(r => r.data),
   });
   const { data: projects = [] } = useQuery({
     queryKey: ['projects-list'],
@@ -149,7 +149,7 @@ export default function NewIssuedDocPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-on-surface-variant mb-1">Клиент</label>
-              <select className="input" value={form.clientId} onChange={e => setField('clientId', e.target.value)}>
+              <select className="input" value={form.counterpartyId} onChange={e => setField('counterpartyId', e.target.value)}>
                 <option value="">— Избери клиент —</option>
                 {(clients as any[]).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -159,6 +159,13 @@ export default function NewIssuedDocPage() {
               <select className="input" value={form.projectId} onChange={e => setField('projectId', e.target.value)}>
                 <option value="">— Без проект —</option>
                 {(projects as any[]).map((p: any) => <option key={p.id} value={p.id}>{p.code} – {p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Марка</label>
+              <select className="input" value={form.brand} onChange={e => setField('brand', e.target.value)}>
+                <option value="STUDIO_BOTEMA">Studio Botema</option>
+                <option value="LUMINAVERA">Luminavera (онлайн магазин)</option>
               </select>
             </div>
           </div>

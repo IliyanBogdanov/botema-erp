@@ -64,6 +64,9 @@ enum Brand {
 
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
 
+// LEGACY — заменена от Counterparty(type=CLIENT). Не се пише/чете от нищо
+// живо след migrateClientsSuppliersToCounterparty.js; държим таблицата няколко
+// дни като safety net преди физическо изтриване.
 model Client {
   id        String     @id @default(cuid())
   name      String
@@ -95,6 +98,9 @@ enum ClientType {
 
 // ─── SUPPLIERS ───────────────────────────────────────────────────────────────
 
+// LEGACY — заменена от Counterparty(type=SUPPLIER). Не се пише/чете от нищо
+// живо след migrateClientsSuppliersToCounterparty.js; държим таблицата няколко
+// дни като safety net преди физическо изтриване.
 model Supplier {
   id        String   @id @default(cuid())
   name      String
@@ -118,8 +124,10 @@ model Project {
   id        String        @id @default(cuid())
   code      String        @unique // e.g. "1717.183"
   name      String
-  clientId  String?
+  clientId  String?       // LEGACY → Client. Safety-net; not written going forward.
   client    Client?       @relation(fields: [clientId], references: [id])
+  counterpartyId String?  // → Counterparty(type=CLIENT), authoritative going forward
+  counterparty    Counterparty? @relation("ProjectClient", fields: [counterpartyId], references: [id])
   status    ProjectStatus @default(ACTIVE)
   year      Int
   notes     String?
@@ -180,8 +188,10 @@ model Invoice {
   number      String        @unique
   date        DateTime
   dueDate     DateTime?
-  clientId    String?
+  clientId    String?       // LEGACY → Client. Safety-net; not written going forward.
   client      Client?       @relation(fields: [clientId], references: [id])
+  counterpartyId String?    // → Counterparty(type=CLIENT), authoritative going forward
+  counterparty   Counterparty? @relation(fields: [counterpartyId], references: [id])
   projectId   String?
   project     Project?      @relation(fields: [projectId], references: [id])
   type        InvoiceType   @default(INVOICE)
@@ -244,8 +254,10 @@ model Purchase {
   id          String        @id @default(cuid())
   invoiceNo   String?
   date        DateTime
-  supplierId  String
+  supplierId  String        // LEGACY → Supplier. Safety-net; not written going forward.
   supplier    Supplier      @relation(fields: [supplierId], references: [id])
+  counterpartyId String?    // → Counterparty(type=SUPPLIER), authoritative going forward
+  counterparty    Counterparty? @relation(fields: [counterpartyId], references: [id])
   projectId   String?
   project     Project?      @relation(fields: [projectId], references: [id])
   currency    String        @default("EUR")
@@ -279,8 +291,10 @@ model PurchaseItem {
 
 model InventoryItem {
   id         String       @id @default(cuid())
-  supplierId String
+  supplierId String        // LEGACY → Supplier. Safety-net; not written going forward.
   supplier   Supplier     @relation(fields: [supplierId], references: [id])
+  counterpartyId String?  // → Counterparty(type=SUPPLIER), authoritative going forward
+  counterparty    Counterparty? @relation(fields: [counterpartyId], references: [id])
   projectId  String?
   project    Project?     @relation(fields: [projectId], references: [id])
   code       String
@@ -519,6 +533,12 @@ model Counterparty {
   logoUrl     String?         // logo image URL (Clearbit or manual)
   notes       String?
   companyId   String?         // Studio Botema
+  // Полета мигрирани от legacy Client (виж migrateClientsSuppliersToCounterparty.js) —
+  // само за type=CLIENT редове, но държани тук, за да няма втора таблица.
+  mol         String?         // МОЛ (материално отговорно лице), само за клиенти
+  since       Int?            // година на onboarding, само за клиенти
+  clientType  ClientType?     // COMPANY/PERSON/ET, по-фин от isIndividual
+  brand       Brand?          // STUDIO_BOTEMA/LUMINAVERA — канал за издадени фактури
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -530,6 +550,10 @@ model Counterparty {
   payments            Payment[]
   missingDocuments    MissingDocument[]
   designedProjects    Project[]            @relation("ProjectDesigner")
+  invoices            Invoice[]
+  projects            Project[]            @relation("ProjectClient")
+  purchases           Purchase[]
+  inventory           InventoryItem[]
 
   @@index([type])
   @@index([name])

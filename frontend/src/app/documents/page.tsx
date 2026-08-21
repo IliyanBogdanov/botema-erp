@@ -248,7 +248,7 @@ function ReviewModal({ doc, onClose }: { doc: Document | null; onClose: () => vo
   const [category, setCategory] = useState('Документи');
   const [error, setError] = useState('');
 
-  const { data: clients = [] } = useQuery({ queryKey: ['clients-list'], queryFn: () => api.get('/clients').then(r => r.data) });
+  const { data: clients = [] } = useQuery({ queryKey: ['clients-list'], queryFn: () => api.get('/counterparties?type=CLIENT').then(r => r.data) });
   const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers-list'], queryFn: () => api.get('/suppliers').then(r => r.data) });
   const { data: projects = [] } = useQuery({ queryKey: ['projects-list'], queryFn: () => api.get('/projects').then(r => r.data) });
 

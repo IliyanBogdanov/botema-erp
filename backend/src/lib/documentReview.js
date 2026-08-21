@@ -117,20 +117,34 @@ async function analyzeDocument(prisma, extractedData = {}) {
   };
 }
 
-async function findOrCreateSupplier(prisma, supplierId, data) {
-  if (supplierId) return prisma.supplier.findUnique({ where: { id: supplierId } });
-  const name = normalizeText(data.supplierName) || 'Непознат доставчик';
-  const existing = await prisma.supplier.findFirst({ where: { name: { contains: name, mode: 'insensitive' } } });
-  if (existing) return existing;
-  return prisma.supplier.create({ data: { name, currency: data.currency || 'BGN' } });
+// Resolves/creates the Counterparty(type=SUPPLIER) for this document, PLUS a
+// legacy Supplier row (Purchase.supplierId is still a required legacy FK —
+// see migrateClientsSuppliersToCounterparty.js) so the created Purchase
+// satisfies both. Counterparty is the one to actually maintain going forward.
+async function findOrCreateSupplierCounterparty(prisma, supplierId, data) {
+  let cp = null;
+  if (supplierId) cp = await prisma.counterparty.findUnique({ where: { id: supplierId } });
+  if (!cp) {
+    const name = normalizeText(data.supplierName) || 'Непознат доставчик';
+    cp = await prisma.counterparty.findFirst({ where: { type: 'SUPPLIER', name: { contains: name, mode: 'insensitive' } } });
+    if (!cp) cp = await prisma.counterparty.create({ data: { name, type: 'SUPPLIER', country: 'BG', currency: data.currency || 'EUR' } });
+  }
+  let supplier = await prisma.supplier.findFirst({ where: { name: { equals: cp.name, mode: 'insensitive' } } });
+  if (!supplier) supplier = await prisma.supplier.create({ data: { name: cp.name, currency: data.currency || 'BGN' } });
+  return { supplier, counterparty: cp };
 }
 
-async function findOrCreateClient(prisma, clientId, data) {
-  if (clientId) return prisma.client.findUnique({ where: { id: clientId } });
+// Resolves/creates the Counterparty(type=CLIENT) for this document. Invoice.clientId
+// is legacy — new invoices go through counterpartyId only.
+async function findOrCreateClientCounterparty(prisma, clientId, data) {
+  if (clientId) {
+    const cp = await prisma.counterparty.findUnique({ where: { id: clientId } });
+    if (cp) return cp;
+  }
   const name = normalizeText(data.clientName) || 'Непознат клиент';
-  const existing = await prisma.client.findFirst({ where: { name: { contains: name, mode: 'insensitive' } } });
+  const existing = await prisma.counterparty.findFirst({ where: { type: 'CLIENT', name: { contains: name, mode: 'insensitive' } } });
   if (existing) return existing;
-  return prisma.client.create({ data: { name } });
+  return prisma.counterparty.create({ data: { name, type: 'CLIENT', country: 'BG', currency: 'BGN' } });
 }
 
 async function reviewDocument(prisma, docId, payload, userId) {
@@ -168,12 +182,13 @@ async function reviewDocument(prisma, docId, payload, userId) {
   let created = null;
 
   if (action === 'CREATE_PURCHASE') {
-    const supplier = await findOrCreateSupplier(prisma, payload.supplierId, data);
+    const { supplier, counterparty: supplierCp } = await findOrCreateSupplierCounterparty(prisma, payload.supplierId, data);
     created = await prisma.purchase.create({
       data: {
         invoiceNo: normalizeText(data.invoiceNo) || null,
         date: new Date(data.date || data.docDate || Date.now()),
         supplierId: supplier.id,
+        counterpartyId: supplierCp.id,
         projectId: payload.projectId || null,
         currency: data.currency || supplier.currency || 'BGN',
         amount: totals.amountTotal || totals.amountNet,
@@ -209,7 +224,7 @@ async function reviewDocument(prisma, docId, payload, userId) {
   }
 
   if (action === 'CREATE_INVOICE') {
-    const client = await findOrCreateClient(prisma, payload.clientId, data);
+    const client = await findOrCreateClientCounterparty(prisma, payload.clientId, data);
     const items = Array.isArray(data.items) && data.items.length
       ? data.items
       : [{ description: data.description || doc.filename, qty: 1, unitPrice: totals.amountNet || totals.amountTotal, vatPct: totals.vatAmount ? 20 : 0 }];
@@ -219,7 +234,7 @@ async function reviewDocument(prisma, docId, payload, userId) {
       data: {
         number: normalizeText(data.invoiceNo) || `DOC-${doc.id.slice(-8)}`,
         date: new Date(data.date || data.docDate || Date.now()),
-        clientId: client.id,
+        counterpartyId: client.id,
         projectId: payload.projectId || null,
         type: data.type === 'PROFORMA' ? 'PROFORMA' : 'INVOICE',
         status: payload.status || 'PENDING',

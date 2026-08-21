@@ -72,7 +72,7 @@ const yearTabs = [CY - 2, CY - 1, CY];
 function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    code: '', name: '', clientId: '', status: 'ACTIVE',
+    code: '', name: '', counterpartyId: '', status: 'ACTIVE',
     year: new Date().getFullYear(), notes: '',
     startDate: new Date().toISOString().slice(0, 10),
   });
@@ -80,7 +80,7 @@ function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void })
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients-list'],
-    queryFn: () => api.get('/clients').then(r => r.data),
+    queryFn: () => api.get('/counterparties?type=CLIENT').then(r => r.data),
   });
 
   const mutation = useMutation({
@@ -113,7 +113,7 @@ function ProjectModal({ open, onClose }: { open: boolean; onClose: () => void })
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={modalLabelClass}>Клиент</label>
-            <select className="input" value={form.clientId} onChange={e => setField('clientId', e.target.value)}>
+            <select className="input" value={form.counterpartyId} onChange={e => setField('counterpartyId', e.target.value)}>
               <option value="">— Без клиент —</option>
               {(clients as any[]).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>

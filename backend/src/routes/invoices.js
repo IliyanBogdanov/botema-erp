@@ -15,17 +15,22 @@ router.get('/', auth, async (req, res) => {
     if (year)     where.date = { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) };
     if (brand)    where.brand = brand;
     if (status)   where.status = status;
-    if (clientId) where.clientId = clientId;
+    if (clientId) where.OR = [{ clientId }, { counterpartyId: clientId }];
     if (search)   where.OR = [
       { number: { contains: search, mode: 'insensitive' } },
       { description: { contains: search, mode: 'insensitive' } },
       { client: { name: { contains: search, mode: 'insensitive' } } },
+      { counterparty: { name: { contains: search, mode: 'insensitive' } } },
     ];
 
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
         where,
-        include: { client: { select: { id: true, name: true } }, project: { select: { id: true, code: true, name: true } } },
+        include: {
+          client: { select: { id: true, name: true } },
+          counterparty: { select: { id: true, name: true } },
+          project: { select: { id: true, code: true, name: true } },
+        },
         orderBy: { date: 'desc' },
         skip: (page - 1) * limit,
         take: parseInt(limit),
@@ -33,7 +38,10 @@ router.get('/', auth, async (req, res) => {
       prisma.invoice.count({ where }),
     ]);
 
-    res.json({ data: invoices, total, page: parseInt(page), pages: Math.ceil(total / limit) });
+    res.json({
+      data: invoices.map(inv => ({ ...inv, client: inv.counterparty || inv.client })),
+      total, page: parseInt(page), pages: Math.ceil(total / limit),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -60,7 +68,7 @@ router.get('/aging', auth, async (req, res) => {
     const today = new Date();
     const invoices = await prisma.invoice.findMany({
       where: { status: { in: ['PENDING', 'OVERDUE'] } },
-      include: { client: { select: { id: true, name: true } } },
+      include: { client: { select: { id: true, name: true } }, counterparty: { select: { id: true, name: true } } },
       orderBy: { dueDate: 'asc' },
     });
 
@@ -80,7 +88,7 @@ router.get('/aging', auth, async (req, res) => {
         amountTotal: Number(inv.amountTotal),
         amountEur: Number(toEur(inv.amountTotal, inv.currency).toFixed(2)),
         currency: inv.currency,
-        clientName: inv.client?.name || null,
+        clientName: inv.counterparty?.name || inv.client?.name || null,
         daysOverdue,
         bucket: daysOverdue === null ? 'NO_DUE_DATE'
           : daysOverdue <= 0 ? 'CURRENT'
@@ -111,10 +119,10 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
-      include: { client: true, project: true, items: true, createdBy: { select: { name: true } } }
+      include: { client: true, counterparty: true, project: true, items: true, createdBy: { select: { name: true } } }
     });
     if (!invoice) return res.status(404).json({ error: 'Not found' });
-    res.json(invoice);
+    res.json({ ...invoice, client: invoice.counterparty || invoice.client });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -123,7 +131,7 @@ router.get('/:id', auth, async (req, res) => {
 // POST /api/invoices
 router.post('/', auth, async (req, res) => {
   try {
-    const { clientId, projectId, type, brand, currency, date, dueDate,
+    const { clientId, counterpartyId, projectId, type, brand, currency, date, dueDate,
             description, notes, items } = req.body;
 
     // Calculate totals
@@ -131,8 +139,10 @@ router.post('/', auth, async (req, res) => {
     const vatAmount = items.reduce((s, i) => s + (i.qty * i.unitPrice * i.vatPct / 100), 0);
     const amountTotal = amountNet + vatAmount;
 
-    // Generate number
-    const last = await prisma.invoice.findFirst({ orderBy: { number: 'desc' }, where: { brand } });
+    // Generate number — ONE sequence across brands (Studio Botema and its
+    // Luminavera online-shop channel are the same legal entity/VAT number;
+    // the accountant numbers them in a single sequence in Micro.bg).
+    const last = await prisma.invoice.findFirst({ orderBy: { number: 'desc' } });
     const nextNum = last ? parseInt(last.number.replace(/\D/g, '')) + 1 : 1;
     const number = String(nextNum).padStart(10, '0');
 
@@ -140,6 +150,7 @@ router.post('/', auth, async (req, res) => {
       data: {
         number,
         ...(clientId  ? { clientId }  : {}),
+        ...(counterpartyId ? { counterpartyId } : {}),
         ...(projectId ? { projectId } : {}),
         type, brand, currency,
         date: new Date(date), dueDate: dueDate ? new Date(dueDate) : null,
@@ -152,9 +163,9 @@ router.post('/', auth, async (req, res) => {
           total: i.qty * i.unitPrice * (1 + (i.vatPct || 20) / 100)
         }))}
       },
-      include: { client: true, project: true, items: true }
+      include: { client: true, counterparty: true, project: true, items: true }
     });
-    res.status(201).json(invoice);
+    res.status(201).json({ ...invoice, client: invoice.counterparty || invoice.client });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -166,9 +177,9 @@ router.patch('/:id', auth, async (req, res) => {
     const invoice = await prisma.invoice.update({
       where: { id: req.params.id },
       data: req.body,
-      include: { client: true, project: true }
+      include: { client: true, counterparty: true, project: true }
     });
-    res.json(invoice);
+    res.json({ ...invoice, client: invoice.counterparty || invoice.client });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -300,7 +311,7 @@ router.get('/receivables-audit', auth, async (req, res) => {
   try {
     const outstanding = await prisma.invoice.findMany({
       where: { status: { in: ['PENDING', 'OVERDUE'] } },
-      include: { client: { select: { name: true } } },
+      include: { client: { select: { name: true } }, counterparty: { select: { name: true } } },
       orderBy: { dueDate: 'asc' },
     });
 
@@ -321,7 +332,7 @@ router.get('/receivables-audit', auth, async (req, res) => {
     const result = outstanding.map(inv => ({
       id: inv.id,
       number: inv.number,
-      clientName: inv.client?.name || 'Unknown',
+      clientName: inv.counterparty?.name || inv.client?.name || 'Unknown',
       amountTotal: Number(inv.amountTotal || 0),
       currency: inv.currency,
       date: inv.date,

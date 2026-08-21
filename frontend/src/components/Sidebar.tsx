@@ -8,10 +8,9 @@ import { useT } from '@/lib/i18n';
 import { api } from '@/lib/api';
 
 // Ежедневни модули — това, което Жоро/Стефи/Илиян отварят всеки ден.
-// Финансовите одит-таблове (ДДС/П&Л/Reconciliation) и AI Документи-опашката
-// живеят под Advanced — те са за одит на данните, не за ежедневна работа.
-// nav.clients/nav.counterparties/nav.suppliers остават три отделни линка,
-// докато не се довърши сливането им в едно "Контрагенти" (виж плана).
+// Финансовите одит-таблове (ДДС/П&Л/Reconciliation) живеят под Advanced —
+// те са за одит на данните, не за ежедневна работа. Клиенти+Доставчици+
+// Контрагенти вече са едно място (виж migrateClientsSuppliersToCounterparty.js).
 const primaryGroups = [
   {
     label: 'Operations',
@@ -27,9 +26,7 @@ const primaryGroups = [
   {
     label: 'Studio',
     items: [
-      { key: 'nav.clients', href: '/clients', icon: 'groups' },
       { key: 'nav.counterparties', href: '/counterparties', icon: 'corporate_fare' },
-      { key: 'nav.suppliers', href: '/suppliers', icon: 'local_shipping' },
     ],
   },
 ];

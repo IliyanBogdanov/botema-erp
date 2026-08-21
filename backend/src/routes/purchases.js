@@ -3,11 +3,32 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { auth } = require('../middleware/auth');
 
+// Same normalize/similarity used by the Client/Supplier→Counterparty migration
+// and lib/unparsedIncoming.js — kept in sync so "which supplier is this really"
+// answers the same way everywhere.
+function normalize(s) {
+  return String(s || '').toLowerCase()
+    .replace(/\b(еоод|оод|ад|ет|ltd|gmbh|s\.?r\.?l\.?|spa|s\.?p\.?a\.?|inc|llc|b\.?v\.?|sn|srl|co)\b/gi, '')
+    .replace(/[^\wа-я\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+function similarity(a, b) {
+  const na = normalize(a), nb = normalize(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 0.9;
+  const wa = new Set(na.split(' ').filter(w => w.length > 2));
+  const wb = new Set(nb.split(' ').filter(w => w.length > 2));
+  const inter = [...wa].filter(w => wb.has(w)).length;
+  const union = new Set([...wa, ...wb]).size;
+  return union > 0 ? inter / union : 0;
+}
+
 router.get('/', auth, async (req, res) => {
-  const { year, supplierId, projectId } = req.query;
+  const { year, supplierId, counterpartyId, projectId } = req.query;
   const where = {};
   if (year) where.year = parseInt(year);
   if (supplierId) where.supplierId = supplierId;
+  if (counterpartyId) where.counterpartyId = counterpartyId;
   if (projectId) where.projectId = projectId;
   const purchases = await prisma.purchase.findMany({
     where, include: { supplier: { select: { name: true } }, project: { select: { code: true, name: true } } },
@@ -19,26 +40,39 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { supplierId, projectId, ...rest } = req.body;
-    // /api/suppliers now serves Counterparty rows, but Purchase.supplierId still
-    // points at the legacy Supplier table — resolve counterparty ids to a Supplier.
-    let resolvedSupplierId = supplierId || null;
-    if (resolvedSupplierId) {
-      const existing = await prisma.supplier.findUnique({ where: { id: resolvedSupplierId } });
-      if (!existing) {
-        const cp = await prisma.counterparty.findUnique({ where: { id: resolvedSupplierId } });
-        if (!cp) return res.status(400).json({ error: 'Unknown supplier id' });
-        const byName = await prisma.supplier.findFirst({ where: { name: { equals: cp.name, mode: 'insensitive' } } });
-        resolvedSupplierId = byName
-          ? byName.id
+    // The supplier dropdown feeds Counterparty ids (see /api/suppliers). Purchase.supplierId
+    // is still a required legacy FK into Supplier — resolve/reuse a Supplier row by fuzzy
+    // name match (not exact) so near-duplicate spellings don't keep spawning new rows;
+    // counterpartyId is set directly and is the field routes should read going forward.
+    let resolvedSupplierId = null;
+    let resolvedCounterpartyId = null;
+    if (supplierId) {
+      const cp = await prisma.counterparty.findUnique({ where: { id: supplierId } });
+      if (cp) {
+        resolvedCounterpartyId = cp.id;
+        const candidates = await prisma.supplier.findMany();
+        let best = null, bestSim = 0;
+        for (const c of candidates) {
+          const s = similarity(c.name, cp.name);
+          if (s > bestSim) { bestSim = s; best = c; }
+        }
+        resolvedSupplierId = (best && bestSim >= 0.85)
+          ? best.id
           : (await prisma.supplier.create({
               data: { name: cp.name, country: cp.country || 'BG', currency: cp.currency || 'EUR', email: cp.email || null },
             })).id;
+      } else {
+        // legacy caller still passing a real Supplier id directly
+        const existing = await prisma.supplier.findUnique({ where: { id: supplierId } });
+        if (!existing) return res.status(400).json({ error: 'Unknown supplier id' });
+        resolvedSupplierId = existing.id;
       }
     }
     const purchase = await prisma.purchase.create({
       data: {
         ...rest,
         supplierId: resolvedSupplierId,
+        counterpartyId: resolvedCounterpartyId,
         projectId: projectId || null,
         date: new Date(req.body.date),
         year: new Date(req.body.date).getFullYear(),

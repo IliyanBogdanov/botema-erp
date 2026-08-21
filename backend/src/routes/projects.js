@@ -33,6 +33,7 @@ router.get('/', auth, async (req, res) => {
     where,
     include: {
       client: { select: { id: true, name: true } },
+      counterparty: { select: { id: true, name: true } },
       designer: { select: { id: true, name: true } },
       invoices: { select: { amountNet: true, amountTotal: true, currency: true, status: true } },
       bizDocuments: PROJECT_COST_DOCS,
@@ -55,6 +56,7 @@ router.get('/', auth, async (req, res) => {
 
     return {
       ...p,
+      client: p.counterparty || p.client, // counterparty (new) wins once a project has one
       revenueBGN: Math.round(revenueBGN),
       costsBGN: Math.round(costsBGN),
       profitBGN: Math.round(profitBGN),
@@ -80,6 +82,7 @@ router.get('/pnl', auth, async (req, res) => {
     where,
     include: {
       client: { select: { id: true, name: true } },
+      counterparty: { select: { id: true, name: true } },
       invoices: { select: { amountNet: true, currency: true, status: true, date: true } },
       bizDocuments: PROJECT_COST_DOCS,
     },
@@ -102,7 +105,7 @@ router.get('/pnl', auth, async (req, res) => {
       name: p.name,
       status: p.status,
       year: p.year,
-      clientName: p.client?.name || null,
+      clientName: p.counterparty?.name || p.client?.name || null,
       revenueBGN: Math.round(revenueBGN),
       costsBGN: Math.round(costsBGN),
       profitBGN: Math.round(profitBGN),
@@ -148,10 +151,11 @@ router.get('/:id', auth, async (req, res) => {
     where: { id: req.params.id },
     include: {
       client: true,
+      counterparty: true,
       designer: { select: { id: true, name: true } },
-      invoices: { include: { client: { select: { name: true } } } },
-      purchases: { include: { supplier: { select: { name: true } } } },
-      inventory: { include: { supplier: { select: { name: true } } } },
+      invoices: { include: { client: { select: { name: true } }, counterparty: { select: { name: true } } } },
+      purchases: { include: { supplier: { select: { name: true } }, counterparty: { select: { name: true } } } },
+      inventory: { include: { supplier: { select: { name: true } }, counterparty: { select: { name: true } } } },
       orders: {
         include: {
           client: { select: { id: true, name: true } },
@@ -182,6 +186,10 @@ router.get('/:id', auth, async (req, res) => {
 
   res.json({
     ...project,
+    client: project.counterparty || project.client, // counterparty (new) wins once a project has one
+    invoices: project.invoices.map(inv => ({ ...inv, client: inv.counterparty || inv.client })),
+    purchases: project.purchases.map(p => ({ ...p, supplier: p.counterparty || p.supplier })),
+    inventory: project.inventory.map(i => ({ ...i, supplier: i.counterparty || i.supplier })),
     totalRevenue: totalRevenueBGN,
     totalCosts: totalCostsBGN,
     margin: totalRevenueBGN - totalCostsBGN,

@@ -13,7 +13,7 @@ router.get('/', auth, async (req, res) => {
     const limitNum = Math.min(100, parseInt(limit));
 
     const where = { type: { in: type ? [type] : DOC_TYPES } };
-    if (clientId) where.clientId = clientId;
+    if (clientId) where.OR = [{ clientId }, { counterpartyId: clientId }];
     if (projectId) where.projectId = projectId;
     if (year) {
       const y = parseInt(year);
@@ -26,6 +26,7 @@ router.get('/', auth, async (req, res) => {
         where,
         include: {
           client: { select: { id: true, name: true, eik: true, vat: true, address: true, city: true, mol: true } },
+          counterparty: { select: { id: true, name: true, eik: true, vat: true, address: true, city: true, mol: true } },
           project: { select: { id: true, code: true, name: true } },
           items: { orderBy: { sortOrder: 'asc' } },
         },
@@ -35,7 +36,7 @@ router.get('/', auth, async (req, res) => {
       }),
     ]);
 
-    res.json({ total, page: pageNum, limit: limitNum, data: docs });
+    res.json({ total, page: pageNum, limit: limitNum, data: docs.map(d => ({ ...d, client: d.counterparty || d.client })) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -48,13 +49,14 @@ router.get('/:id', auth, async (req, res) => {
       where: { id: req.params.id },
       include: {
         client: true,
+        counterparty: true,
         project: { select: { id: true, code: true, name: true } },
         items: { orderBy: { sortOrder: 'asc' } },
         createdBy: { select: { id: true, name: true } },
       },
     });
     if (!doc) return res.status(404).json({ error: 'Not found' });
-    res.json(doc);
+    res.json({ ...doc, client: doc.counterparty || doc.client });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -111,12 +113,13 @@ router.post('/', auth, async (req, res) => {
       },
       include: {
         client: true,
+        counterparty: true,
         project: { select: { id: true, code: true, name: true } },
         items: { orderBy: { sortOrder: 'asc' } },
       },
     });
 
-    res.status(201).json(doc);
+    res.status(201).json({ ...doc, client: doc.counterparty || doc.client });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
