@@ -1,8 +1,11 @@
 'use client';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { api, fmt, fmtBgn, fmtDate, statusConfig } from '@/lib/api';
+import {
+  DEAL_STAGE_ORDER, DEAL_STAGE_LABELS, DEAL_STAGE_SUGGESTED_OWNER, DEAL_STAGE_OWNERS, dealStageIndex, DealStage,
+} from '@/lib/dealStages';
 
 const PROJ_IMGS = [
   'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&auto=format&q=80',
@@ -39,31 +42,12 @@ function StatusChip({ status }: { status: string }) {
 const DOC_TYPE_LABELS: Record<string, string> = {
   OFFER_OUT: 'Оферта', OFFER_IN: 'Оферта (вх.)', PROFORMA_OUT: 'Проформа', PROFORMA_IN: 'Проформа (вх.)',
   INVOICE_OUT: 'Фактура', INVOICE_IN: 'Фактура (вх.)', CREDIT_NOTE: 'Кредитно известие',
-  ADVANCE: 'Аванс', PROTOCOL: 'Протокол', DELIVERY_NOTE: 'Доставъчна бележка',
-  CONTRACT: 'Договор', WARRANTY: 'Гаранция', OTHER: 'Друго',
+  PROTOCOL: 'Протокол', DELIVERY_NOTE: 'Доставъчна бележка', WARRANTY: 'Гаранция', OTHER: 'Друго',
 };
 
-const DOC_TYPE_ICON: Record<string, string> = {
-  OFFER_OUT: 'description', PROFORMA_OUT: 'receipt_long', PROFORMA_IN: 'receipt_long', ADVANCE: 'payments',
-  INVOICE_OUT: 'receipt', INVOICE_IN: 'receipt', PROTOCOL: 'assignment_turned_in', DELIVERY_NOTE: 'local_shipping',
-  WARRANTY: 'verified', CONTRACT: 'handshake', OTHER: 'article',
-};
-
-const DOC_TYPE_COLOR: Record<string, string> = {
-  OFFER_OUT: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
-  PROFORMA_OUT: 'text-primary border-primary-container/40 bg-primary-container/10',
-  PROFORMA_IN: 'text-primary border-primary-container/40 bg-primary-container/10',
-  ADVANCE: 'text-warning border-warning/30 bg-warning/5',
-  INVOICE_OUT: 'text-primary border-primary-container/40 bg-primary-container/10',
-  INVOICE_IN: 'text-primary border-primary-container/40 bg-primary-container/10',
-  PROTOCOL: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
-  DELIVERY_NOTE: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
-  WARRANTY: 'text-on-surface-variant border-outline-variant/40 bg-surface-container',
-};
-
+// orderType values match the OrderType enum (CLIENT_ORDER | SUPPLIER_ORDER)
 const ORDER_TYPE_LABELS: Record<string, string> = {
-  PURCHASE_ORDER: 'Поръчка на стока', SALES_ORDER: 'Продажбена поръчка',
-  INTERNAL: 'Вътрешна поръчка',
+  CLIENT_ORDER: 'Клиентска поръчка', SUPPLIER_ORDER: 'Поръчка на стока',
 };
 
 function TimelineSection({ title, icon, color, children }: {
@@ -93,10 +77,9 @@ function TimelineTab({ project }: { project: any }) {
 
   const offers = bizDocs.filter((d: any) => d.docType === 'OFFER_OUT');
   const proformas = bizDocs.filter((d: any) => ['PROFORMA_OUT', 'PROFORMA_IN'].includes(d.docType));
-  const advances = bizDocs.filter((d: any) => d.docType === 'ADVANCE');
   const protocols = bizDocs.filter((d: any) => ['PROTOCOL', 'DELIVERY_NOTE'].includes(d.docType));
 
-  const isEmpty = !offers.length && !proformas.length && !advances.length && !orders.length
+  const isEmpty = !offers.length && !proformas.length && !orders.length
     && !protocols.length && !invoices.length && !payments.length;
 
   if (isEmpty) {
@@ -143,23 +126,6 @@ function TimelineTab({ project }: { project: any }) {
         </TimelineSection>
       )}
 
-      {advances.length > 0 && (
-        <TimelineSection title="АВАНС" icon="payments" color="border-warning/30 text-warning bg-warning/5">
-          {advances.map((d: any) => (
-            <div key={d.id} className="border border-outline-variant/10 bg-surface-container-low p-3 mb-2 flex items-center justify-between">
-              <div>
-                <p className="font-body-sm text-body-sm text-on-surface">{d.docNumber || '—'}</p>
-                <p className="text-[10px] text-on-surface-variant/60">{fmtDate(d.docDate)} · {d.counterparty?.name || '—'}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {d.amountTotal > 0 && <span className="font-mono text-xs text-on-surface">{fmt(d.amountTotal, d.currency)}</span>}
-                <StatusChip status={d.status} />
-              </div>
-            </div>
-          ))}
-        </TimelineSection>
-      )}
-
       {orders.length > 0 && (
         <TimelineSection title="ПОРЪЧКИ НА СТОКА" icon="shopping_cart" color="border-outline-variant/40 text-on-surface-variant bg-surface-container">
           {orders.map((o: any) => (
@@ -168,7 +134,7 @@ function TimelineTab({ project }: { project: any }) {
                 <div>
                   <p className="font-body-sm text-body-sm text-on-surface">{o.orderNumber || o.id.slice(-6)}</p>
                   <p className="text-[10px] text-on-surface-variant/60">
-                    {fmtDate(o.orderDate)} · {ORDER_TYPE_LABELS[o.orderType] || o.orderType} · {o.counterparty?.name || '—'}
+                    {fmtDate(o.orderDate)} · {ORDER_TYPE_LABELS[o.orderType] || o.orderType} · {(o.client || o.supplier)?.name || '—'}
                   </p>
                 </div>
                 <StatusChip status={o.status} />
@@ -236,6 +202,129 @@ function TimelineTab({ project }: { project: any }) {
   );
 }
 
+// ─── Deal-stage pipeline panel ─────────────────────────────────────────────────
+// "Ход на сделката" — lets any of the three people see and advance where a
+// project stands (оферта → ... → затворено) instead of that living only in
+// Жоро's head. Detected stage (from linked documents/payments) is offered as
+// a one-click suggestion, never applied automatically.
+
+function DealStageStepper({ current }: { current: string | null }) {
+  const currentIdx = dealStageIndex(current);
+  return (
+    <div className="flex items-center">
+      {DEAL_STAGE_ORDER.map((stage, i) => (
+        <div key={stage} className="flex items-center">
+          <div title={DEAL_STAGE_LABELS[stage]}
+            className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${i <= currentIdx ? 'bg-primary' : 'bg-outline-variant/30'}`} />
+          {i < DEAL_STAGE_ORDER.length - 1 && (
+            <div className={`w-4 sm:w-6 h-px flex-shrink-0 ${i < currentIdx ? 'bg-primary' : 'bg-outline-variant/20'}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DealStagePanel({ project }: { project: any }) {
+  const qc = useQueryClient();
+  const [designerName, setDesignerName] = useState('');
+
+  const { data: designers = [] } = useQuery({
+    queryKey: ['counterparties', 'DESIGNER'],
+    queryFn: () => api.get('/counterparties', { params: { type: 'DESIGNER' } }).then(r => r.data),
+  });
+
+  const patch = useMutation({
+    mutationFn: (payload: any) => api.patch(`/projects/${project.id}`, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', project.id] }),
+  });
+
+  const addDesigner = useMutation({
+    mutationFn: (name: string) => api.post('/counterparties', { name, type: 'DESIGNER' }).then(r => r.data),
+    onSuccess: (cp: any) => {
+      qc.invalidateQueries({ queryKey: ['counterparties', 'DESIGNER'] });
+      patch.mutate({ designerId: cp.id });
+      setDesignerName('');
+    },
+  });
+
+  const suggested = project.suggestedDealStage as string | null;
+
+  return (
+    <div className="border border-outline-variant/10 bg-surface-container-low p-5 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="font-label-caps text-label-caps text-on-surface-variant">ХОД НА СДЕЛКАТА</p>
+        {project.dealStageUpdatedAt && (
+          <p className="text-[10px] text-on-surface-variant/40">Обновено {fmtDate(project.dealStageUpdatedAt)}</p>
+        )}
+      </div>
+
+      <DealStageStepper current={project.dealStage} />
+
+      {suggested && suggested !== project.dealStage && (
+        <div className="flex items-center justify-between gap-3 border border-warning/30 bg-warning/5 px-3 py-2">
+          <p className="font-body-sm text-body-sm text-warning">
+            Свързаните документи предполагат по-напреднал етап: <b>{DEAL_STAGE_LABELS[suggested as DealStage]}</b>
+          </p>
+          <button onClick={() => patch.mutate({ dealStage: suggested })}
+            className="font-label-caps text-label-caps text-warning border border-warning/40 px-2 py-1 hover:bg-warning/10 flex-shrink-0">
+            Премести
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant/60 mb-1">ЕТАП</label>
+          <select value={project.dealStage || ''} onChange={e => patch.mutate({ dealStage: e.target.value || null })}
+            className="w-full bg-surface-container border border-outline-variant/20 px-2 py-1.5 text-sm text-on-surface">
+            <option value="">— не е зададен —</option>
+            {DEAL_STAGE_ORDER.map(s => <option key={s} value={s}>{DEAL_STAGE_LABELS[s]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant/60 mb-1">ОТГОВОРНИК</label>
+          <select value={project.dealStageOwner || ''} onChange={e => patch.mutate({ dealStageOwner: e.target.value || null })}
+            className="w-full bg-surface-container border border-outline-variant/20 px-2 py-1.5 text-sm text-on-surface">
+            <option value="">
+              {project.dealStage ? `предложен: ${DEAL_STAGE_SUGGESTED_OWNER[project.dealStage as keyof typeof DEAL_STAGE_SUGGESTED_OWNER] || '—'}` : '—'}
+            </option>
+            {DEAL_STAGE_OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant/60 mb-1">ДИЗАЙНЕР/АРХИТЕКТ</label>
+          <select value={project.designerId || ''} onChange={e => patch.mutate({ designerId: e.target.value || null })}
+            className="w-full bg-surface-container border border-outline-variant/20 px-2 py-1.5 text-sm text-on-surface">
+            <option value="">— няма —</option>
+            {designers.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block font-label-caps text-label-caps text-on-surface-variant/60 mb-1">КОМИСИОН %</label>
+          <input type="number" step="0.1" min="0" max="100" defaultValue={project.commissionPct ?? ''}
+            onBlur={e => {
+              const v = e.target.value === '' ? null : Number(e.target.value);
+              if (v !== project.commissionPct) patch.mutate({ commissionPct: v });
+            }}
+            className="w-full bg-surface-container border border-outline-variant/20 px-2 py-1.5 text-sm text-on-surface" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input value={designerName} onChange={e => setDesignerName(e.target.value)}
+          placeholder="Нов дизайнер/архитект..."
+          className="flex-1 max-w-xs bg-surface-container border border-outline-variant/20 px-2 py-1.5 text-sm text-on-surface" />
+        <button disabled={!designerName.trim() || addDesigner.isPending}
+          onClick={() => addDesigner.mutate(designerName.trim())}
+          className="font-label-caps text-label-caps text-primary border border-primary/30 px-2 py-1.5 hover:bg-primary/10 disabled:opacity-40">
+          + добави
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -283,7 +372,10 @@ export default function ProjectDetailPage() {
             <span className="font-label-caps text-label-caps text-on-surface-variant/50">{project.year}</span>
           </div>
           <h1 className="font-headline text-headline-lg text-on-surface">{project.name}</h1>
-          {project.client && <p className="font-body-sm text-body-sm text-on-surface-variant">{project.client.name}</p>}
+          <p className="font-body-sm text-body-sm text-on-surface-variant">
+            {project.client?.name}
+            {project.designer && ` · ${project.designer.name}${project.commissionPct != null ? ` (${project.commissionPct}%)` : ''}`}
+          </p>
         </div>
       </div>
 
@@ -306,6 +398,8 @@ export default function ProjectDetailPage() {
             </div>
           ))}
         </div>
+
+        <DealStagePanel project={project} />
 
         {/* TABS */}
         <div className="border border-outline-variant/10 bg-surface-container-low">

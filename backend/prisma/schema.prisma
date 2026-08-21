@@ -128,6 +128,15 @@ model Project {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
+  // Deal pipeline — tracks the sales/fulfillment cycle so status isn't locked
+  // in one person's head (оферта → ... → затворено). See backend/src/lib/dealStages.js.
+  dealStage          DealStage?
+  dealStageOwner     String?   // "Жоро" | "Илиян" | "Стефи" — whoever currently owns advancing this stage
+  dealStageUpdatedAt DateTime?
+  designerId         String?
+  designer           Counterparty? @relation("ProjectDesigner", fields: [designerId], references: [id])
+  commissionPct      Float?    // designer/architect commission, e.g. 10 = 10%
+
   invoices     Invoice[]
   purchases    Purchase[]
   inventory    InventoryItem[]
@@ -146,6 +155,22 @@ enum ProjectStatus {
   COMPLETED
   ON_HOLD
   CANCELLED
+}
+
+// Mirrors the as-is process in the ERP spec: offer -> proforma -> advance ->
+// ordered from supplier(s) -> designer commission paid -> goods arrived ->
+// warehoused (Micro.bg) -> zero-value invoice handed to client -> closed.
+enum DealStage {
+  OFFER_SENT       // Оферта изпратена
+  CLIENT_APPROVED  // Одобрена от клиент
+  PROFORMA_ISSUED  // Проформа издадена (+ % аванс)
+  ADVANCE_PAID     // Авансът платен
+  ORDERED          // Поръчано при производител(и)
+  COMMISSION_PAID  // Платен комисион на дизайнер/архитект
+  GOODS_ARRIVED    // Стоката пристигнала
+  WAREHOUSED       // Заведена в склад (Micro.bg)
+  INVOICED_ZERO    // Издадена нулева фактура / предадена на клиент
+  CLOSED           // Затворено
 }
 
 // ─── INVOICES (OUTGOING) ─────────────────────────────────────────────────────
@@ -504,6 +529,7 @@ model Counterparty {
   bizDocuments        BizDocument[]
   payments            Payment[]
   missingDocuments    MissingDocument[]
+  designedProjects    Project[]            @relation("ProjectDesigner")
 
   @@index([type])
   @@index([name])
@@ -516,6 +542,7 @@ enum CounterpartyType {
   COURIER
   BANK
   ACCOUNTING
+  DESIGNER // дизайнер / архитект — получава комисион, не е клиент или доставчик
   OTHER
 }
 

@@ -27,10 +27,11 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   COURIER:    { label: 'Куриер',     color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' },
   BANK:       { label: 'Банка',      color: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20' },
   ACCOUNTING: { label: 'Счетоводство', color: 'text-purple-400 bg-purple-400/10 border-purple-400/20' },
+  DESIGNER:   { label: 'Дизайнер/архитект', color: 'text-pink-400 bg-pink-400/10 border-pink-400/20' },
   OTHER:      { label: 'Друго',      color: 'text-on-surface-variant bg-surface-container border-outline-variant/20' },
 };
 
-const ALL_TYPES = ['', 'CLIENT', 'SUPPLIER', 'COURIER', 'BANK', 'ACCOUNTING', 'OTHER'];
+const ALL_TYPES = ['', 'CLIENT', 'SUPPLIER', 'COURIER', 'BANK', 'ACCOUNTING', 'DESIGNER', 'OTHER'];
 const cleanName = (n: string) => n?.replace(/^"|"$/g, '').trim() || n;
 
 function CounterpartyAvatar({ cp }: { cp: Counterparty }) {
