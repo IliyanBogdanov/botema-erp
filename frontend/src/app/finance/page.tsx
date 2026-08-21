@@ -222,7 +222,7 @@ export default function FinancePage() {
           </div>
         </div>
 
-        <p className="font-label-caps text-[9px] text-on-surface-variant/40 tracking-[0.1em] pt-2">ДОКУМЕНТЕН ИЗГЛЕД (ФАКТУРИ) — СПОМАГАТЕЛЕН</p>
+        <p className="font-label-caps text-[9px] text-on-surface-variant/40 tracking-[0.1em] pt-2">ДОКУМЕНТЕН ИЗГЛЕД (ФАКТУРИ) — СПОМАГАТЕЛЕН, ОФИЦИАЛНИТЕ ЧИСЛА СА В MICRO.BG</p>
         {/* Annual KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {isLoading ? (

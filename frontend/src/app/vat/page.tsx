@@ -88,6 +88,13 @@ export default function VatPage() {
       </div>
 
       <div className="px-8 py-6 space-y-6">
+        <div className="flex items-start gap-3 border border-warning/25 bg-warning/5 px-4 py-3">
+          <span className="material-symbols-outlined text-warning text-[18px] mt-0.5">info</span>
+          <p className="font-body-sm text-body-sm text-on-surface-variant">
+            <span className="text-warning font-medium">Оценка от заведените документи, не официално число.</span>{' '}
+            Официалната ДДС позиция е тази в Micro.bg — питай счетоводителя при разминаване.
+          </p>
+        </div>
         {isLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[...Array(4)].map((_, i) => (

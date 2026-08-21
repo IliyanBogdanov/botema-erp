@@ -7,23 +7,21 @@ import { useAuthStore } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { api } from '@/lib/api';
 
+// Ежедневни модули — това, което Жоро/Стефи/Илиян отварят всеки ден.
+// Финансовите одит-таблове (ДДС/П&Л/Reconciliation) и AI Документи-опашката
+// живеят под Advanced — те са за одит на данните, не за ежедневна работа.
+// nav.clients/nav.counterparties/nav.suppliers остават три отделни линка,
+// докато не се довърши сливането им в едно "Контрагенти" (виж плана).
 const primaryGroups = [
   {
     label: 'Operations',
     items: [
       { key: 'nav.dashboard', href: '/', icon: 'dashboard', exact: true },
-      { key: 'nav.purchases', href: '/purchases', icon: 'shopping_cart' },
-      { key: 'nav.documents', href: '/documents', icon: 'auto_awesome' },
       { key: 'nav.projects', href: '/projects', icon: 'folder_open' },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
+      { key: 'nav.purchases', href: '/purchases', icon: 'shopping_cart' },
       { key: 'nav.invoices', href: '/invoices', icon: 'receipt_long' },
-      { key: 'nav.vat', href: '/vat', icon: 'account_balance' },
-      { key: 'nav.finance', href: '/finance', icon: 'bar_chart' },
-      { key: 'nav.reconciliation', href: '/reconciliation', icon: 'account_tree' },
+      { key: 'nav.documents', href: '/documents', icon: 'auto_awesome' },
+      { key: 'nav.ai', href: '/ai', icon: 'smart_toy' },
     ],
   },
   {
@@ -37,12 +35,14 @@ const primaryGroups = [
 ];
 
 const advancedItems = [
+  { key: 'nav.vat', href: '/vat', icon: 'account_balance' },
+  { key: 'nav.finance', href: '/finance', icon: 'bar_chart' },
+  { key: 'nav.reconciliation', href: '/reconciliation', icon: 'account_tree' },
   { key: 'nav.issuedDocs', href: '/issued-docs', icon: 'edit_document' },
   { key: 'nav.expenses', href: '/expenses', icon: 'receipt' },
   { key: 'nav.aged', href: '/aged-debtors', icon: 'pending_actions' },
   { key: 'nav.inbox', href: '/inbox', icon: 'inbox' },
   { key: 'nav.alerts', href: '/alerts', icon: 'notifications_active' },
-  { key: 'nav.ai', href: '/ai', icon: 'smart_toy' },
   { key: 'nav.backfill', href: '/backfill', icon: 'cloud_sync' },
   { key: 'nav.settings', href: '/settings', icon: 'settings' },
 ];
