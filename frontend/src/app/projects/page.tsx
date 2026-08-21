@@ -6,6 +6,7 @@ import { api, fmtDate } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
+import { DEAL_STAGE_LABELS } from '@/lib/dealStages';
 
 interface Project {
   id: string;
@@ -20,6 +21,19 @@ interface Project {
   invoiceCount: number;
   purchaseCount: number;
   client?: { id: string; name: string };
+  dealStage?: string | null;
+  dealStageOwner?: string | null;
+  designer?: { id: string; name: string } | null;
+}
+
+function DealStageChip({ stage, owner }: { stage?: string | null; owner?: string | null }) {
+  if (!stage) return null;
+  const label = DEAL_STAGE_LABELS[stage as keyof typeof DEAL_STAGE_LABELS] || stage;
+  return (
+    <span className="inline-flex items-center gap-1 border border-primary-container/30 bg-primary-container/10 px-2 py-0.5 font-label-caps text-[9px] text-primary">
+      {label}{owner && ` · ${owner}`}
+    </span>
+  );
 }
 
 const modalLabelClass = 'block font-label-caps text-label-caps text-on-surface-variant mb-1.5';
@@ -295,7 +309,10 @@ export default function ProjectsPage() {
                     </div>
 
                     <div className="space-y-4">
-                      <ProjectStatusBadge status={project.status} activeLabel={t('proj.activeLabel')} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <ProjectStatusBadge status={project.status} activeLabel={t('proj.activeLabel')} />
+                        <DealStageChip stage={project.dealStage} owner={project.dealStageOwner} />
+                      </div>
                       <div>
                         <h3 className="font-headline text-headline-md text-on-surface">{project.name}</h3>
                         <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant">Година {project.year}</p>
@@ -363,6 +380,7 @@ export default function ProjectsPage() {
                     <th className="table-header">ПРОЕКТ</th>
                     <th className="table-header">КЛИЕНТ</th>
                     <th className="table-header">СТАТУС</th>
+                    <th className="table-header">ЕТАП</th>
                     <th className="table-header text-right">ПРИХОДИ (EUR)</th>
                     <th className="table-header text-right">РАЗХОДИ (EUR)</th>
                     <th className="table-header text-right">ПЕЧАЛБА (EUR)</th>
@@ -381,6 +399,9 @@ export default function ProjectsPage() {
                       <td className="table-cell text-on-surface-variant text-sm">{p.client?.name || '—'}</td>
                       <td className="table-cell">
                         <ProjectStatusBadge status={p.status} activeLabel="АКТИВЕН" />
+                      </td>
+                      <td className="table-cell">
+                        <DealStageChip stage={p.dealStage} owner={p.dealStageOwner} />
                       </td>
                       <td className="table-cell text-right font-mono text-sm text-primary">
                         {((p.revenueBGN || 0) / BGN_PER_EUR).toLocaleString('bg-BG')}

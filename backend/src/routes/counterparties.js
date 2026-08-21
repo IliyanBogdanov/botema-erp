@@ -22,6 +22,30 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// POST /api/counterparties — generic create (e.g. designers/architects assigned to a project)
+router.post('/', auth, async (req, res) => {
+  try {
+    const { name, type, isIndividual, eik, vat, country, currency, email, phone, notes } = req.body;
+    if (!name || !type) return res.status(400).json({ error: 'name and type are required' });
+    const cp = await prisma.counterparty.create({
+      data: {
+        name, type,
+        isIndividual: !!isIndividual,
+        eik: eik || null,
+        vat: vat || null,
+        country: country || 'BG',
+        currency: currency || 'BGN',
+        email: email || null,
+        phone: phone || null,
+        notes: notes || null,
+      },
+    });
+    res.status(201).json(cp);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/counterparties/:id
 router.get('/:id', auth, async (req, res) => {
   try {

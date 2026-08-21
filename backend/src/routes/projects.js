@@ -5,6 +5,7 @@ const { auth } = require('../middleware/auth');
 
 const fx = require('../lib/fx');
 const { AUTHORITATIVE_BIZ_DOC_STATUSES, netCostAmount } = require('../lib/costs');
+const { suggestNextStage } = require('../lib/dealStages');
 
 const EUR_RATE = fx.BGN_PER_EUR;
 
@@ -32,6 +33,7 @@ router.get('/', auth, async (req, res) => {
     where,
     include: {
       client: { select: { id: true, name: true } },
+      designer: { select: { id: true, name: true } },
       invoices: { select: { amountNet: true, amountTotal: true, currency: true, status: true } },
       bizDocuments: PROJECT_COST_DOCS,
     },
@@ -135,7 +137,9 @@ router.post('/', auth, async (req, res) => {
 });
 
 router.patch('/:id', auth, async (req, res) => {
-  const project = await prisma.project.update({ where: { id: req.params.id }, data: req.body });
+  const data = { ...req.body };
+  if (data.dealStage !== undefined) data.dealStageUpdatedAt = new Date();
+  const project = await prisma.project.update({ where: { id: req.params.id }, data });
   res.json(project);
 });
 
@@ -144,6 +148,7 @@ router.get('/:id', auth, async (req, res) => {
     where: { id: req.params.id },
     include: {
       client: true,
+      designer: { select: { id: true, name: true } },
       invoices: { include: { client: { select: { name: true } } } },
       purchases: { include: { supplier: { select: { name: true } } } },
       inventory: { include: { supplier: { select: { name: true } } } },
@@ -180,6 +185,7 @@ router.get('/:id', auth, async (req, res) => {
     totalCosts: totalCostsBGN,
     margin: totalRevenueBGN - totalCostsBGN,
     marginPct: (totalRevenueBGN > 0 && costDocs.length > 0) ? Math.round(((totalRevenueBGN - totalCostsBGN) / totalRevenueBGN) * 100) : null,
+    suggestedDealStage: suggestNextStage(project),
   });
 });
 
